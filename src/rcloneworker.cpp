@@ -10,26 +10,29 @@
 #include <KLocalizedString>
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QLoggingCategory>
 #include <QLocale>
+#include <QLoggingCategory>
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
+#include <QUuid>
 
 #include <limits>
 #include <sys/stat.h>
+#include <utility>
 
 Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 
 namespace
 {
 constexpr qsizetype DownloadChunkSize = 64 * 1024;
-constexpr qsizetype UploadChunkSize = 256 * 1024;
 constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
 
 void appendLimited(QByteArray &destination, const QByteArray &data)
@@ -51,9 +54,23 @@ QString fallbackMimeType(const RcloneItem &item)
     return QMimeDatabase().mimeTypeForFile(item.name, QMimeDatabase::MatchExtension).name();
 }
 
-QString fallbackMimeType(const QString &fileName)
+QString itemVersion(const RcloneItem &item)
 {
-    return QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase::MatchExtension).name();
+    return item.id + QLatin1Char('\n') + item.modificationTime.toUTC().toString(Qt::ISODateWithMs) + QLatin1Char('\n') + QString::number(item.size);
+}
+
+bool preferItem(const RcloneItem &candidate, const RcloneItem &current)
+{
+    if (candidate.modificationTime.isValid() != current.modificationTime.isValid()) {
+        return candidate.modificationTime.isValid();
+    }
+    if (candidate.modificationTime != current.modificationTime) {
+        return candidate.modificationTime > current.modificationTime;
+    }
+    if (!candidate.id.isEmpty() && !current.id.isEmpty() && candidate.id != current.id) {
+        return candidate.id < current.id;
+    }
+    return false;
 }
 
 class KIOPluginForMetaData : public QObject
@@ -127,13 +144,34 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, url);
     }
 
-    KIO::UDSEntryList entries;
-    entries.reserve(items.size() + 1);
-    entries.append(remoteEntry(rcloneUrl.remote(), true));
+    QList<RcloneItem> visibleItems;
+    QHash<QString, qsizetype> itemIndexes;
+    visibleItems.reserve(items.size());
     for (const RcloneItem &item : items) {
-        if (!item.name.isEmpty() && !item.name.contains(QLatin1Char('/'))) {
-            entries.append(itemEntry(item));
+        if (item.name.isEmpty() || item.name.contains(QLatin1Char('/'))) {
+            continue;
         }
+
+        const auto existing = itemIndexes.constFind(item.name);
+        if (existing == itemIndexes.cend()) {
+            itemIndexes.insert(item.name, visibleItems.size());
+            visibleItems.append(item);
+            continue;
+        }
+
+        RcloneItem &selected = visibleItems[*existing];
+        if (preferItem(item, selected)) {
+            selected = item;
+        }
+        selected.ambiguous = true;
+        selected.readOnly = true;
+    }
+
+    KIO::UDSEntryList entries;
+    entries.reserve(visibleItems.size() + 1);
+    entries.append(remoteEntry(rcloneUrl.remote(), true));
+    for (const RcloneItem &item : std::as_const(visibleItems)) {
+        entries.append(itemEntry(item));
     }
     listEntries(entries);
     return KIO::WorkerResult::pass();
@@ -166,16 +204,24 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
     }
 
     QString error;
-    const auto item = m_backend.stat(rcloneUrl.remoteSpec(), &error, [this]() {
-        return wasKilled();
-    });
+    const auto item = sourceItem(rcloneUrl, &error);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
     if (!item) {
         return errorResult(error, KIO::ERR_CANNOT_STAT, url);
     }
-    statEntry(itemEntry(*item));
+
+    RcloneItem resolvedItem = *item;
+    if (!resolvedItem.isDirectory && resolvedItem.size < 0) {
+        if (const auto result = resolveUnknownSize(rcloneUrl, resolvedItem); !result.success()) {
+            return result;
+        }
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+    }
+    statEntry(itemEntry(resolvedItem));
     return KIO::WorkerResult::pass();
 }
 
@@ -186,11 +232,15 @@ KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
         mimeType(QStringLiteral("inode/directory"));
         return KIO::WorkerResult::pass();
     }
+    if (const auto result = ensureBackend(); !result.success()) {
+        return result;
+    }
 
     QString error;
-    const auto item = m_backend.stat(rcloneUrl.remoteSpec(), &error, [this]() {
-        return wasKilled();
-    });
+    const auto item = sourceItem(rcloneUrl, &error);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
     if (!item) {
         return errorResult(error, KIO::ERR_DOES_NOT_EXIST, url);
     }
@@ -208,10 +258,29 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return result;
     }
 
-    // CopyJob has already obtained the source size before starting its
-    // get/put data pump. Repeating lsjson --stat here starts a second rclone
-    // process and resolves the complete remote path twice for every download.
-    mimeType(fallbackMimeType(rcloneUrl.remotePath()));
+    QString error;
+    auto item = sourceItem(rcloneUrl, &error);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!item) {
+        return errorResult(error, KIO::ERR_CANNOT_READ, url);
+    }
+
+    mimeType(fallbackMimeType(*item));
+    if (cachedDownloadMatches(rcloneUrl, *item)) {
+        return sendCachedDownload(rcloneUrl);
+    }
+    if (item->ambiguous || item->size < 0) {
+        if (const auto result = cacheRemoteFile(rcloneUrl, *item); !result.success()) {
+            return result;
+        }
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+        return sendCachedDownload(rcloneUrl);
+    }
+    totalSize(item->size);
 
     const QString fileName = rcloneUrl.remotePath().section(QLatin1Char('/'), -1);
     if (fileName.contains(QLatin1Char('\n'))) {
@@ -275,6 +344,9 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         return errorResult(QString::fromUtf8(standardError).trimmed(), KIO::ERR_CANNOT_READ, url);
     }
+    if (item->size >= 0 && processed != item->size) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, i18n("The remote file changed while it was being read."));
+    }
 
     data(QByteArray());
     return KIO::WorkerResult::pass();
@@ -291,135 +363,53 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
     }
+    if (m_cachedDownloadSpec == rcloneUrl.remoteSpec()) {
+        clearCachedDownload();
+    }
 
-    if (!(flags & KIO::Overwrite)) {
-        std::optional<RcloneItem> existingItem;
-        QString error;
-        if (destinationExists(rcloneUrl.remoteSpec(), &existingItem, &error)) {
-            return KIO::WorkerResult::fail(existingItem && existingItem->isDirectory ? KIO::ERR_DIR_ALREADY_EXIST : KIO::ERR_FILE_ALREADY_EXIST,
-                                           url.toDisplayString());
+    QString destinationError;
+    const std::optional<RcloneItem> expectedDestination = sourceItem(rcloneUrl, &destinationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!expectedDestination && !destinationError.isEmpty() && !RcloneBackend::isNotFoundError(destinationError)) {
+        return errorResult(destinationError, KIO::ERR_CANNOT_STAT, url);
+    }
+    if (expectedDestination) {
+        if (expectedDestination->isDirectory) {
+            return KIO::WorkerResult::fail(KIO::ERR_DIR_ALREADY_EXIST, url.toDisplayString());
         }
-        if (!error.isEmpty() && !RcloneBackend::isNotFoundError(error)) {
-            return errorResult(error, KIO::ERR_CANNOT_STAT, url);
+        if (expectedDestination->ambiguous) {
+            return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE,
+                                           i18n("Multiple remote objects have this name. Rename or remove the duplicates before editing this file."));
+        }
+        if (expectedDestination->readOnly) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_WRITE_ACCESS_DENIED,
+                i18n("This is an exported cloud document with no stable remote size. It is available read-only to avoid replacing the original."));
+        }
+        if (!(flags & KIO::Overwrite)) {
+            return KIO::WorkerResult::fail(KIO::ERR_FILE_ALREADY_EXIST, url.toDisplayString());
         }
     }
 
     bool sizeOk = false;
     const qint64 sourceSize = metaData(QStringLiteral("sourceSize")).toLongLong(&sizeOk);
-    QStringList arguments{
-        QStringLiteral("rcat"),
-        rcloneUrl.remoteSpec(),
-        QStringLiteral("--buffer-size"),
-        QStringLiteral("0"),
-        QStringLiteral("--stats"),
-        QStringLiteral("500ms"),
-        QStringLiteral("--stats-one-line"),
-        QStringLiteral("--stats-log-level"),
-        QStringLiteral("NOTICE"),
-        QStringLiteral("--use-json-log"),
-        QStringLiteral("--log-level"),
-        QStringLiteral("NOTICE"),
-    };
     if (sizeOk && sourceSize >= 0) {
-        arguments.append({QStringLiteral("--size"), QString::number(sourceSize)});
         totalSize(sourceSize);
     }
 
-    QProcess process;
-    configureProcess(process, m_backend.executable(), arguments);
-    process.start();
-    if (!process.waitForStarted(5000)) {
-        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS, process.errorString());
+    const QString suffix = QFileInfo(rcloneUrl.remotePath()).completeSuffix();
+    const QString extension = suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix;
+    QTemporaryFile localUpload(QDir::tempPath() + QStringLiteral("/kio-rclone-upload-XXXXXX") + extension);
+    if (!localUpload.open()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_OPEN_FOR_WRITING, localUpload.errorString());
     }
 
-    QByteArray standardOutput;
-    QByteArray standardError;
-    QByteArray pendingLog;
     qint64 processed = 0;
-    qint64 remoteProcessed = 0;
-
-    const auto handleLogLine = [this, &standardError, &remoteProcessed](const QByteArray &line) {
-        QJsonParseError parseError;
-        const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
-        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            appendLimited(standardError, line + '\n');
-            return;
-        }
-
-        const QJsonObject object = document.object();
-        const QJsonObject stats = object.value(QStringLiteral("stats")).toObject();
-        if (!stats.isEmpty()) {
-            qint64 transferred = stats.value(QStringLiteral("bytes")).toVariant().toLongLong();
-            double transferSpeed = stats.value(QStringLiteral("speed")).toDouble();
-            int percentage = -1;
-            qint64 eta = -1;
-
-            const QJsonArray transferring = stats.value(QStringLiteral("transferring")).toArray();
-            if (!transferring.isEmpty()) {
-                const QJsonObject transfer = transferring.at(0).toObject();
-                transferred = transfer.value(QStringLiteral("bytes")).toVariant().toLongLong();
-                transferSpeed = transfer.value(QStringLiteral("speedAvg")).toDouble();
-                if (transferSpeed <= 0) {
-                    transferSpeed = transfer.value(QStringLiteral("speed")).toDouble();
-                }
-                percentage = transfer.value(QStringLiteral("percentage")).toInt(-1);
-                const QJsonValue etaValue = transfer.value(QStringLiteral("eta"));
-                if (etaValue.isDouble()) {
-                    eta = qRound64(etaValue.toDouble());
-                }
-            } else {
-                const qint64 total = stats.value(QStringLiteral("totalBytes")).toVariant().toLongLong();
-                if (total > 0) {
-                    percentage = qBound(0, int((transferred * 100) / total), 100);
-                }
-                const QJsonValue etaValue = stats.value(QStringLiteral("eta"));
-                if (etaValue.isDouble()) {
-                    eta = qRound64(etaValue.toDouble());
-                }
-            }
-
-            remoteProcessed = qMax(remoteProcessed, transferred);
-            processedSize(remoteProcessed);
-            if (transferSpeed > 0) {
-                speed(static_cast<unsigned long>(qMin(transferSpeed, double(std::numeric_limits<unsigned long>::max()))));
-            }
-
-            const QString formattedSpeed = QLocale().formattedDataSize(qMax<qint64>(0, qRound64(transferSpeed)));
-            if (percentage >= 0 && eta >= 0) {
-                infoMessage(i18n("Uploading… %1% · %2/s · %3 s remaining", percentage, formattedSpeed, eta));
-            } else if (percentage >= 0) {
-                infoMessage(i18n("Uploading… %1% · %2/s", percentage, formattedSpeed));
-            }
-            return;
-        }
-
-        const QString message = object.value(QStringLiteral("msg")).toString().trimmed();
-        if (!message.isEmpty()) {
-            appendLimited(standardError, message.toUtf8() + '\n');
-        }
-    };
-
-    const auto collectUploadOutput = [&process, &standardOutput, &pendingLog, &handleLogLine](bool flush) {
-        appendLimited(standardOutput, process.readAllStandardOutput());
-        pendingLog.append(process.readAllStandardError());
-        for (;;) {
-            const qsizetype newline = pendingLog.indexOf('\n');
-            if (newline < 0) {
-                break;
-            }
-            handleLogLine(pendingLog.left(newline));
-            pendingLog.remove(0, newline + 1);
-        }
-        if (flush && !pendingLog.isEmpty()) {
-            handleLogLine(pendingLog);
-            pendingLog.clear();
-        }
-    };
-
     infoMessage(i18n("Preparing upload…"));
-    while (process.state() != QProcess::NotRunning) {
+    for (;;) {
         if (wasKilled()) {
-            stopProcess(process);
             return KIO::WorkerResult::pass();
         }
 
@@ -427,57 +417,54 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         QByteArray sourceData;
         const int readResult = readData(sourceData);
         if (readResult < 0) {
-            stopProcess(process);
             return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, url.toDisplayString());
         }
         if (readResult == 0) {
             break;
         }
-
-        qsizetype offset = 0;
-        while (offset < sourceData.size()) {
-            if (process.state() == QProcess::NotRunning) {
-                collectUploadOutput(true);
-                return errorResult(QString::fromUtf8(standardError).trimmed(), KIO::ERR_CANNOT_WRITE, url);
-            }
-
-            const qsizetype amount = qMin(UploadChunkSize, sourceData.size() - offset);
-            const qint64 accepted = process.write(sourceData.constData() + offset, amount);
-            if (accepted <= 0) {
-                stopProcess(process);
-                return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, url.toDisplayString());
-            }
-            offset += accepted;
-
-            while (process.bytesToWrite() > 0 && process.state() != QProcess::NotRunning) {
-                if (wasKilled()) {
-                    stopProcess(process);
-                    return KIO::WorkerResult::pass();
-                }
-                process.waitForBytesWritten(100);
-                collectUploadOutput(false);
-            }
+        if (sizeOk && sourceSize >= 0 && processed > sourceSize - sourceData.size()) {
+            return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, i18n("The upload source changed size while it was being read."));
         }
-
+        if (localUpload.write(sourceData) != sourceData.size()) {
+            return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, localUpload.errorString());
+        }
         processed += sourceData.size();
-        collectUploadOutput(false);
     }
 
-    process.closeWriteChannel();
-    infoMessage(i18n("Finalizing upload…"));
-    while (process.state() != QProcess::NotRunning) {
-        if (wasKilled()) {
-            stopProcess(process);
-            return KIO::WorkerResult::pass();
-        }
-        process.waitForFinished(100);
-        collectUploadOutput(false);
+    if (sizeOk && sourceSize >= 0 && processed != sourceSize) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, i18n("The upload source changed size while it was being read."));
     }
-    collectUploadOutput(true);
+    if (!localUpload.flush()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, localUpload.errorString());
+    }
+    const QString localUploadPath = localUpload.fileName();
+    localUpload.close();
 
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        return errorResult(QString::fromUtf8(standardError).trimmed(), KIO::ERR_CANNOT_WRITE, url);
+    const auto destinationChanged = [&expectedDestination](const std::optional<RcloneItem> &current) {
+        return expectedDestination.has_value() != current.has_value()
+            || (expectedDestination && current && (current->ambiguous || itemVersion(*expectedDestination) != itemVersion(*current)));
+    };
+    const auto currentDestination = [this, &rcloneUrl](QString *error) {
+        return sourceItem(rcloneUrl, error);
+    };
+
+    QString currentError;
+    std::optional<RcloneItem> current = currentDestination(&currentError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
     }
+    if (!current && !currentError.isEmpty() && !RcloneBackend::isNotFoundError(currentError)) {
+        return errorResult(currentError, KIO::ERR_CANNOT_STAT, url);
+    }
+    if (destinationChanged(current)) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, i18n("The remote file changed while the local edit was being prepared."));
+    }
+
+    const RcloneResult upload = runUpload(localUploadPath, rcloneUrl.remoteSpec());
+    if (!upload.success()) {
+        return commandResult(upload, KIO::ERR_CANNOT_WRITE, url);
+    }
+
     processedSize(sizeOk && sourceSize >= 0 ? sourceSize : processed);
     return KIO::WorkerResult::pass();
 }
@@ -506,6 +493,8 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
 
 KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::JobFlags flags)
 {
+    clearCachedDownload();
+
     const RcloneUrl source(src);
     const RcloneUrl destination(dest);
     if (!source.isValid() || !destination.isValid() || source.remoteSpec().isEmpty() || destination.remoteSpec().isEmpty()) {
@@ -517,20 +506,41 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     if (source.remote() != destination.remote()) {
         return KIO::WorkerResult::fail(KIO::ERR_UNSUPPORTED_ACTION, i18n("Moving between different rclone remotes is streamed by KIO."));
     }
+    if (const auto result = ensureBackend(); !result.success()) {
+        return result;
+    }
 
-    if (!(flags & KIO::Overwrite)) {
-        std::optional<RcloneItem> existingItem;
-        QString error;
-        if (destinationExists(destination.remoteSpec(), &existingItem, &error)) {
-            return KIO::WorkerResult::fail(existingItem && existingItem->isDirectory ? KIO::ERR_DIR_ALREADY_EXIST : KIO::ERR_FILE_ALREADY_EXIST,
-                                           dest.toDisplayString());
+    QString sourceError;
+    const std::optional<RcloneItem> sourceItemResult = sourceItem(source, &sourceError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!sourceItemResult) {
+        return errorResult(sourceError, KIO::ERR_CANNOT_RENAME, src);
+    }
+    if (sourceItemResult->ambiguous) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_RENAME,
+                                       i18n("Multiple remote objects have the source name. Resolve the duplicates before renaming this path."));
+    }
+
+    QString destinationError;
+    const std::optional<RcloneItem> destinationItem = sourceItem(destination, &destinationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!destinationItem && !destinationError.isEmpty() && !RcloneBackend::isNotFoundError(destinationError)) {
+        return errorResult(destinationError, KIO::ERR_CANNOT_STAT, dest);
+    }
+    if (destinationItem) {
+        if (destinationItem->ambiguous || destinationItem->readOnly) {
+            return KIO::WorkerResult::fail(KIO::ERR_CANNOT_RENAME, i18n("The destination is ambiguous or read-only and cannot be replaced safely."));
         }
-        if (!error.isEmpty() && !RcloneBackend::isNotFoundError(error)) {
-            return errorResult(error, KIO::ERR_CANNOT_STAT, dest);
+        if (!(flags & KIO::Overwrite)) {
+            return KIO::WorkerResult::fail(destinationItem->isDirectory ? KIO::ERR_DIR_ALREADY_EXIST : KIO::ERR_FILE_ALREADY_EXIST, dest.toDisplayString());
         }
     }
 
-    return commandResult(runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec()}), KIO::ERR_CANNOT_RENAME, src);
+    return commandResult(runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec(), QStringLiteral("--ignore-times")}), KIO::ERR_CANNOT_RENAME, src);
 }
 
 KIO::WorkerResult RcloneWorker::copy(const QUrl &src, const QUrl &dest, int permissions, KIO::JobFlags flags)
@@ -547,9 +557,27 @@ KIO::WorkerResult RcloneWorker::copy(const QUrl &src, const QUrl &dest, int perm
 
 KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
 {
+    clearCachedDownload();
+
     const RcloneUrl rcloneUrl(url);
     if (!rcloneUrl.isValid() || rcloneUrl.remotePath().isEmpty()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_DELETE, url.toDisplayString());
+    }
+    if (const auto result = ensureBackend(); !result.success()) {
+        return result;
+    }
+
+    QString sourceError;
+    const std::optional<RcloneItem> item = sourceItem(rcloneUrl, &sourceError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!item) {
+        return errorResult(sourceError, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR, url);
+    }
+    if (item->ambiguous) {
+        return KIO::WorkerResult::fail(isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR,
+                                       i18n("Multiple remote objects have this name. Resolve the duplicates before deleting this path."));
     }
 
     QString command;
@@ -633,10 +661,15 @@ KIO::UDSEntry RcloneWorker::itemEntry(const RcloneItem &item) const
     entry.reserve(7);
     entry.fastInsert(KIO::UDSEntry::UDS_NAME, item.name);
     entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, item.isDirectory ? S_IFDIR : S_IFREG);
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS,
-                     item.isDirectory ? S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH : S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_SIZE, qMax<qint64>(0, item.size));
+    const mode_t fileAccess = item.readOnly ? S_IRUSR | S_IRGRP | S_IROTH : S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, item.isDirectory ? S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH : fileAccess);
+    if (item.size >= 0) {
+        entry.fastInsert(KIO::UDSEntry::UDS_SIZE, item.size);
+    }
     entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, fallbackMimeType(item));
+    if (item.ambiguous) {
+        entry.fastInsert(KIO::UDSEntry::UDS_COMMENT, i18n("Multiple remote objects have this name. KIO Rclone is showing the newest one."));
+    }
     if (item.isDirectory) {
         entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder"));
     }
@@ -712,6 +745,127 @@ RcloneResult RcloneWorker::runCommand(const QStringList &arguments, int timeoutM
     });
 }
 
+RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &remoteSpec)
+{
+    RcloneResult result;
+    QProcess process;
+    configureProcess(process,
+                     m_backend.executable(),
+                     {
+                         QStringLiteral("copyto"),
+                         localPath,
+                         remoteSpec,
+                         QStringLiteral("--ignore-times"),
+                         QStringLiteral("--stats"),
+                         QStringLiteral("500ms"),
+                         QStringLiteral("--stats-one-line"),
+                         QStringLiteral("--stats-log-level"),
+                         QStringLiteral("NOTICE"),
+                         QStringLiteral("--use-json-log"),
+                         QStringLiteral("--log-level"),
+                         QStringLiteral("NOTICE"),
+                     });
+    process.start();
+    result.started = process.waitForStarted(5000);
+    if (!result.started) {
+        result.standardError = process.errorString().toUtf8();
+        return result;
+    }
+
+    QByteArray pendingLog;
+    qint64 remoteProcessed = 0;
+    const auto handleLogLine = [this, &result, &remoteProcessed](const QByteArray &line) {
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            appendLimited(result.standardError, line + '\n');
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const QJsonObject stats = object.value(QStringLiteral("stats")).toObject();
+        if (!stats.isEmpty()) {
+            qint64 transferred = stats.value(QStringLiteral("bytes")).toVariant().toLongLong();
+            double transferSpeed = stats.value(QStringLiteral("speed")).toDouble();
+            int percentage = -1;
+            qint64 eta = -1;
+
+            const QJsonArray transferring = stats.value(QStringLiteral("transferring")).toArray();
+            if (!transferring.isEmpty()) {
+                const QJsonObject transfer = transferring.at(0).toObject();
+                transferred = transfer.value(QStringLiteral("bytes")).toVariant().toLongLong();
+                transferSpeed = transfer.value(QStringLiteral("speedAvg")).toDouble();
+                if (transferSpeed <= 0) {
+                    transferSpeed = transfer.value(QStringLiteral("speed")).toDouble();
+                }
+                percentage = transfer.value(QStringLiteral("percentage")).toInt(-1);
+                const QJsonValue etaValue = transfer.value(QStringLiteral("eta"));
+                if (etaValue.isDouble()) {
+                    eta = qRound64(etaValue.toDouble());
+                }
+            } else {
+                const qint64 total = stats.value(QStringLiteral("totalBytes")).toVariant().toLongLong();
+                if (total > 0) {
+                    percentage = qBound(0, int((transferred * 100) / total), 100);
+                }
+                const QJsonValue etaValue = stats.value(QStringLiteral("eta"));
+                if (etaValue.isDouble()) {
+                    eta = qRound64(etaValue.toDouble());
+                }
+            }
+
+            remoteProcessed = qMax(remoteProcessed, transferred);
+            processedSize(remoteProcessed);
+            if (transferSpeed > 0) {
+                speed(static_cast<unsigned long>(qMin(transferSpeed, double(std::numeric_limits<unsigned long>::max()))));
+            }
+
+            const QString formattedSpeed = QLocale().formattedDataSize(qMax<qint64>(0, qRound64(transferSpeed)));
+            if (percentage >= 0 && eta >= 0) {
+                infoMessage(i18n("Uploading… %1% · %2/s · %3 s remaining", percentage, formattedSpeed, eta));
+            } else if (percentage >= 0) {
+                infoMessage(i18n("Uploading… %1% · %2/s", percentage, formattedSpeed));
+            }
+            return;
+        }
+
+        const QString message = object.value(QStringLiteral("msg")).toString().trimmed();
+        if (!message.isEmpty()) {
+            appendLimited(result.standardError, message.toUtf8() + '\n');
+        }
+    };
+    const auto collectOutput = [&process, &result, &pendingLog, &handleLogLine](bool flush) {
+        appendLimited(result.standardOutput, process.readAllStandardOutput());
+        pendingLog.append(process.readAllStandardError());
+        for (;;) {
+            const qsizetype newline = pendingLog.indexOf('\n');
+            if (newline < 0) {
+                break;
+            }
+            handleLogLine(pendingLog.left(newline));
+            pendingLog.remove(0, newline + 1);
+        }
+        if (flush && !pendingLog.isEmpty()) {
+            handleLogLine(pendingLog);
+            pendingLog.clear();
+        }
+    };
+
+    infoMessage(i18n("Uploading…"));
+    while (process.state() != QProcess::NotRunning) {
+        if (wasKilled()) {
+            result.cancelled = true;
+            stopProcess(process);
+            break;
+        }
+        process.waitForFinished(100);
+        collectOutput(false);
+    }
+    collectOutput(true);
+    result.exitCode = process.exitCode();
+    return result;
+}
+
 bool RcloneWorker::remoteExists(const QString &remote, QString *error) const
 {
     return m_backend
@@ -731,6 +885,176 @@ bool RcloneWorker::destinationExists(const QString &remoteSpec, std::optional<Rc
         *item = result;
     }
     return result.has_value();
+}
+
+std::optional<RcloneItem> RcloneWorker::sourceItem(const RcloneUrl &url, QString *error) const
+{
+    const QString fileName = url.remotePath().section(QLatin1Char('/'), -1);
+    const QString parentPath = url.remotePath().section(QLatin1Char('/'), 0, -2);
+    const QString parentSpec = url.remote() + QLatin1Char(':') + parentPath;
+
+    QString listError;
+    const QList<RcloneItem> items = m_backend.list(parentSpec, &listError, [this]() {
+        return wasKilled();
+    });
+    if (!listError.isEmpty()) {
+        if (error) {
+            *error = listError;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<RcloneItem> selected;
+    int matches = 0;
+    for (const RcloneItem &item : items) {
+        if (item.name != fileName) {
+            continue;
+        }
+        ++matches;
+        if (!selected || preferItem(item, *selected)) {
+            selected = item;
+        }
+    }
+
+    if (!selected) {
+        if (error) {
+            *error = QStringLiteral("object not found");
+        }
+        return std::nullopt;
+    }
+    selected->ambiguous = matches > 1;
+    selected->readOnly = selected->readOnly || selected->ambiguous;
+    return selected;
+}
+
+KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem &item)
+{
+    if (cachedDownloadMatches(url, item)) {
+        item.size = m_cachedDownload->size();
+        return KIO::WorkerResult::pass();
+    }
+
+    const QString remoteVersion = itemVersion(item);
+    clearCachedDownload();
+    if (item.ambiguous && item.id.isEmpty()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ,
+                                       i18n("Multiple remote objects have this name, and this backend cannot identify which one to open safely."));
+    }
+
+    const QString suffix = QFileInfo(url.remotePath()).completeSuffix();
+    const QString extension = suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix;
+    const QString fileTemplate = QDir::tempPath() + QStringLiteral("/kio-rclone-XXXXXX") + extension;
+    auto temporaryFile = std::make_unique<QTemporaryFile>(fileTemplate);
+    if (!temporaryFile->open()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_OPEN_FOR_WRITING, temporaryFile->errorString());
+    }
+    const QString temporaryPath = temporaryFile->fileName();
+    temporaryFile->close();
+
+    RcloneResult result;
+    if (!item.id.isEmpty()) {
+        result = m_backend.run({QStringLiteral("backend"),
+                                QStringLiteral("copyid"),
+                                url.remote() + QLatin1Char(':'),
+                                item.id,
+                                temporaryPath,
+                                QStringLiteral("--ignore-times"),
+                                QStringLiteral("--log-level"),
+                                QStringLiteral("ERROR")},
+                               -1,
+                               [this]() {
+                                   return wasKilled();
+                               });
+    }
+
+    if (item.id.isEmpty() || !result.success()) {
+        if (result.cancelled || wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+        if (item.ambiguous && !item.id.isEmpty()) {
+            return errorResult(result.errorMessage(), KIO::ERR_CANNOT_READ, url.url());
+        }
+
+        QFile::remove(temporaryPath);
+        result = m_backend.run({QStringLiteral("copyto"),
+                                url.remoteSpec(),
+                                temporaryPath,
+                                QStringLiteral("--ignore-times"),
+                                QStringLiteral("--log-level"),
+                                QStringLiteral("ERROR")},
+                               -1,
+                               [this]() {
+                                   return wasKilled();
+                               });
+    }
+
+    if (result.cancelled || wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!result.success()) {
+        return errorResult(result.errorMessage(), KIO::ERR_CANNOT_READ, url.url());
+    }
+    if (!temporaryFile->open() || !temporaryFile->seek(0)) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, temporaryFile->errorString());
+    }
+
+    item.size = temporaryFile->size();
+    m_cachedDownloadSpec = url.remoteSpec();
+    m_cachedDownloadVersion = remoteVersion;
+    m_cachedDownload = std::move(temporaryFile);
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult RcloneWorker::resolveUnknownSize(const RcloneUrl &url, RcloneItem &item)
+{
+    return cacheRemoteFile(url, item);
+}
+
+bool RcloneWorker::cachedDownloadMatches(const RcloneUrl &url, const RcloneItem &item) const
+{
+    return m_cachedDownload && m_cachedDownloadSpec == url.remoteSpec() && m_cachedDownloadVersion == itemVersion(item);
+}
+
+KIO::WorkerResult RcloneWorker::sendCachedDownload(const RcloneUrl &url)
+{
+    if (!m_cachedDownload || !m_cachedDownload->seek(0)) {
+        clearCachedDownload();
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, url.url().toDisplayString());
+    }
+
+    totalSize(m_cachedDownload->size());
+    qint64 processed = 0;
+    for (;;) {
+        if (wasKilled()) {
+            clearCachedDownload();
+            return KIO::WorkerResult::pass();
+        }
+
+        const QByteArray chunk = m_cachedDownload->read(DownloadChunkSize);
+        if (chunk.isEmpty()) {
+            if (m_cachedDownload->error() != QFileDevice::NoError) {
+                const QString error = m_cachedDownload->errorString();
+                clearCachedDownload();
+                return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, error);
+            }
+            break;
+        }
+
+        data(chunk);
+        processed += chunk.size();
+        processedSize(processed);
+    }
+
+    data(QByteArray());
+    clearCachedDownload();
+    return KIO::WorkerResult::pass();
+}
+
+void RcloneWorker::clearCachedDownload()
+{
+    m_cachedDownload.reset();
+    m_cachedDownloadSpec.clear();
+    m_cachedDownloadVersion.clear();
 }
 
 void RcloneWorker::configureProcess(QProcess &process, const QString &program, const QStringList &arguments)

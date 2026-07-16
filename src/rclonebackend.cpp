@@ -30,6 +30,7 @@ std::optional<RcloneItem> itemFromObject(const QJsonObject &object)
     item.mimeType = object.value(QStringLiteral("MimeType")).toString();
     item.size = object.value(QStringLiteral("Size")).toVariant().toLongLong();
     item.isDirectory = object.value(QStringLiteral("IsDir")).toBool();
+    item.readOnly = !item.isDirectory && item.size < 0;
     item.modificationTime = QDateTime::fromString(object.value(QStringLiteral("ModTime")).toString(), Qt::ISODateWithMs);
     if (!item.modificationTime.isValid()) {
         item.modificationTime = QDateTime::fromString(object.value(QStringLiteral("ModTime")).toString(), Qt::ISODate);

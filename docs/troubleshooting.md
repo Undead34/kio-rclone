@@ -25,9 +25,35 @@ días en la guía [GCP](/google-drive#modo-testing-y-tokens-de-siete-dias).
 
 ## La barra dice 100% pero la tarea aún sigue
 
-Espera el texto **Finalizing upload…**. Drive u otro proveedor todavía puede
-estar confirmando el último bloque remoto. No cierres ni canceles la tarea si
-quieres que termine correctamente.
+Espera los textos **Finalizing upload…** y **Committing upload…**. Drive u otro
+proveedor todavía puede estar confirmando el último bloque o publicando el
+nombre definitivo. No cierres ni canceles la tarea si quieres que termine
+correctamente.
+
+## LibreOffice abre un documento vacío o dice que está corrupto
+
+Actualiza a KIO Rclone 0.3.0 o posterior. Esa versión resuelve dos causas
+específicas de Google Drive: exportaciones nativas cuyo tamaño aparece como
+desconocido y objetos distintos que comparten el mismo nombre.
+
+Si Dolphin indica que hay duplicados, KIO Rclone abre exactamente el objeto
+más reciente cuando Drive proporciona su ID, pero mantiene la ruta de solo
+lectura. Renombra o elimina los duplicados desde Drive/rclone antes de editar.
+
+Los documentos nativos de Google exportados como DOCX/XLSX/PPTX también se
+abren de solo lectura. Guarda una copia con otro nombre si quieres convertirlos
+en archivos Office ordinarios; la reimportación automática podría reemplazar
+el documento colaborativo original.
+
+## Un TXT u otro archivo ordinario no conserva los cambios
+
+En 0.3.0 el guardado se publica desde un nombre remoto temporal. Una
+cancelación, fallo de red o nueva modificación durante el flush conserva la
+versión remota completa en vez de dejar bytes parciales.
+
+Si aún falla, comprueba que el backend soporte `rcat` y `moveto`, que no haya
+otro objeto con el mismo nombre y que ninguna otra aplicación haya modificado
+el archivo durante la subida.
 
 ## No aparece `rclone:/`
 

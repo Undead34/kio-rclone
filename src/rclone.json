@@ -12,7 +12,8 @@
                 "Type",
                 "Size",
                 "Date",
-                "Access"
+                "Access",
+                "MimeType"
             ],
             "makedir": true,
             "maxInstances": 10,

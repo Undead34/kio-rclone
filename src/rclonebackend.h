@@ -32,6 +32,8 @@ struct RcloneItem {
     QString mimeType;
     qint64 size = -1;
     bool isDirectory = false;
+    bool ambiguous = false;
+    bool readOnly = false;
     QDateTime modificationTime;
 };
 
@@ -60,9 +62,8 @@ public:
 
     [[nodiscard]] RcloneResult run(const QStringList &arguments, int timeoutMs = 120000, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QStringList remotes(QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
-    [[nodiscard]] std::optional<RcloneRemoteInfo> remoteInfo(const QString &remote,
-                                                             QString *error = nullptr,
-                                                             const CancellationCallback &isCancelled = {}) const;
+    [[nodiscard]] std::optional<RcloneRemoteInfo>
+    remoteInfo(const QString &remote, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QList<RcloneItem> list(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] std::optional<RcloneItem> stat(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] std::optional<RcloneSpace> about(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;

@@ -23,6 +23,8 @@ Current tests:
 | `rcloneurltest` | Parses and builds `rclone:/` URLs. |
 | `rclonebackendtest` | Parses rclone JSON and exercises the local rclone backend. |
 | `rclonepausetest` | Checks download/upload backpressure with a fake rclone process. |
+| `rcloneuploadtest` | Verifies staged publication, exact bytes, cancellation/failure cleanup and preservation of the previous remote file. |
+| `rclonedownloadtest` | Verifies unknown-size materialization and exact selection of duplicate remote objects. |
 | `appstreamtest` | Validates installed desktop metadata. |
 
 `rclonepausetest` is especially important. It suspends a KIO copy, waits for
@@ -60,6 +62,13 @@ release candidate by deleting or renaming files in a personal root directory.
 6. Rename the file within the remote, then remove it.
 7. Test an overwrite prompt and a cancel action.
 8. Restart Dolphin and verify the remote still opens.
+9. Open, edit and save a TXT plus one ODT/DOCX file through `rclone:/`; close
+   the application, reopen the file and verify the edited bytes/content.
+10. Open a native Google document exported by rclone and verify it has real
+    content, a nonzero size and is presented read-only.
+11. Create two disposable Drive objects with the same exported name. Verify
+    that Dolphin shows one read-only entry and LibreOffice opens one valid
+    document rather than concatenated/corrupt bytes.
 
 For Google Drive, perform this with a private OAuth client. A shared rclone
 client can introduce quota delays that make a release candidate look slow even
@@ -76,6 +85,8 @@ Run this matrix before a public release:
 | Local destination | Download from a remote to a local filesystem |
 | Provider | Google Drive with private OAuth; one non-Google rclone backend |
 | File size | Small file, multi-chunk file and a filename with spaces/Unicode |
+| Document editing | TXT and one ZIP-based office format saved and reopened |
+| Drive edge cases | Native export with unknown size and duplicate object names |
 | Failure path | Cancel, network interruption and denied/expired OAuth |
 | UI | Dolphin notification, F5, context menu, Properties/free-space query |
 

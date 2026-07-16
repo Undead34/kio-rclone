@@ -19,6 +19,7 @@ mounts or another frontend.
 | Browse remotes and folders | Available |
 | Download and upload through Dolphin | Available |
 | Create, rename and delete files/directories | Available |
+| Open and edit ordinary documents through KIOFuse | Available with whole-file caching |
 | Pause and cancel transfers | Available through KIO backpressure |
 | Google Drive private OAuth flow | Available in **Rclone Remotes** |
 | Full offline cache, sync UI or mount manager | Not part of this project |
@@ -55,7 +56,7 @@ kbuildsycoca6 --noincremental
 To replace an older package with a package already built in this checkout:
 
 ~~~bash
-sudo pacman -U ./kio-rclone-0.2.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ./kio-rclone-0.3.0-1-x86_64.pkg.tar.zst
 kbuildsycoca6 --noincremental
 ~~~
 
@@ -105,10 +106,11 @@ remain meaningful.
 
 | Situation | What KIO Rclone does |
 | --- | --- |
-| Download | Streams one requested remote file without a redundant metadata pass. |
-| Upload | Streams stdin to `rclone rcat` with the exact size when KIO knows it. |
+| Normal download | Streams one unique, known-size remote file. |
+| Unknown size or duplicate name | Materializes the selected object locally and reports its real size before opening it. |
+| Upload | Streams to a unique remote staging name, validates the source size and publishes it with `moveto` only after `rcat` succeeds. |
 | Progress | Shows rclone's remote upload percentage, rate and ETA in the notification. |
-| Final remote commit | Shows **Finalizing upload…** until rclone confirms success. |
+| Final remote commit | Shows **Finalizing upload…** and **Committing upload…** until the staged file is published. |
 | Pause | Stops KIO's producer/consumer flow, so rclone stops receiving data. |
 
 Dolphin can briefly show a 100% bar while a cloud provider commits its final
@@ -120,6 +122,28 @@ Google Drive's default upload chunk is 8 MiB; larger chunks improve throughput
 at the cost of memory. KIO Rclone does not override that provider setting with
 a smaller value. See [rclone's Drive options](https://rclone.org/drive/#drive-chunk-size)
 and [`rcat` documentation](https://rclone.org/commands/rclone_rcat/).
+
+### Opening and editing documents
+
+Applications that need a local seekable file, including LibreOffice and text
+editors, normally reach `rclone:/` through KIOFuse. KIO Rclone deliberately
+keeps its KIO `opening` capability disabled so KIOFuse provides the whole-file
+cache; ordinary remote files are uploaded back safely when that cache is
+flushed.
+
+Two cloud cases are intentionally read-only:
+
+- Google-native documents exported by rclone have no stable size until they
+  are downloaded. KIO Rclone materializes them so LibreOffice receives the
+  correct bytes and size, but does not replace the native collaborative
+  document with an uploaded Office file.
+- Some providers allow several objects with the same name. KIO Rclone shows
+  the newest one and, when the backend exposes an object ID, downloads that
+  exact object instead of concatenating duplicates. Resolve the duplicate
+  names in the provider before editing that path.
+
+This release implements reliable whole-file editing, not remote random-access
+I/O or an offline synchronization cache.
 
 ## Configuration and credentials
 
@@ -172,7 +196,9 @@ useful for every rclone backend that supports the requested operation.
 ## User documentation website
 
 The `docs/` directory is also a VitePress static website. It contains the
-Spanish user guide, Google Cloud setup guide and project documentation.
+English and Spanish user guides, the Google Cloud setup guide, and project
+documentation. Read the [English documentation](https://undead34.github.io/kio-rclone/en/)
+or the [Spanish documentation](https://undead34.github.io/kio-rclone/).
 The published copy is [undead34.github.io/kio-rclone](https://undead34.github.io/kio-rclone/).
 
 ```bash
@@ -223,7 +249,8 @@ mount, sync, bisync or a full VFS cache. In particular:
 - There is no offline cache or queued transfer manager.
 - Provider features not exposed by KIO stay available through rclone itself.
 - Cloud providers may allow duplicate filenames even though a file-manager URL
-  normally identifies one path; avoid duplicate names in the same folder.
+  normally identifies one path. KIO Rclone exposes only the newest duplicate
+  and keeps that ambiguous path read-only until the duplicates are resolved.
 
 ## Project plan
 

@@ -20,7 +20,7 @@ Before public packaging work:
 
 - [ ] Add a top-level `LICENSE` file matching the SPDX headers.
 - [ ] Add AppStream metainfo so software centers can describe the utility.
-- [ ] Define a changelog and semantic-versioning policy.
+- [x] Define a changelog and semantic-versioning policy.
 - [ ] Choose the canonical public forge and configure protected release tags.
 - [ ] Add CI for CMake, CTest and the Arch package `check()` step.
 - [x] Build the VitePress site in CI and publish it to GitHub Pages.
@@ -126,7 +126,7 @@ Every public version should satisfy all of these:
 
 ## First public milestone
 
-The practical first milestone is **0.2.x on Arch**:
+The practical first milestone is **0.3.x on Arch**:
 
 1. Finish Phase 0.
 2. Recruit a few testers with independent rclone remotes.

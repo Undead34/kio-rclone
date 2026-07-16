@@ -1,5 +1,6 @@
 ---
 layout: home
+description: Integración de KDE Dolphin con remotos cloud de rclone mediante KIO.
 
 hero:
   name: KIO Rclone

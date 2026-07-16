@@ -9,9 +9,15 @@ archivo local ⇄ KIO ⇄ KIO Rclone ⇄ rclone ⇄ proveedor
 
 ## Subidas
 
-Al subir, KIO Rclone inicia `rclone rcat` y va entregándole datos solo cuando
-rclone puede aceptarlos. Si Dolphin pausa la tarea, KIO deja de alimentar el
-worker; el proceso de rclone se queda sin nuevos bytes que enviar.
+Al subir, KIO Rclone inicia `rclone rcat` contra un nombre remoto temporal y va
+entregándole datos solo cuando rclone puede aceptarlos. Si Dolphin pausa la
+tarea, KIO deja de alimentar el worker; el proceso de rclone se queda sin
+nuevos bytes que enviar.
+
+El nombre definitivo no se toca durante esa fase. KIO Rclone valida el tamaño
+recibido y comprueba que otra aplicación no haya cambiado el destino. Sólo
+entonces ejecuta `rclone moveto` para publicar el archivo completo. Si se
+cancela o falla la subida, borra el temporal y conserva la versión anterior.
 
 La notificación puede pasar por estas fases:
 
@@ -20,6 +26,7 @@ La notificación puede pasar por estas fases:
 | Preparing upload… | rclone está creando la operación y resolviendo el remoto. |
 | Uploading… 42% · 8.1 MiB/s | Estadística real que rclone reporta desde el backend. |
 | Finalizing upload… | Todos los bytes locales llegaron a rclone; el proveedor aún confirma el último bloque. |
+| Committing upload… | La carga completa se está moviendo al nombre definitivo. |
 | Completado | rclone salió correctamente y KIO confirmó la tarea. |
 
 > [!IMPORTANT]
@@ -30,9 +37,14 @@ La notificación puede pasar por estas fases:
 
 ## Descargas
 
-La descarga se entrega por chunks a KIO. Pausar bloquea el consumidor y aplica
-contrapresión al proceso que está leyendo desde rclone. Cancelar termina el
-proceso y la tarea de KIO.
+Los archivos únicos con tamaño conocido se entregan por chunks a KIO. Pausar
+bloquea el consumidor y aplica contrapresión al proceso que está leyendo desde
+rclone. Cancelar termina el proceso y la tarea de KIO.
+
+Para una exportación nativa de Google con tamaño desconocido, o cuando existen
+objetos duplicados, primero se crea un archivo temporal local. Así KIOFuse y
+LibreOffice reciben un tamaño real y un único archivo, nunca varios ZIP/Office
+concatenados.
 
 ## Rendimiento
 

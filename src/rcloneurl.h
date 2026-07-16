@@ -23,12 +23,14 @@ public:
     [[nodiscard]] QString remote() const;
     [[nodiscard]] QString remotePath() const;
     [[nodiscard]] QString remoteSpec() const;
+    [[nodiscard]] QUrl url() const;
 
     [[nodiscard]] static QUrl rootUrl();
     [[nodiscard]] static QUrl remoteUrl(const QString &remote);
 
 private:
     bool m_valid = false;
+    QUrl m_url;
     QString m_remote;
     QString m_remotePath;
 };

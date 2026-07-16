@@ -13,6 +13,7 @@ RcloneUrl::RcloneUrl(const QUrl &url)
     if (url.scheme() != QLatin1String("rclone")) {
         return;
     }
+    m_url = url;
 
     QStringList parts;
     if (!url.host().isEmpty()) {
@@ -67,6 +68,11 @@ QString RcloneUrl::remoteSpec() const
     }
 
     return m_remote + QLatin1Char(':') + m_remotePath;
+}
+
+QUrl RcloneUrl::url() const
+{
+    return m_url;
 }
 
 QUrl RcloneUrl::rootUrl()

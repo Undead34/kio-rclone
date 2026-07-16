@@ -1,7 +1,7 @@
 # Maintainer: KIO Rclone contributors
 
 pkgname=kio-rclone
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc='Browse rclone remotes from Dolphin and other KIO applications'
 arch=('x86_64')

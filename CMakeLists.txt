@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(kio-rclone VERSION 0.2.0 LANGUAGES CXX)
+project(kio-rclone VERSION 0.3.0 LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.5.0)
 set(KF_MIN_VERSION 6.3.0)

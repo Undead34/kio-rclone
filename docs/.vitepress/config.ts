@@ -9,6 +9,11 @@ export default defineConfig({
     description: 'Tu nube como una ubicación nativa de Dolphin.',
     lastUpdated: true,
 
+    locales: {
+        root: { label: 'Español', lang: 'es' },
+        en: { label: 'English', lang: 'en' },
+    },
+
     head: [
         ['meta', { name: 'theme-color', content: '#1688d4' }],
         ['meta', { property: 'og:type', content: 'website' }],
@@ -19,6 +24,41 @@ export default defineConfig({
 
     themeConfig: {
         logo: '/kio-rclone.svg',
+        localeLinks: { text: 'Idioma' },
+
+        locales: {
+            root: {
+                label: 'Español',
+                lang: 'es',
+            },
+            en: {
+                label: 'English',
+                lang: 'en',
+                nav: [
+                    { text: 'Get started', link: '/en/getting-started' },
+                    { text: 'Google Drive', link: '/en/google-drive' },
+                    { text: 'Features', link: '/en/features' },
+                    { text: 'Help', link: '/en/troubleshooting' },
+                ],
+                sidebar: [
+                    {
+                        text: 'For users',
+                        items: [
+                            { text: 'Home', link: '/en/' },
+                            { text: 'Getting started', link: '/en/getting-started' },
+                            { text: 'Features', link: '/en/features' },
+                            { text: 'Transfers', link: '/en/transfers' },
+                            { text: 'Google Drive and GCP', link: '/en/google-drive' },
+                            { text: 'Troubleshooting', link: '/en/troubleshooting' },
+                        ],
+                    },
+                    {
+                        text: 'Support',
+                        items: [{ text: 'Logs and safe diagnostics', link: '/en/LOGGING' }],
+                    },
+                ],
+            },
+        },
 
         nav: [
             { text: 'Empezar', link: '/getting-started' },
