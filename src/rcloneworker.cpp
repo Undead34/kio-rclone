@@ -23,7 +23,7 @@ Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 
 namespace
 {
-constexpr qsizetype DownloadChunkSize = 2 * 1024;
+constexpr qsizetype DownloadChunkSize = 64 * 1024;
 constexpr qsizetype UploadChunkSize = 32 * 1024;
 constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
 
