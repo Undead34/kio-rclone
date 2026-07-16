@@ -23,11 +23,28 @@ Before public packaging work:
 - [ ] Define a changelog and semantic-versioning policy.
 - [ ] Choose the canonical public forge and configure protected release tags.
 - [ ] Add CI for CMake, CTest and the Arch package `check()` step.
+- [x] Build the VitePress site in CI and publish it to GitHub Pages.
+- [x] Select GitHub Pages as the first static host.
 - [ ] Add a release issue template containing the manual test matrix.
 - [ ] Verify a clean source archive builds without ignored local artifacts.
 
 Exit gate: a tagged source tree builds, tests and packages in a clean Arch
-environment with no cloud credentials.
+environment with no cloud credentials, and the user documentation builds to
+static HTML.
+
+### Documentation hosting
+
+The VitePress site is deliberately independent from the KIO package. The
+`Deploy documentation` workflow builds `docs/.vitepress/dist/` and deploys it
+to `https://undead34.github.io/kio-rclone/` after a push to `main`. There is no
+server-side application to operate.
+
+The workflow accepts only trusted `main` pushes or a manual dispatch; it does
+not run on pull requests, uses no repository secrets, grants write access only
+to the deployment job, and pins every GitHub Action to a full commit SHA.
+Other static hosts can use the same `pnpm install --frozen-lockfile` and
+`pnpm docs:build` commands, adjusting `DOCS_BASE` if the site is served under a
+subdirectory.
 
 ## Phase 1 — Arch Linux first
 

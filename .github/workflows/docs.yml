@@ -1,0 +1,78 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# The build reads source only. The deployment job receives its two extra
+# permissions explicitly below.
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        # actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          # VitePress uses history to show the last update of each page.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        # actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          # A docs build is small; avoid restoring untrusted cache contents.
+          package-manager-cache: false
+
+      - name: Enable the pinned package manager
+        run: corepack enable
+
+      - name: Install dependencies
+        # pnpm-workspace.yaml authorizes only esbuild's required postinstall.
+        run: pnpm install --frozen-lockfile
+
+      - name: Build VitePress
+        env:
+          DOCS_BASE: /kio-rclone/
+        run: pnpm docs:build
+
+      - name: Upload GitHub Pages artifact
+        # actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy artifact
+        id: deployment
+        # actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
