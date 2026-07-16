@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -45,6 +46,34 @@ void writeCounter(int descriptor, qint64 value)
     if (descriptor >= 0) {
         [[maybe_unused]] const ssize_t written = ::pwrite(descriptor, &value, sizeof(value), static_cast<off_t>(0));
     }
+}
+
+void writeUploadStats(qint64 transferred)
+{
+    const int percentage = int((transferred * 100) / PayloadSize);
+    const QJsonObject transfer{
+        {QStringLiteral("bytes"), transferred},
+        {QStringLiteral("eta"), qMax<qint64>(0, (PayloadSize - transferred) / (1024 * 1024))},
+        {QStringLiteral("name"), QStringLiteral("uploaded.bin")},
+        {QStringLiteral("percentage"), percentage},
+        {QStringLiteral("size"), PayloadSize},
+        {QStringLiteral("speed"), 1024 * 1024},
+        {QStringLiteral("speedAvg"), 1024 * 1024},
+    };
+    const QJsonObject stats{
+        {QStringLiteral("bytes"), transferred},
+        {QStringLiteral("eta"), qMax<qint64>(0, (PayloadSize - transferred) / (1024 * 1024))},
+        {QStringLiteral("speed"), 1024 * 1024},
+        {QStringLiteral("totalBytes"), PayloadSize},
+        {QStringLiteral("transferring"), QJsonArray{transfer}},
+    };
+    const QJsonObject log{
+        {QStringLiteral("level"), QStringLiteral("notice")},
+        {QStringLiteral("msg"), QStringLiteral("test upload stats")},
+        {QStringLiteral("stats"), stats},
+    };
+    const QByteArray line = QJsonDocument(log).toJson(QJsonDocument::Compact) + '\n';
+    writeAll(STDERR_FILENO, line.constData(), line.size());
 }
 
 int openCounter()
@@ -89,11 +118,16 @@ int consumeUpload()
 
     std::array<char, ChunkSize> chunk;
     qint64 transferred = 0;
+    qint64 nextStats = 1024 * 1024;
     for (;;) {
         const ssize_t received = ::read(STDIN_FILENO, chunk.data(), chunk.size());
         if (received > 0) {
             transferred += received;
             writeCounter(counter, transferred);
+            if (transferred >= nextStats) {
+                writeUploadStats(transferred);
+                nextStats += 1024 * 1024;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }

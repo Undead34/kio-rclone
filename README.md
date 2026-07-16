@@ -64,6 +64,7 @@ quota-limited and is being retired during 2026.
 Transfers intentionally use KIO's stream path instead of direct local-file
 shortcuts. This lets Dolphin pause and cancel them through normal KIO
 backpressure. Uploads use each rclone backend's native chunk settings instead
-of forcing small Google Drive chunks. Dolphin may briefly show 100% while the
-remote provider commits the final chunk; the job remains active and reports
+of forcing small Google Drive chunks. The notification reports rclone's remote
+percentage and transfer speed while uploading. Dolphin may briefly show 100%
+while the provider commits the final chunk; the job remains active and reports
 that it is finalizing until rclone confirms completion.

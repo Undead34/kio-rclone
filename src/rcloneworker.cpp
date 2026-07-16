@@ -11,12 +11,17 @@
 
 #include <QCoreApplication>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
+#include <QLocale>
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 
+#include <limits>
 #include <sys/stat.h>
 
 Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
@@ -306,8 +311,14 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         rcloneUrl.remoteSpec(),
         QStringLiteral("--buffer-size"),
         QStringLiteral("0"),
+        QStringLiteral("--stats"),
+        QStringLiteral("500ms"),
+        QStringLiteral("--stats-one-line"),
+        QStringLiteral("--stats-log-level"),
+        QStringLiteral("NOTICE"),
+        QStringLiteral("--use-json-log"),
         QStringLiteral("--log-level"),
-        QStringLiteral("ERROR"),
+        QStringLiteral("NOTICE"),
     };
     if (sizeOk && sourceSize >= 0) {
         arguments.append({QStringLiteral("--size"), QString::number(sourceSize)});
@@ -323,7 +334,89 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
 
     QByteArray standardOutput;
     QByteArray standardError;
+    QByteArray pendingLog;
     qint64 processed = 0;
+    qint64 remoteProcessed = 0;
+
+    const auto handleLogLine = [this, &standardError, &remoteProcessed](const QByteArray &line) {
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            appendLimited(standardError, line + '\n');
+            return;
+        }
+
+        const QJsonObject object = document.object();
+        const QJsonObject stats = object.value(QStringLiteral("stats")).toObject();
+        if (!stats.isEmpty()) {
+            qint64 transferred = stats.value(QStringLiteral("bytes")).toVariant().toLongLong();
+            double transferSpeed = stats.value(QStringLiteral("speed")).toDouble();
+            int percentage = -1;
+            qint64 eta = -1;
+
+            const QJsonArray transferring = stats.value(QStringLiteral("transferring")).toArray();
+            if (!transferring.isEmpty()) {
+                const QJsonObject transfer = transferring.at(0).toObject();
+                transferred = transfer.value(QStringLiteral("bytes")).toVariant().toLongLong();
+                transferSpeed = transfer.value(QStringLiteral("speedAvg")).toDouble();
+                if (transferSpeed <= 0) {
+                    transferSpeed = transfer.value(QStringLiteral("speed")).toDouble();
+                }
+                percentage = transfer.value(QStringLiteral("percentage")).toInt(-1);
+                const QJsonValue etaValue = transfer.value(QStringLiteral("eta"));
+                if (etaValue.isDouble()) {
+                    eta = qRound64(etaValue.toDouble());
+                }
+            } else {
+                const qint64 total = stats.value(QStringLiteral("totalBytes")).toVariant().toLongLong();
+                if (total > 0) {
+                    percentage = qBound(0, int((transferred * 100) / total), 100);
+                }
+                const QJsonValue etaValue = stats.value(QStringLiteral("eta"));
+                if (etaValue.isDouble()) {
+                    eta = qRound64(etaValue.toDouble());
+                }
+            }
+
+            remoteProcessed = qMax(remoteProcessed, transferred);
+            processedSize(remoteProcessed);
+            if (transferSpeed > 0) {
+                speed(static_cast<unsigned long>(qMin(transferSpeed, double(std::numeric_limits<unsigned long>::max()))));
+            }
+
+            const QString formattedSpeed = QLocale().formattedDataSize(qMax<qint64>(0, qRound64(transferSpeed)));
+            if (percentage >= 0 && eta >= 0) {
+                infoMessage(i18n("Uploading… %1% · %2/s · %3 s remaining", percentage, formattedSpeed, eta));
+            } else if (percentage >= 0) {
+                infoMessage(i18n("Uploading… %1% · %2/s", percentage, formattedSpeed));
+            }
+            return;
+        }
+
+        const QString message = object.value(QStringLiteral("msg")).toString().trimmed();
+        if (!message.isEmpty()) {
+            appendLimited(standardError, message.toUtf8() + '\n');
+        }
+    };
+
+    const auto collectUploadOutput = [&process, &standardOutput, &pendingLog, &handleLogLine](bool flush) {
+        appendLimited(standardOutput, process.readAllStandardOutput());
+        pendingLog.append(process.readAllStandardError());
+        for (;;) {
+            const qsizetype newline = pendingLog.indexOf('\n');
+            if (newline < 0) {
+                break;
+            }
+            handleLogLine(pendingLog.left(newline));
+            pendingLog.remove(0, newline + 1);
+        }
+        if (flush && !pendingLog.isEmpty()) {
+            handleLogLine(pendingLog);
+            pendingLog.clear();
+        }
+    };
+
+    infoMessage(i18n("Preparing upload…"));
     while (process.state() != QProcess::NotRunning) {
         if (wasKilled()) {
             stopProcess(process);
@@ -344,7 +437,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         qsizetype offset = 0;
         while (offset < sourceData.size()) {
             if (process.state() == QProcess::NotRunning) {
-                collectProcessOutput(process, standardOutput, standardError);
+                collectUploadOutput(true);
                 return errorResult(QString::fromUtf8(standardError).trimmed(), KIO::ERR_CANNOT_WRITE, url);
             }
 
@@ -362,12 +455,12 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
                     return KIO::WorkerResult::pass();
                 }
                 process.waitForBytesWritten(100);
-                collectProcessOutput(process, standardOutput, standardError);
+                collectUploadOutput(false);
             }
         }
 
         processed += sourceData.size();
-        processedSize(processed);
+        collectUploadOutput(false);
     }
 
     process.closeWriteChannel();
@@ -378,13 +471,14 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
             return KIO::WorkerResult::pass();
         }
         process.waitForFinished(100);
-        collectProcessOutput(process, standardOutput, standardError);
+        collectUploadOutput(false);
     }
-    collectProcessOutput(process, standardOutput, standardError);
+    collectUploadOutput(true);
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         return errorResult(QString::fromUtf8(standardError).trimmed(), KIO::ERR_CANNOT_WRITE, url);
     }
+    processedSize(sizeOk && sourceSize >= 0 ? sourceSize : processed);
     return KIO::WorkerResult::pass();
 }
 

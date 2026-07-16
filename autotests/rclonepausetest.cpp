@@ -77,6 +77,10 @@ void RclonePauseTest::uploadStopsAtTheConsumer()
     verifyPause(job);
     QCOMPARE(counterValue(), PayloadSize);
     QVERIFY(std::any_of(infoSpy.cbegin(), infoSpy.cend(), [](const QList<QVariant> &arguments) {
+        return arguments.size() >= 2 && arguments.at(1).toString().contains(QStringLiteral("Uploading"))
+            && arguments.at(1).toString().contains(QLatin1Char('%'));
+    }));
+    QVERIFY(std::any_of(infoSpy.cbegin(), infoSpy.cend(), [](const QList<QVariant> &arguments) {
         return arguments.size() >= 2 && arguments.at(1).toString().contains(QStringLiteral("Finalizing upload"));
     }));
     delete job;
