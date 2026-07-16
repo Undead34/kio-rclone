@@ -24,7 +24,7 @@ Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 namespace
 {
 constexpr qsizetype DownloadChunkSize = 64 * 1024;
-constexpr qsizetype UploadChunkSize = 32 * 1024;
+constexpr qsizetype UploadChunkSize = 256 * 1024;
 constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
 
 void appendLimited(QByteArray &destination, const QByteArray &data)
@@ -44,6 +44,11 @@ QString fallbackMimeType(const RcloneItem &item)
         return item.mimeType;
     }
     return QMimeDatabase().mimeTypeForFile(item.name, QMimeDatabase::MatchExtension).name();
+}
+
+QString fallbackMimeType(const QString &fileName)
+{
+    return QMimeDatabase().mimeTypeForFile(fileName, QMimeDatabase::MatchExtension).name();
 }
 
 class KIOPluginForMetaData : public QObject
@@ -198,21 +203,10 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return result;
     }
 
-    QString statError;
-    const auto item = m_backend.stat(rcloneUrl.remoteSpec(), &statError, [this]() {
-        return wasKilled();
-    });
-    if (!item) {
-        return errorResult(statError, KIO::ERR_DOES_NOT_EXIST, url);
-    }
-    if (item->isDirectory) {
-        return KIO::WorkerResult::fail(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
-    }
-
-    mimeType(fallbackMimeType(*item));
-    if (item->size >= 0) {
-        totalSize(item->size);
-    }
+    // CopyJob has already obtained the source size before starting its
+    // get/put data pump. Repeating lsjson --stat here starts a second rclone
+    // process and resolves the complete remote path twice for every download.
+    mimeType(fallbackMimeType(rcloneUrl.remotePath()));
 
     QProcess process;
     configureProcess(process,
@@ -297,10 +291,6 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         rcloneUrl.remoteSpec(),
         QStringLiteral("--buffer-size"),
         QStringLiteral("0"),
-        QStringLiteral("--streaming-upload-cutoff"),
-        QStringLiteral("256K"),
-        QStringLiteral("--drive-chunk-size"),
-        QStringLiteral("1M"),
         QStringLiteral("--log-level"),
         QStringLiteral("ERROR"),
     };
@@ -366,6 +356,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
     }
 
     process.closeWriteChannel();
+    infoMessage(i18n("Finalizing upload…"));
     while (process.state() != QProcess::NotRunning) {
         if (wasKilled()) {
             stopProcess(process);
