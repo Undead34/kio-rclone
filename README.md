@@ -44,7 +44,9 @@ The Arch package installs the worker in Qt's system plugin directory and does
 not need this step.
 
 Use the **Configure Remotes…** entry to add a Google Drive account using
-rclone's browser-based OAuth flow.
+rclone's browser-based OAuth flow. For Google Drive, configure your own OAuth
+desktop client in the **Google OAuth…** action. The shared rclone client is
+quota-limited and is being retired during 2026.
 
 ## Runtime dependency
 
@@ -61,4 +63,7 @@ rclone's browser-based OAuth flow.
 
 Transfers intentionally use KIO's stream path instead of direct local-file
 shortcuts. This lets Dolphin pause and cancel them through normal KIO
-backpressure.
+backpressure. Uploads use each rclone backend's native chunk settings instead
+of forcing small Google Drive chunks. Dolphin may briefly show 100% while the
+remote provider commits the final chunk; the job remains active and reports
+that it is finalizing until rclone confirms completion.
