@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">KIO Rclone</title>
+  <desc id="desc">Una nube azul conectada a dos flechas</desc>
+  <defs>
+    <linearGradient id="cloud" x1="48" y1="42" x2="209" y2="215" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6ad7ff"/>
+      <stop offset="0.52" stop-color="#1688d4"/>
+      <stop offset="1" stop-color="#704ff2"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0f3b6b" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#111a27"/>
+  <path filter="url(#shadow)" fill="url(#cloud)" d="M184.8 193H74.2C48.1 193 27 172.2 27 146.4c0-23.1 17.1-42.5 39.8-46.1C73.9 70.7 99.4 49 130 49c36.1 0 65.5 29.1 65.9 65.1 19.3 4.9 33.1 22.2 33.1 42.5 0 20.1-16.3 36.4-36.2 36.4Z"/>
+  <path fill="#f5fbff" d="M91 134.5a9 9 0 0 1 12.7 0l17.1 17.1a9 9 0 0 1 0 12.8l-17.1 17.1a9 9 0 1 1-12.7-12.8l10.7-10.7L91 147.3a9 9 0 0 1 0-12.8Zm73.1 0a9 9 0 0 1 12.8 12.8L166.2 158l10.7 10.7a9 9 0 1 1-12.8 12.8L147 164.4a9 9 0 0 1 0-12.8l17.1-17.1Z"/>
+  <path fill="#dff5ff" d="M127 126.5h2a9 9 0 0 1 0 18h-2a9 9 0 0 1 0-18Zm0 43h2a9 9 0 0 1 0 18h-2a9 9 0 0 1 0-18Z"/>
+</svg>

@@ -169,6 +169,22 @@ The worker never implements Google Drive, S3, WebDAV or another provider API
 itself. That keeps provider behaviour aligned with rclone and makes the worker
 useful for every rclone backend that supports the requested operation.
 
+## User documentation website
+
+The `docs/` directory is also a VitePress static website. It contains the
+Spanish user guide, Google Cloud setup guide and project documentation.
+The published copy is [undead34.github.io/kio-rclone](https://undead34.github.io/kio-rclone/).
+
+```bash
+pnpm install
+pnpm docs:dev
+pnpm docs:build
+pnpm docs:preview
+```
+
+`docs:build` produces deployable static files in `docs/.vitepress/dist/`; no
+application server, database or credentials are needed to host them.
+
 ## Testing
 
 The automated suite is deliberately cloud-free:
