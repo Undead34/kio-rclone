@@ -208,12 +208,21 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     // process and resolves the complete remote path twice for every download.
     mimeType(fallbackMimeType(rcloneUrl.remotePath()));
 
+    const QString fileName = rcloneUrl.remotePath().section(QLatin1Char('/'), -1);
+    if (fileName.contains(QLatin1Char('\n'))) {
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+    }
+    const QString parentPath = rcloneUrl.remotePath().section(QLatin1Char('/'), 0, -2);
+    const QString parentSpec = rcloneUrl.remote() + QLatin1Char(':') + parentPath;
+
     QProcess process;
     configureProcess(process,
                      m_backend.executable(),
                      {
                          QStringLiteral("cat"),
-                         rcloneUrl.remoteSpec(),
+                         parentSpec,
+                         QStringLiteral("--files-from-raw"),
+                         QStringLiteral("-"),
                          QStringLiteral("--buffer-size"),
                          QStringLiteral("0"),
                          QStringLiteral("--multi-thread-streams"),
@@ -226,6 +235,12 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     if (!process.waitForStarted(5000)) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS, process.errorString());
     }
+    const QByteArray requestedFile = fileName.toUtf8() + '\n';
+    if (process.write(requestedFile) != requestedFile.size() || !process.waitForBytesWritten(5000)) {
+        stopProcess(process);
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, url.toDisplayString());
+    }
+    process.closeWriteChannel();
 
     QByteArray standardError;
     qint64 processed = 0;
