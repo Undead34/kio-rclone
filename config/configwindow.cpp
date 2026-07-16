@@ -13,10 +13,13 @@
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFile>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QProcess>
@@ -25,6 +28,40 @@
 #include <QStandardPaths>
 #include <QStyle>
 #include <QVBoxLayout>
+#include <QXmlStreamReader>
+
+namespace
+{
+std::optional<QPair<QString, QString>> existingGoogleOAuthOverride()
+{
+    QFile file(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/accounts/providers/google.provider"));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return std::nullopt;
+    }
+
+    QString clientId;
+    QString clientSecret;
+    QXmlStreamReader xml(&file);
+    while (!xml.atEnd()) {
+        xml.readNext();
+        if (!xml.isStartElement() || xml.name() != QLatin1String("setting")) {
+            continue;
+        }
+
+        const QString name = xml.attributes().value(QStringLiteral("name")).toString();
+        if (name == QLatin1String("ClientId")) {
+            clientId = xml.readElementText().trimmed();
+        } else if (name == QLatin1String("ClientSecret")) {
+            clientSecret = xml.readElementText().trimmed();
+        }
+    }
+
+    if (xml.hasError() || clientId.isEmpty() || clientSecret.isEmpty()) {
+        return std::nullopt;
+    }
+    return qMakePair(clientId, clientSecret);
+}
+} // namespace
 
 ConfigWindow::ConfigWindow(QWidget *parent)
     : QWidget(parent)
@@ -65,10 +102,12 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     auto *remoteButtons = new QHBoxLayout;
     m_openButton = new QPushButton(QIcon::fromTheme(QStringLiteral("system-file-manager")), i18n("Open in Dolphin"), this);
     m_reconnectButton = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")), i18n("Reconnect…"), this);
+    m_googleOAuthButton = new QPushButton(QIcon::fromTheme(QStringLiteral("document-edit-sign-encrypt")), i18n("Google OAuth…"), this);
     m_removeButton = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-delete")), i18n("Remove"), this);
     auto *refreshButton = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")), i18n("Refresh"), this);
     remoteButtons->addWidget(m_openButton);
     remoteButtons->addWidget(m_reconnectButton);
+    remoteButtons->addWidget(m_googleOAuthButton);
     remoteButtons->addWidget(m_removeButton);
     remoteButtons->addStretch();
     remoteButtons->addWidget(refreshButton);
@@ -85,6 +124,9 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     });
     connect(m_reconnectButton, &QPushButton::clicked, this, [this]() {
         reconnectSelected();
+    });
+    connect(m_googleOAuthButton, &QPushButton::clicked, this, [this]() {
+        configureGoogleOAuth();
     });
     connect(m_removeButton, &QPushButton::clicked, this, [this]() {
         removeSelected();
@@ -105,6 +147,7 @@ ConfigWindow::ConfigWindow(QWidget *parent)
 void ConfigWindow::refreshRemotes()
 {
     m_remoteList->clear();
+    m_remoteInfo.clear();
     if (!m_backend.isAvailable()) {
         m_statusLabel->setText(
             i18n("rclone was not found. Install it or set "
@@ -115,15 +158,36 @@ void ConfigWindow::refreshRemotes()
 
     QString error;
     const QStringList remotes = m_backend.remotes(&error);
+    int sharedGoogleClients = 0;
     for (const QString &remote : remotes) {
-        auto *item = new QListWidgetItem(QIcon::fromTheme(QStringLiteral("folder-cloud")), remote, m_remoteList);
+        QString infoError;
+        const auto info = m_backend.remoteInfo(remote, &infoError);
+        if (info) {
+            m_remoteInfo.insert(remote, *info);
+        }
+
+        const bool sharedGoogleClient = info && info->type == QLatin1String("drive") && !info->hasClientId;
+        auto *item =
+            new QListWidgetItem(QIcon::fromTheme(sharedGoogleClient ? QStringLiteral("dialog-warning") : QStringLiteral("folder-cloud")), remote, m_remoteList);
         item->setData(Qt::UserRole, remote);
+        if (sharedGoogleClient) {
+            ++sharedGoogleClients;
+            item->setToolTip(i18n("This Google Drive remote uses rclone's shared OAuth client. "
+                                  "It is quota-limited and is being retired during 2026."));
+        } else if (!infoError.isEmpty()) {
+            item->setToolTip(infoError);
+        }
     }
 
     if (!error.isEmpty()) {
         m_statusLabel->setText(error);
     } else if (remotes.isEmpty()) {
         m_statusLabel->setText(i18n("No remotes are configured yet."));
+    } else if (sharedGoogleClients > 0) {
+        m_statusLabel->setText(
+            i18np("One Google Drive remote uses rclone's shared OAuth client. Configure your own client to avoid quota delays and service interruption.",
+                  "%1 Google Drive remotes use rclone's shared OAuth client. Configure your own clients to avoid quota delays and service interruption.",
+                  sharedGoogleClients));
     } else {
         m_statusLabel->setText(i18np("One remote configured.", "%1 remotes configured.", remotes.size()));
         m_remoteList->setCurrentRow(0);
@@ -194,6 +258,77 @@ void ConfigWindow::reconnectSelected()
     refreshRemotes();
 }
 
+void ConfigWindow::configureGoogleOAuth()
+{
+    const QString remote = selectedRemote();
+    if (remote.isEmpty() || m_remoteInfo.value(remote).type != QLatin1String("drive")) {
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(i18n("Google OAuth for %1", remote));
+    dialog.setMinimumWidth(560);
+
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *description = new QLabel(
+        i18n("Use your own Google OAuth desktop client to avoid the shared rclone quota. "
+             "<a href=\"https://rclone.org/drive/#making-your-own-client-id\">Creation instructions</a>"),
+        &dialog);
+    description->setWordWrap(true);
+    description->setOpenExternalLinks(true);
+    layout->addWidget(description);
+
+    auto *form = new QFormLayout;
+    auto *clientId = new QLineEdit(&dialog);
+    auto *clientSecret = new QLineEdit(&dialog);
+    clientSecret->setEchoMode(QLineEdit::Password);
+    form->addRow(i18n("Client ID:"), clientId);
+    form->addRow(i18n("Client secret:"), clientSecret);
+    layout->addLayout(form);
+
+    if (const auto existing = existingGoogleOAuthOverride()) {
+        auto *importButton = new QPushButton(QIcon::fromTheme(QStringLiteral("document-import")), i18n("Import existing local OAuth override"), &dialog);
+        layout->addWidget(importButton);
+        connect(importButton, &QPushButton::clicked, &dialog, [clientId, clientSecret, existing]() {
+            clientId->setText(existing->first);
+            clientSecret->setText(existing->second);
+        });
+    }
+
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    if (clientId->text().trimmed().isEmpty() || clientSecret->text().trimmed().isEmpty()) {
+        QMessageBox::warning(this, i18n("Missing Credentials"), i18n("Enter both the Google OAuth client ID and client secret."));
+        return;
+    }
+
+    const bool success = runInteractiveRclone(
+        {
+            QStringLiteral("config"),
+            QStringLiteral("update"),
+            remote,
+            QStringLiteral("client_id"),
+            clientId->text().trimmed(),
+            QStringLiteral("client_secret"),
+            clientSecret->text().trimmed(),
+            QStringLiteral("--no-output"),
+        },
+        i18n("Authorize %1", remote),
+        i18n("Complete authorization in the browser. rclone will store the new token directly in its own configuration."));
+    refreshRemotes();
+    if (!success) {
+        QMessageBox::warning(this,
+                             i18n("Authorization Incomplete"),
+                             i18n("The Google OAuth credentials were not activated. Open Google OAuth again and complete the browser authorization."));
+    }
+}
+
 void ConfigWindow::removeSelected()
 {
     const QString remote = selectedRemote();
@@ -250,9 +385,11 @@ void ConfigWindow::openAdvancedConfiguration()
 
 void ConfigWindow::updateActions()
 {
-    const bool selected = !selectedRemote().isEmpty();
+    const QString remote = selectedRemote();
+    const bool selected = !remote.isEmpty();
     m_openButton->setEnabled(selected);
     m_reconnectButton->setEnabled(selected);
+    m_googleOAuthButton->setEnabled(selected && m_remoteInfo.value(remote).type == QLatin1String("drive"));
     m_removeButton->setEnabled(selected);
 }
 

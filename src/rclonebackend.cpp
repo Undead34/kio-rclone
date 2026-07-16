@@ -147,6 +147,16 @@ QStringList RcloneBackend::remotes(QString *error, const CancellationCallback &i
     return parseRemoteList(result.standardOutput, error);
 }
 
+std::optional<RcloneRemoteInfo> RcloneBackend::remoteInfo(const QString &remote, QString *error, const CancellationCallback &isCancelled) const
+{
+    const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("redacted"), remote}, 30000, isCancelled);
+    if (!result.success()) {
+        setError(error, result.errorMessage());
+        return std::nullopt;
+    }
+    return parseRemoteInfo(result.standardOutput, error);
+}
+
 QStringList RcloneBackend::parseRemoteList(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
@@ -173,6 +183,45 @@ QStringList RcloneBackend::parseRemoteList(const QByteArray &json, QString *erro
     }
     remotes.sort(Qt::CaseInsensitive);
     return remotes;
+}
+
+std::optional<RcloneRemoteInfo> RcloneBackend::parseRemoteInfo(const QByteArray &config, QString *error)
+{
+    RcloneRemoteInfo info;
+    bool foundSection = false;
+
+    const QList<QByteArray> lines = config.split('\n');
+    for (const QByteArray &rawLine : lines) {
+        const QString line = QString::fromUtf8(rawLine).trimmed();
+        if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+            info.name = line.mid(1, line.size() - 2).trimmed();
+            foundSection = !info.name.isEmpty();
+            continue;
+        }
+        if (!foundSection) {
+            continue;
+        }
+
+        const qsizetype separator = line.indexOf(QLatin1Char('='));
+        if (separator < 0) {
+            continue;
+        }
+        const QString key = line.left(separator).trimmed();
+        const QString value = line.mid(separator + 1).trimmed();
+        if (key == QLatin1String("type")) {
+            info.type = value;
+        } else if (key == QLatin1String("client_id")) {
+            info.hasClientId = !value.isEmpty();
+        } else if (key == QLatin1String("root_folder_id")) {
+            info.hasRootFolderId = !value.isEmpty();
+        }
+    }
+
+    if (!foundSection) {
+        setError(error, QStringLiteral("No remote section found in rclone configuration"));
+        return std::nullopt;
+    }
+    return info;
 }
 
 QList<RcloneItem> RcloneBackend::list(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const

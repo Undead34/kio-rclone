@@ -8,6 +8,7 @@
 
 #include "rclonebackend.h"
 
+#include <QHash>
 #include <QWidget>
 
 class QLabel;
@@ -25,6 +26,7 @@ private:
     void refreshRemotes();
     void addGoogleDrive();
     void reconnectSelected();
+    void configureGoogleOAuth();
     void removeSelected();
     void openSelected();
     void openAdvancedConfiguration();
@@ -34,8 +36,10 @@ private:
     [[nodiscard]] bool validateRemoteName(const QString &name) const;
 
     RcloneBackend m_backend;
+    QHash<QString, RcloneRemoteInfo> m_remoteInfo;
     QLabel *m_statusLabel = nullptr;
     QListWidget *m_remoteList = nullptr;
+    QPushButton *m_googleOAuthButton = nullptr;
     QPushButton *m_openButton = nullptr;
     QPushButton *m_reconnectButton = nullptr;
     QPushButton *m_removeButton = nullptr;

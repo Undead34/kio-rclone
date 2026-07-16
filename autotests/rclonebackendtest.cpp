@@ -16,6 +16,7 @@ class RcloneBackendTest : public QObject
 
 private Q_SLOTS:
     void parsesRemoteLists();
+    void parsesRemoteInfo();
     void parsesListing();
     void listsLocalRemote();
 };
@@ -35,6 +36,35 @@ void RcloneBackendTest::parsesRemoteLists()
         &error);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(current, QStringList({QStringLiteral("Archive"), QStringLiteral("Photos")}));
+}
+
+void RcloneBackendTest::parsesRemoteInfo()
+{
+    QString error;
+    const auto sharedClient = RcloneBackend::parseRemoteInfo(
+        R"([Google Drive]
+type = drive
+scope = drive
+token = XXX
+)",
+        &error);
+    QVERIFY2(sharedClient.has_value(), qPrintable(error));
+    QCOMPARE(sharedClient->name, QStringLiteral("Google Drive"));
+    QCOMPARE(sharedClient->type, QStringLiteral("drive"));
+    QVERIFY(!sharedClient->hasClientId);
+    QVERIFY(!sharedClient->hasRootFolderId);
+
+    const auto privateClient = RcloneBackend::parseRemoteInfo(
+        R"([Work]
+type = drive
+client_id = 123.apps.googleusercontent.com
+client_secret = XXX
+root_folder_id = root-id
+)",
+        &error);
+    QVERIFY2(privateClient.has_value(), qPrintable(error));
+    QVERIFY(privateClient->hasClientId);
+    QVERIFY(privateClient->hasRootFolderId);
 }
 
 void RcloneBackendTest::parsesListing()

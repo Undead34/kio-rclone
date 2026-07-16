@@ -41,6 +41,13 @@ struct RcloneSpace {
     qint64 used = -1;
 };
 
+struct RcloneRemoteInfo {
+    QString name;
+    QString type;
+    bool hasClientId = false;
+    bool hasRootFolderId = false;
+};
+
 class RcloneBackend
 {
 public:
@@ -53,6 +60,9 @@ public:
 
     [[nodiscard]] RcloneResult run(const QStringList &arguments, int timeoutMs = 120000, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QStringList remotes(QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
+    [[nodiscard]] std::optional<RcloneRemoteInfo> remoteInfo(const QString &remote,
+                                                             QString *error = nullptr,
+                                                             const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QList<RcloneItem> list(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] std::optional<RcloneItem> stat(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] std::optional<RcloneSpace> about(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
@@ -61,6 +71,7 @@ public:
     [[nodiscard]] static QList<RcloneItem> parseItemList(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static std::optional<RcloneItem> parseItem(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static QStringList parseRemoteList(const QByteArray &json, QString *error = nullptr);
+    [[nodiscard]] static std::optional<RcloneRemoteInfo> parseRemoteInfo(const QByteArray &config, QString *error = nullptr);
     [[nodiscard]] static bool isNotFoundError(const QString &error);
 
 private:
