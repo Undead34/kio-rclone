@@ -1,0 +1,28 @@
+{
+    "KDE-KIO-Protocols": {
+        "rclone": {
+            "Class": ":internet",
+            "ExtraNames": [],
+            "Icon": "folder-cloud",
+            "deleteRecursive": true,
+            "deleting": true,
+            "input": "none",
+            "listing": [
+                "Name",
+                "Type",
+                "Size",
+                "Date",
+                "Access"
+            ],
+            "makedir": true,
+            "maxInstances": 10,
+            "maxInstancesPerHost": 5,
+            "moving": true,
+            "opening": false,
+            "output": "filesystem",
+            "protocol": "rclone",
+            "reading": true,
+            "writing": true
+        }
+    }
+}

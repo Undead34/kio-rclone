@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Link
+Name=Rclone Cloud Storage
+Comment=Browse cloud storage configured with rclone
+Icon=folder-cloud
+URL=rclone:/

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Rclone Remotes
+Comment=Configure cloud storage for Dolphin
+Icon=folder-cloud
+Exec=kio-rclone-config
+Categories=Qt;KDE;Settings;Network;
+StartupNotify=true
