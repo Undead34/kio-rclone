@@ -1,0 +1,42 @@
+# Maintainer: KIO Rclone contributors
+
+pkgname=kio-rclone
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Browse rclone remotes from Dolphin and other KIO applications'
+arch=('x86_64')
+license=('GPL-2.0-or-later')
+depends=(
+  'kcoreaddons'
+  'ki18n'
+  'kio'
+  'qt6-base'
+  'rclone'
+)
+makedepends=(
+  'cmake'
+  'extra-cmake-modules'
+  'ninja'
+)
+options=('!debug')
+source=()
+sha256sums=()
+
+build() {
+  cmake \
+    -S "$startdir/../.." \
+    -B "$srcdir/build" \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DBUILD_TESTING=ON
+  cmake --build "$srcdir/build"
+}
+
+check() {
+  ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}
