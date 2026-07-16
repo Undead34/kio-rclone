@@ -12,6 +12,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+
 namespace
 {
 constexpr qint64 PayloadSize = 16 * 1024 * 1024;
@@ -56,6 +58,7 @@ void RclonePauseTest::downloadStopsAtTheProducer()
 
     verifyPause(job);
     QCOMPARE(QFileInfo(destination).size(), PayloadSize);
+    delete job;
 }
 
 void RclonePauseTest::uploadStopsAtTheConsumer()
@@ -70,8 +73,13 @@ void RclonePauseTest::uploadStopsAtTheConsumer()
     file.close();
 
     auto *job = KIO::file_copy(QUrl::fromLocalFile(source), QUrl(QStringLiteral("rclone:/test/uploaded.bin")), -1, KIO::HideProgressInfo | KIO::Overwrite);
+    QSignalSpy infoSpy(job, &KJob::infoMessage);
     verifyPause(job);
     QCOMPARE(counterValue(), PayloadSize);
+    QVERIFY(std::any_of(infoSpy.cbegin(), infoSpy.cend(), [](const QList<QVariant> &arguments) {
+        return arguments.size() >= 2 && arguments.at(1).toString().contains(QStringLiteral("Finalizing upload"));
+    }));
+    delete job;
 }
 
 void RclonePauseTest::verifyPause(KIO::FileCopyJob *job)
@@ -98,7 +106,6 @@ void RclonePauseTest::verifyPause(KIO::FileCopyJob *job)
         QVERIFY(resultSpy.wait(10000));
     }
     QCOMPARE(job->error(), 0);
-    delete job;
 }
 
 qint64 RclonePauseTest::counterValue() const
