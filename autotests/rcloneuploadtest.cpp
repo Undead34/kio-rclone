@@ -16,9 +16,9 @@
 
 namespace
 {
-constexpr auto RcatBlockFile = ".kio-rclone-test-block-rcat";
-constexpr auto RcatFailFile = ".kio-rclone-test-fail-rcat";
-constexpr auto RcatStartedFile = ".kio-rclone-test-rcat-started";
+constexpr auto CopytoBlockFile = ".kio-rclone-test-block-copyto";
+constexpr auto CopytoFailFile = ".kio-rclone-test-fail-copyto";
+constexpr auto CopytoStartedFile = ".kio-rclone-test-copyto-started";
 constexpr auto DestinationName = "document.bin";
 constexpr qsizetype UploadSize = 2 * 1024 * 1024 + 137;
 
@@ -60,7 +60,7 @@ private Q_SLOTS:
     void originalStaysVisibleDuringBlockedUpload();
     void cancellationKeepsOriginal();
     void failureKeepsOriginal();
-    void concurrentRemoteChangeWins();
+    void concurrentRemoteChangeIsReplacedAtomically();
     void successPublishesExactBytes();
 
 private:
@@ -99,8 +99,8 @@ void RcloneUploadTest::init()
 
 void RcloneUploadTest::cleanup()
 {
-    QFile::remove(controlPath(QLatin1String(RcatBlockFile)));
-    QFile::remove(controlPath(QLatin1String(RcatFailFile)));
+    QFile::remove(controlPath(QLatin1String(CopytoBlockFile)));
+    QFile::remove(controlPath(QLatin1String(CopytoFailFile)));
 }
 
 void RcloneUploadTest::originalStaysVisibleDuringBlockedUpload()
@@ -108,20 +108,19 @@ void RcloneUploadTest::originalStaysVisibleDuringBlockedUpload()
     const QByteArray original("the original document remains readable\n");
     const QByteArray replacement = uploadPayload();
     QVERIFY(writeFile(destinationPath(), original));
-    QVERIFY(writeFile(controlPath(QLatin1String(RcatBlockFile)), {}));
+    QVERIFY(writeFile(controlPath(QLatin1String(CopytoBlockFile)), {}));
 
     KIO::FileCopyJob *job = startUpload(replacement);
     QVERIFY(job);
     QSignalSpy resultSpy(job, &KJob::result);
-    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(controlPath(QLatin1String(RcatStartedFile))) || !resultSpy.isEmpty(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(controlPath(QLatin1String(CopytoStartedFile))) || !resultSpy.isEmpty(), 5000);
     QVERIFY2(resultSpy.isEmpty(), qPrintable(job->errorString()));
 
     QCOMPARE(readFile(destinationPath()), original);
-    const QByteArray uploadSpec = readFile(controlPath(QLatin1String(RcatStartedFile)));
-    QVERIFY(!uploadSpec.isEmpty());
-    QVERIFY(uploadSpec != QByteArrayLiteral("test:") + DestinationName);
+    const QByteArray uploadSpec = readFile(controlPath(QLatin1String(CopytoStartedFile)));
+    QCOMPARE(uploadSpec, QByteArrayLiteral("test:") + DestinationName);
 
-    QVERIFY(QFile::remove(controlPath(QLatin1String(RcatBlockFile))));
+    QVERIFY(QFile::remove(controlPath(QLatin1String(CopytoBlockFile))));
     if (resultSpy.isEmpty()) {
         QVERIFY(resultSpy.wait(10000));
     }
@@ -136,16 +135,16 @@ void RcloneUploadTest::cancellationKeepsOriginal()
 {
     const QByteArray original("original bytes before cancellation\n");
     QVERIFY(writeFile(destinationPath(), original));
-    QVERIFY(writeFile(controlPath(QLatin1String(RcatBlockFile)), {}));
+    QVERIFY(writeFile(controlPath(QLatin1String(CopytoBlockFile)), {}));
 
     KIO::FileCopyJob *job = startUpload(uploadPayload());
     QVERIFY(job);
     QSignalSpy resultSpy(job, &KJob::result);
-    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(controlPath(QLatin1String(RcatStartedFile))) || !resultSpy.isEmpty(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(controlPath(QLatin1String(CopytoStartedFile))) || !resultSpy.isEmpty(), 5000);
     QVERIFY2(resultSpy.isEmpty(), qPrintable(job->errorString()));
 
     QVERIFY(job->kill(KJob::EmitResult));
-    QFile::remove(controlPath(QLatin1String(RcatBlockFile)));
+    QFile::remove(controlPath(QLatin1String(CopytoBlockFile)));
     if (resultSpy.isEmpty()) {
         QVERIFY(resultSpy.wait(5000));
     }
@@ -160,7 +159,7 @@ void RcloneUploadTest::failureKeepsOriginal()
 {
     const QByteArray original("original bytes before failure\n");
     QVERIFY(writeFile(destinationPath(), original));
-    QVERIFY(writeFile(controlPath(QLatin1String(RcatFailFile)), {}));
+    QVERIFY(writeFile(controlPath(QLatin1String(CopytoFailFile)), {}));
 
     KIO::FileCopyJob *job = startUpload(uploadPayload());
     QVERIFY(job);
@@ -176,28 +175,30 @@ void RcloneUploadTest::failureKeepsOriginal()
     delete job;
 }
 
-void RcloneUploadTest::concurrentRemoteChangeWins()
+void RcloneUploadTest::concurrentRemoteChangeIsReplacedAtomically()
 {
     const QByteArray original("original before concurrent edit\n");
     const QByteArray concurrent("newer remote contents from another client\n");
     QVERIFY(writeFile(destinationPath(), original));
-    QVERIFY(writeFile(controlPath(QLatin1String(RcatBlockFile)), {}));
+    const QByteArray replacement = uploadPayload();
+    QVERIFY(writeFile(controlPath(QLatin1String(CopytoBlockFile)), {}));
 
-    KIO::FileCopyJob *job = startUpload(uploadPayload());
+    KIO::FileCopyJob *job = startUpload(replacement);
     QVERIFY(job);
     QSignalSpy resultSpy(job, &KJob::result);
-    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(controlPath(QLatin1String(RcatStartedFile))) || !resultSpy.isEmpty(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(controlPath(QLatin1String(CopytoStartedFile))) || !resultSpy.isEmpty(), 5000);
     QVERIFY2(resultSpy.isEmpty(), qPrintable(job->errorString()));
 
     QTest::qWait(10);
     QVERIFY(writeFile(destinationPath(), concurrent));
-    QVERIFY(QFile::remove(controlPath(QLatin1String(RcatBlockFile))));
+    QCOMPARE(readFile(destinationPath()), concurrent);
+    QVERIFY(QFile::remove(controlPath(QLatin1String(CopytoBlockFile))));
     if (resultSpy.isEmpty()) {
         QVERIFY(resultSpy.wait(10000));
     }
 
-    QVERIFY(job->error() != 0);
-    QCOMPARE(readFile(destinationPath()), concurrent);
+    QCOMPARE(job->error(), 0);
+    QCOMPARE(readFile(destinationPath()), replacement);
     const QStringList expectedFiles{QLatin1String(DestinationName)};
     QCOMPARE(remoteFiles(), expectedFiles);
     delete job;

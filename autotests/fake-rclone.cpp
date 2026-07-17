@@ -18,6 +18,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <optional>
@@ -31,6 +32,9 @@ constexpr qsizetype ChunkSize = 16 * 1024;
 constexpr auto RcatBlockFile = ".kio-rclone-test-block-rcat";
 constexpr auto RcatFailFile = ".kio-rclone-test-fail-rcat";
 constexpr auto RcatStartedFile = ".kio-rclone-test-rcat-started";
+constexpr auto CopytoBlockFile = ".kio-rclone-test-block-copyto";
+constexpr auto CopytoFailFile = ".kio-rclone-test-fail-copyto";
+constexpr auto CopytoStartedFile = ".kio-rclone-test-copyto-started";
 constexpr auto LogicalItemsEnvironment = "KIO_RCLONE_TEST_LOGICAL_ITEMS";
 
 struct RemotePath {
@@ -558,16 +562,16 @@ int copyPersistentFile(const QString &root, const QStringList &arguments, const 
     } else if (destination.valid) {
         sourcePath = arguments.at(2);
         destinationPath = destination.localPath;
-        QFile marker(QDir(root).filePath(QStringLiteral("copyto-started")));
+        QFile marker(QDir(root).filePath(QLatin1String(CopytoStartedFile)));
         if (marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             marker.write(arguments.at(3).toUtf8());
             marker.close();
         }
-        const QString block = QDir(root).filePath(QStringLiteral("copyto-block"));
+        const QString block = QDir(root).filePath(QLatin1String(CopytoBlockFile));
         while (QFileInfo::exists(block)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        if (QFileInfo::exists(QDir(root).filePath(QStringLiteral("copyto-fail")))) {
+        if (QFileInfo::exists(QDir(root).filePath(QLatin1String(CopytoFailFile)))) {
             return writeError(QByteArrayLiteral("copyto failed"));
         }
     } else {
@@ -576,8 +580,8 @@ int copyPersistentFile(const QString &root, const QStringList &arguments, const 
     QDir().mkpath(QFileInfo(destinationPath).absolutePath());
     const QString temporaryPath = destinationPath + QStringLiteral(".partial-test");
     QFile::remove(temporaryPath);
-    if (!copyLocalFile(sourcePath, temporaryPath) || (QFile::exists(destinationPath) && !QFile::remove(destinationPath))
-        || !QFile::rename(temporaryPath, destinationPath)) {
+    if (!copyLocalFile(sourcePath, temporaryPath)
+        || ::rename(QFile::encodeName(temporaryPath).constData(), QFile::encodeName(destinationPath).constData()) != 0) {
         QFile::remove(temporaryPath);
         return writeError(QByteArrayLiteral("copyto failed"));
     }
