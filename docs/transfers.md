@@ -1,8 +1,9 @@
 # Transfers, pause, and progress
 
-~~~text
-local file ⇄ KIO ⇄ KIO Rclone ⇄ rclone ⇄ provider
-~~~
+<ArchitectureFlow compact />
+
+Uploads and downloads both cross every stage of this chain; only the direction
+of the byte stream changes.
 
 ## Uploads
 
@@ -48,4 +49,4 @@ project.
 - Cancel it: the remote file should not appear as a completed copy.
 - Press F5 when done: Dolphin should request the remote listing again.
 
-If it fails, follow the [safe diagnostics guide](/en/LOGGING).
+If it fails, follow the [safe diagnostics guide](/logging).

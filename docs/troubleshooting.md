@@ -3,14 +3,14 @@
 ## Google Drive is slow before bytes move
 
 The shared rclone Client ID may be quota-limited. Configure [your own Client
-ID](/en/google-drive), authorize the remote again, and retry.
+ID](/google-drive), authorize the remote again, and retry.
 
 ## Access denied, invalid_grant, or repeated login
 
 Run `kio-rclone-config`, select the remote, and choose **Reconnect…**. For
 Google Drive, verify that the Client ID and secret match the project used for
 the token. If the project is in **Testing**, check the seven-day token limit
-in the [Google Drive guide](/en/google-drive#testing-mode-and-seven-day-tokens).
+in the [Google Drive guide](/google-drive#testing-mode-and-seven-day-tokens).
 
 ## The bar says 100% but the job is still running
 
@@ -47,7 +47,7 @@ changed the file during upload.
 ## It fails only at a company or Google Workspace account
 
 An administrator may restrict external OAuth apps, Drive scopes, or internal
-apps. See the Workspace section in [Google Drive and GCP](/en/google-drive).
+apps. See the Workspace section in [Google Drive and GCP](/google-drive).
 
 For help, share versions, redacted configuration, exact steps, and the visible
 error—never tokens or client secrets.

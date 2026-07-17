@@ -109,5 +109,5 @@ share tokens or your Client secret.
 - If the computer is compromised, revoke access from your Google account and
   authorize the remote again.
 
-See [Getting started](/en/getting-started) or [Troubleshooting](/en/troubleshooting)
+See [Getting started](/getting-started) or [Troubleshooting](/troubleshooting)
 when you are done.

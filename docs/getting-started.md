@@ -56,7 +56,7 @@ hand.
 4. When it finishes, press F5 to request a fresh listing from the provider.
 
 To understand what happens when you pause a copy, read
-[Transfers](/en/transfers).
+[Transfers](/transfers).
 
 ## Google Drive: do it right from the start
 
@@ -64,4 +64,4 @@ rclone's shared Client ID has a global quota and can introduce delays or
 limits. For a stable experience, configure your own Google Drive OAuth client
 before moving many files:
 
-[Create your Google Cloud project](/en/google-drive)
+[Create your Google Cloud project](/google-drive)

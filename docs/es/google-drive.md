@@ -198,5 +198,5 @@ que solicita la aplicación; no compartas tokens ni tu Client secret.
 - Si pierdes el control del equipo, revoca el acceso desde tu cuenta de Google
   y vuelve a autorizar el remoto.
 
-¿Todo listo? Vuelve a [Primeros pasos](/getting-started) o consulta
-[Problemas frecuentes](/troubleshooting).
+¿Todo listo? Vuelve a [Primeros pasos](/es/getting-started) o consulta
+[Problemas frecuentes](/es/troubleshooting).

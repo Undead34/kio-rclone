@@ -7,7 +7,7 @@ es usado por muchas personas y Google puede limitar consultas antes de que la
 transferencia empiece.
 
 **Solución:** configura un Client ID propio en
-[Google Drive y GCP](/google-drive), autoriza de nuevo el remoto y vuelve a
+[Google Drive y GCP](/es/google-drive), autoriza de nuevo el remoto y vuelve a
 probar.
 
 ## “Access denied”, “invalid_grant” o el remoto pide login
@@ -21,7 +21,7 @@ La autorización expiró, se revocó o el Client ID cambió.
    quieres renovar el token.
 
 Si el proyecto Google sigue en modo **Testing**, revisa el vencimiento de siete
-días en la guía [GCP](/google-drive#modo-testing-y-tokens-de-siete-dias).
+días en la guía [GCP](/es/google-drive#modo-testing-y-tokens-de-siete-dias).
 
 ## La barra dice 100% pero la tarea aún sigue
 
@@ -72,9 +72,9 @@ el archivo durante la subida.
 
 El administrador puede limitar apps OAuth externas, scopes de Drive o el uso de
 apps internas. Consulta la sección de Workspace en
-[Google Drive y GCP](/google-drive#google-workspace-y-cuentas-administradas).
+[Google Drive y GCP](/es/google-drive#google-workspace-y-cuentas-administradas).
 
 ## Cómo pedir ayuda sin filtrar secretos
 
-Sigue [Logs y diagnóstico seguro](/LOGGING). Comparte versión, configuración
+Sigue [Logs y diagnóstico seguro](/es/logging). Comparte versión, configuración
 redactada, pasos exactos y el error visible; nunca tokens ni Client Secret.

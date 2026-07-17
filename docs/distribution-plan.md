@@ -69,12 +69,12 @@ Exit gate: a fresh Arch user can install from the package recipe, open
 
 Before asking other distributions to carry it:
 
-- [ ] Run the manual matrix in [TESTING.md](TESTING.md) for each release.
+- [ ] Run the manual matrix in [testing.md](testing.md) for each release.
 - [ ] Test private Google OAuth and one non-Google rclone backend.
 - [ ] Publish known limitations and upgrade notes.
 - [ ] Define a security-contact and responsible-disclosure path.
 - [ ] Sign release tags and publish checksums for artifacts.
-- [ ] Add an opt-in, redacted diagnostic mode described in [LOGGING.md](LOGGING.md).
+- [ ] Add an opt-in, redacted diagnostic mode described in [logging.md](logging.md).
 - [ ] Track crash reports and regressions without uploading user metadata.
 
 Exit gate: regressions can be reproduced from a redacted report and a release

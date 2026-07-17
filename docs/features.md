@@ -26,7 +26,7 @@ Transfers between locations pass through KIO, preserving Dolphin's controls:
 - Uploads receive rclone JSON statistics for percentage, speed, and ETA.
 - **Finalizing upload…** distinguishes 100% transferred from provider confirmation.
 
-See [Transfers](/en/transfers) for details.
+See [Transfers](/transfers) for details.
 
 ## Documents, editing, and Google Drive
 

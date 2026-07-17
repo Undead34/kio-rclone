@@ -3,9 +3,10 @@
 Una copia de Dolphin parece simple, pero entre un archivo local y un proveedor
 cloud hay dos flujos que deben mantenerse coordinados:
 
-~~~text
-archivo local ⇄ KIO ⇄ KIO Rclone ⇄ rclone ⇄ proveedor
-~~~
+<ArchitectureFlow lang="es" compact />
+
+Las subidas y descargas cruzan toda esta cadena por igual; solo cambia la
+dirección del flujo de bytes.
 
 ## Subidas
 
@@ -68,4 +69,4 @@ proyecto OAuth privado.
 - Cancela: el archivo remoto no debería figurar como una copia terminada.
 - Pulsa F5 al terminar: Dolphin debe pedir de nuevo el listado remoto.
 
-Si falla, sigue la guía de [diagnóstico seguro](/LOGGING).
+Si falla, sigue la guía de [diagnóstico seguro](/es/logging).

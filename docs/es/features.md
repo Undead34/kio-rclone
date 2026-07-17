@@ -33,7 +33,7 @@ Dolphin:
 - El estado **Finalizing upload…** evita confundir una barra al 100% con una
   subida ya confirmada por el proveedor.
 
-Consulta los detalles en [Transferencias](/transfers).
+Consulta los detalles en [Transferencias](/es/transfers).
 
 ## Documentos, edición y Google Drive
 

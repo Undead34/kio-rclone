@@ -66,7 +66,7 @@ en una URL escrita a mano.
 4. Cuando termine, pulsa F5 para pedir un listado actualizado al proveedor.
 
 Para entender qué ocurre cuando pausas una copia, lee
-[Transferencias](/transfers).
+[Transferencias](/es/transfers).
 
 ## Google Drive: hazlo bien desde el inicio
 
@@ -74,4 +74,4 @@ El Client ID compartido de rclone tiene cuota global y puede introducir esperas
 o límites. Para una experiencia estable, configura tu propio OAuth de Google
 Drive antes de mover muchos archivos:
 
-[Crear tu proyecto de Google Cloud](/google-drive)
+[Crear tu proyecto de Google Cloud](/es/google-drive)

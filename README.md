@@ -1,5 +1,8 @@
 # KIO Rclone
 
+📖 Documentación completa en español: **[undead34.github.io/kio-rclone](https://undead34.github.io/kio-rclone/)**
+(English docs: [undead34.github.io/kio-rclone/en/](https://undead34.github.io/kio-rclone/en/))
+
 Browse the remotes already configured in [rclone](https://rclone.org/) from
 Dolphin and every other KIO-aware application.
 
@@ -67,7 +70,7 @@ version. Uninstall with:
 sudo pacman -Rns kio-rclone
 ~~~
 
-Other distributions are planned; see the [distribution plan](docs/DISTRIBUTION_PLAN.md).
+Other distributions are planned; see the [distribution plan](docs/distribution-plan.md).
 
 ### Development install
 
@@ -228,7 +231,7 @@ ctest --test-dir build --output-on-failure
 ~~~
 
 The Arch package runs the same suite in `check()`. The full manual and release
-test matrix is in [docs/TESTING.md](docs/TESTING.md).
+test matrix is in [docs/testing.md](docs/testing.md).
 
 ## Diagnostics and support
 
@@ -238,7 +241,7 @@ configuration.
 
 For a useful, safe bug report, collect the rclone version, a redacted config,
 the exact operation and the visible KIO error. Do **not** share access tokens,
-client secrets or an unredacted rclone config. See [docs/LOGGING.md](docs/LOGGING.md).
+client secrets or an unredacted rclone config. See [docs/logging.md](docs/logging.md).
 
 ## Scope and known boundaries
 
@@ -256,9 +259,9 @@ mount, sync, bisync or a full VFS cache. In particular:
 
 The next release work is documented rather than implied:
 
-- [Distribution and release plan](docs/DISTRIBUTION_PLAN.md)
-- [Testing strategy](docs/TESTING.md)
-- [Logging and support diagnostics](docs/LOGGING.md)
+- [Distribution and release plan](docs/distribution-plan.md)
+- [Testing strategy](docs/testing.md)
+- [Logging and support diagnostics](docs/logging.md)
 
 ## Contributing
 
