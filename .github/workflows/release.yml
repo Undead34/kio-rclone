@@ -39,13 +39,23 @@ jobs:
             qt6-base kcoreaddons ki18n kio rclone appstream github-cli
 
       - name: Verify tag matches the project version
+        # Catches exactly the "bumped 3 of 4 files" mistake this project
+        # hit once. scripts/bump-version.sh keeps these three in sync;
+        # this step is the safety net in case someone edits by hand instead.
         run: |
           set -euo pipefail
           tag_version="${GITHUB_REF_NAME#v}"
           cmake_version="$(grep -oP 'project\(kio-rclone VERSION \K[0-9.]+' CMakeLists.txt)"
           pkgbuild_version="$(grep -oP '^pkgver=\K.*' packaging/arch/PKGBUILD)"
-          if [[ "$tag_version" != "$cmake_version" || "$tag_version" != "$pkgbuild_version" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match CMakeLists.txt ($cmake_version) or PKGBUILD ($pkgbuild_version). Bump both and retag."
+          package_json_version="$(grep -oP '"version":\s*"\K[0-9.]+' package.json)"
+          metainfo_version="$(grep -oP '<release version="\K[0-9.]+' config/org.kde.kio-rclone-config.metainfo.xml | head -1)"
+          mismatches=()
+          [[ "$tag_version" == "$cmake_version" ]] || mismatches+=("CMakeLists.txt ($cmake_version)")
+          [[ "$tag_version" == "$pkgbuild_version" ]] || mismatches+=("PKGBUILD ($pkgbuild_version)")
+          [[ "$tag_version" == "$package_json_version" ]] || mismatches+=("package.json ($package_json_version)")
+          [[ "$tag_version" == "$metainfo_version" ]] || mismatches+=("metainfo.xml ($metainfo_version)")
+          if [[ ${#mismatches[@]} -gt 0 ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match: ${mismatches[*]}. Run scripts/bump-version.sh $tag_version, update CHANGELOG.md and metainfo.xml, commit, and retag."
             exit 1
           fi
 
