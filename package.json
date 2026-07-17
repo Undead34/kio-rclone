@@ -1,6 +1,23 @@
 {
   "name": "kio-rclone",
-  "version": "0.3.0",
+  "version": "0.3.1",
+  "description": "KDE Dolphin integration for rclone cloud remotes: browse, upload, download, edit files, and manage cloud storage through KIO.",
+  "keywords": [
+    "kde",
+    "kio",
+    "dolphin",
+    "rclone",
+    "cloud-storage",
+    "google-drive",
+    "kde-plasma"
+  ],
+  "homepage": "https://undead34.github.io/kio-rclone/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Undead34/kio-rclone.git"
+  },
+  "bugs": "https://github.com/Undead34/kio-rclone/issues",
+  "license": "GPL-2.0-or-later",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.9.0",

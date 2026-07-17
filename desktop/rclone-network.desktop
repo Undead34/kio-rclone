@@ -1,6 +1,8 @@
 [Desktop Entry]
 Type=Link
 Name=Rclone Cloud Storage
+Name[es]=Almacenamiento en la nube (Rclone)
 Comment=Browse cloud storage configured with rclone
-Icon=folder-cloud
+Comment[es]=Navega el almacenamiento en la nube configurado con rclone
+Icon=org.kde.kio-rclone-config
 URL=rclone:/

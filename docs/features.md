@@ -1,66 +1,57 @@
-# Funciones
+# Features
 
-KIO Rclone intenta que el remoto se sienta natural en Dolphin, mientras deja
-las decisiones específicas del proveedor a rclone.
+KIO Rclone makes a remote feel natural in Dolphin while leaving provider-
+specific decisions to rclone.
 
-## Lo que puedes hacer
-
-| Acción en Dolphin | Comportamiento |
+| Dolphin action | Behavior |
 | --- | --- |
-| Abrir `rclone:/` | Muestra los remotos configurados por rclone. |
-| Entrar en carpetas | Consulta el listado del proveedor a través de rclone. |
-| Descargar | Transmite archivos normales; materializa primero los de tamaño desconocido o nombre duplicado. |
-| Abrir en LibreOffice o un editor | Usa la caché de archivo completo de KIOFuse para dar acceso local y seekable. |
-| Subir/guardar | Sube a un nombre remoto temporal y publica el resultado sólo cuando la transferencia termina. |
-| Crear carpeta | Usa `rclone mkdir`. |
-| Renombrar/mover dentro del remoto | Usa `rclone moveto`. |
-| Borrar | Usa `deletefile`, `rmdir` o `purge` según la operación de KIO. |
-| Ver espacio libre | Usa `rclone about` si el backend lo soporta. |
-| Configurar | Abre el configurador pequeño de KIO Rclone. |
+| Open `rclone:/` | Shows remotes configured in rclone. |
+| Enter folders | Lists the provider through rclone. |
+| Download | Streams normal files and materializes unknown-size or duplicate-name objects first. |
+| Open in LibreOffice or an editor | Uses KIOFuse's full-file cache for local, seekable access. |
+| Upload/save | Uploads to a temporary remote name and publishes only after completion. |
+| Create a folder | Uses `rclone mkdir`. |
+| Rename/move | Uses `rclone moveto`. |
+| Delete | Uses `deletefile`, `rmdir`, or `purge` as appropriate. |
+| View free space | Uses `rclone about` when supported by the backend. |
+| Configure | Opens KIO Rclone's small configurator. |
 
-## Lo que hace especial a las transferencias
+## What makes transfers special
 
-Las operaciones entre ubicaciones se transmiten por KIO en vez de delegarse en
-una copia directa de rclone. Esto conserva los controles que esperas de
-Dolphin:
+Transfers between locations pass through KIO, preserving Dolphin's controls:
 
-- Pausar deja de solicitar datos al origen y de alimentar a rclone.
-- Cancelar termina el proceso de transferencia.
-- Una subida cancelada o fallida no sustituye el archivo remoto por una copia
-  parcial.
-- Las subidas reciben estadísticas JSON de rclone: porcentaje remoto, velocidad
-  y ETA.
-- El estado **Finalizing upload…** evita confundir una barra al 100% con una
-  subida ya confirmada por el proveedor.
+- Pause stops requesting data and feeding rclone.
+- Cancel terminates the transfer process.
+- A failed or cancelled upload never replaces the remote file with partial data.
+- Uploads receive rclone JSON statistics for percentage, speed, and ETA.
+- **Finalizing upload…** distinguishes 100% transferred from provider confirmation.
 
-Consulta los detalles en [Transferencias](/transfers).
+See [Transfers](/en/transfers) for details.
 
-## Documentos, edición y Google Drive
+## Documents, editing, and Google Drive
 
-Los archivos ordinarios como TXT, ODT, DOCX, XLSX o PPTX se abren mediante la
-caché local de KIOFuse. Al guardar, KIO Rclone valida el archivo completo y
-publica la nueva versión al final.
+Ordinary files such as TXT, ODT, DOCX, XLSX, and PPTX open through KIOFuse's
+local full-file cache. When saved, KIO Rclone validates the complete file and
+publishes the new version at the end.
 
-Hay dos excepciones de solo lectura:
+There are two read-only exceptions:
 
-- Los documentos nativos de Google exportados por rclone no tienen un tamaño
-  estable hasta descargarlos. Se abren con el tamaño correcto, pero no se
-  reimportan automáticamente para evitar sustituir el documento colaborativo.
-- Si una carpeta contiene varios objetos con el mismo nombre, se muestra el
-  más reciente y se descarga por su ID cuando el backend lo permite. La ruta
-  queda bloqueada para edición hasta resolver los duplicados.
+- Native Google documents exported by rclone do not have a stable size until
+  downloaded. They open at the correct size, but are not automatically
+  re-imported to avoid replacing a collaborative document.
+- If a folder contains several objects with the same name, the newest is
+  shown and downloaded by ID when the backend supports it. The path remains
+  read-only until the duplicates are resolved.
 
-## Lo que no pretende ser
+## What it does not aim to replace
 
-KIO Rclone no reemplaza otras herramientas de rclone:
-
-| Necesidad | Usa |
+| Need | Use |
 | --- | --- |
-| Sincronizar directorios | `rclone sync` o `rclone bisync` |
-| Montar un remoto como filesystem | `rclone mount` |
-| Cola/reintentos fuera de Dolphin | Un flujo propio de rclone |
-| Caché offline/VFS | `rclone mount` con las opciones VFS adecuadas |
-| Funciones exclusivas del proveedor | El comando/backend de rclone correspondiente |
+| Synchronize directories | `rclone sync` or `rclone bisync` |
+| Mount a remote as a filesystem | `rclone mount` |
+| Queue/retry outside Dolphin | A dedicated rclone workflow |
+| Offline/VFS cache | `rclone mount` with suitable VFS options |
+| Provider-exclusive features | The corresponding rclone command/backend |
 
-Esta separación es deliberada: el worker sigue pequeño y rclone mantiene el
-conocimiento de proveedores, OAuth y reintentos.
+This separation is deliberate: the worker stays small while rclone keeps the
+provider, OAuth, and retry knowledge.

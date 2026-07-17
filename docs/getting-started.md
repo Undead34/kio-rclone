@@ -1,12 +1,11 @@
-# Primeros pasos
+# Getting started
 
-KIO Rclone usa exactamente los remotos que rclone ya conoce. Primero asegúrate
-de que rclone puede listar el remoto desde la terminal; después ábrelo desde
-Dolphin.
+KIO Rclone uses exactly the remotes that rclone already knows. First make sure
+rclone can list the remote from a terminal, then open it in Dolphin.
 
-## 1. Instala el paquete
+## 1. Install the package
 
-En Arch Linux, desde el checkout del proyecto:
+On Arch Linux, from the project checkout:
 
 ~~~bash
 cd packaging/arch
@@ -14,64 +13,55 @@ makepkg -si
 kbuildsycoca6 --noincremental
 ~~~
 
-Si ya tenías una versión instalada, `pacman` la sustituye; no necesitas
-desinstalarla primero.
+If you already had a version installed, `pacman` replaces it; you do not need
+to uninstall it first.
 
-## 2. Configura un remoto
+## 2. Configure a remote
 
-Abre **Rclone Remotes** desde el menú de aplicaciones o ejecuta:
+Open **Rclone Remotes** from the application menu or run:
 
 ~~~bash
 kio-rclone-config
 ~~~
 
-Puedes:
-
-- añadir Google Drive;
-- reconectar un remoto existente;
-- borrar únicamente su entrada de configuración;
-- abrir el remoto seleccionado directamente en Dolphin;
-- usar **Other Providers…** para el configurador normal de rclone.
+You can add Google Drive, reconnect an existing remote, remove only its
+configuration entry, open it directly in Dolphin, or use **Other Providers…**
+for rclone's regular configurator.
 
 > [!TIP]
-> Antes de culpar a Dolphin, comprueba el remoto en rclone. Por ejemplo:
+> Test the remote in rclone before debugging Dolphin:
 >
 > ~~~bash
-> rclone lsd 'Mi remoto:'
+> rclone lsd 'My remote:'
 > ~~~
 
-## 3. Ábrelo en Dolphin
+## 3. Open it in Dolphin
 
-Escribe esto en la barra de ubicación:
-
-~~~text
-rclone:/
-~~~
-
-Verás todos los remotos. Si el remoto se llama `Google Drive`, su raíz será:
+Enter `rclone:/` in Dolphin's location bar. You will see every configured
+remote. A remote named `Google Drive` is available at:
 
 ~~~text
 rclone:/Google%20Drive/
 ~~~
 
-Dolphin se encarga de mostrar los espacios normalmente; el `%20` solo aparece
-en una URL escrita a mano.
+Dolphin normally displays spaces for you; `%20` only appears in a URL typed by
+hand.
 
-## 4. Tu primera copia
+## 4. Make your first copy
 
-1. Entra en una carpeta de tu remoto.
-2. Arrastra un archivo local, o copia y pega.
-3. Mira la notificación de Dolphin: durante una subida verás la preparación,
-   el progreso remoto y la confirmación final.
-4. Cuando termine, pulsa F5 para pedir un listado actualizado al proveedor.
+1. Enter a folder in your remote.
+2. Drag a local file there, or copy and paste it.
+3. Watch Dolphin's notification: an upload shows preparation, remote progress,
+   and final confirmation.
+4. When it finishes, press F5 to request a fresh listing from the provider.
 
-Para entender qué ocurre cuando pausas una copia, lee
-[Transferencias](/transfers).
+To understand what happens when you pause a copy, read
+[Transfers](/en/transfers).
 
-## Google Drive: hazlo bien desde el inicio
+## Google Drive: do it right from the start
 
-El Client ID compartido de rclone tiene cuota global y puede introducir esperas
-o límites. Para una experiencia estable, configura tu propio OAuth de Google
-Drive antes de mover muchos archivos:
+rclone's shared Client ID has a global quota and can introduce delays or
+limits. For a stable experience, configure your own Google Drive OAuth client
+before moving many files:
 
-[Crear tu proyecto de Google Cloud](/google-drive)
+[Create your Google Cloud project](/en/google-drive)

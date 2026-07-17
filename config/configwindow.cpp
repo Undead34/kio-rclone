@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "appid.h"
 #include "configwindow.h"
 #include "rcloneurl.h"
 
@@ -67,7 +68,7 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     : QWidget(parent)
 {
     setWindowTitle(i18n("Rclone Remotes"));
-    setWindowIcon(QIcon::fromTheme(QStringLiteral("folder-cloud")));
+    setWindowIcon(QIcon::fromTheme(QStringLiteral(KIO_RCLONE_CONFIG_APP_ID)));
     resize(620, 430);
 
     auto *layout = new QVBoxLayout(this);
@@ -403,7 +404,7 @@ bool ConfigWindow::runInteractiveRclone(const QStringList &arguments, const QStr
 {
     QDialog dialog(this);
     dialog.setWindowTitle(title);
-    dialog.setWindowIcon(QIcon::fromTheme(QStringLiteral("folder-cloud")));
+    dialog.setWindowIcon(QIcon::fromTheme(QStringLiteral(KIO_RCLONE_CONFIG_APP_ID)));
     dialog.setMinimumWidth(500);
 
     auto *layout = new QVBoxLayout(&dialog);

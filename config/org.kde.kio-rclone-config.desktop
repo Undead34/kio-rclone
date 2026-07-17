@@ -1,8 +1,14 @@
 [Desktop Entry]
 Type=Application
 Name=Rclone Remotes
+Name[es]=Remotos Rclone
+GenericName=Cloud Storage Configuration
+GenericName[es]=Configuración de almacenamiento en la nube
 Comment=Configure cloud storage for Dolphin
-Icon=folder-cloud
+Comment[es]=Configura almacenamiento en la nube para Dolphin
+Keywords=rclone;cloud;storage;dolphin;drive;s3;dropbox;onedrive;remote;
+Keywords[es]=rclone;nube;almacenamiento;dolphin;drive;s3;dropbox;onedrive;remoto;
+Icon=org.kde.kio-rclone-config
 Exec=kio-rclone-config
 Categories=Qt;KDE;Settings;Network;
 StartupNotify=true

@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Elevated only in the one job that needs it (contents: write, to publish
+# the Release and its assets). Only a tag push on this repo can reach this
+# workflow at all -- pull_request never triggers it, so a fork can't.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build Arch package and publish GitHub Release
+    runs-on: ubuntu-24.04
+    container:
+      image: archlinux@sha256:212b1e518e94ee9c52be55e8a32da75fcf11e7b5610b80b49479e67880102406
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        # actions/checkout@v5 (pin kept in sync with the other workflows)
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        # Keep in sync with packaging/arch/PKGBUILD's depends/makedepends.
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git cmake extra-cmake-modules ninja pkgconf \
+            qt6-base kcoreaddons ki18n kio rclone appstream github-cli
+
+      - name: Verify tag matches the project version
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          cmake_version="$(grep -oP 'project\(kio-rclone VERSION \K[0-9.]+' CMakeLists.txt)"
+          pkgbuild_version="$(grep -oP '^pkgver=\K.*' packaging/arch/PKGBUILD)"
+          if [[ "$tag_version" != "$cmake_version" || "$tag_version" != "$pkgbuild_version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match CMakeLists.txt ($cmake_version) or PKGBUILD ($pkgbuild_version). Bump both and retag."
+            exit 1
+          fi
+
+      - name: Build Arch package with makepkg
+        run: |
+          set -euo pipefail
+          # makepkg refuses to run as root; build as an unprivileged user.
+          # All dependencies are already installed above, so makepkg needs
+          # no elevated access at all here (no --syncdeps, no sudo).
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -c 'cd packaging/arch && makepkg --noconfirm'
+          sha256sum packaging/arch/*.pkg.tar.zst > packaging/arch/SHA256SUMS
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # GitHub attaches "Source code (zip/tar.gz)" to every Release
+          # automatically; we only need to upload the built package here.
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            packaging/arch/*.pkg.tar.zst packaging/arch/SHA256SUMS

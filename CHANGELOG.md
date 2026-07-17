@@ -4,6 +4,19 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## 0.3.1 — 2026-07-17
+
+### Fixed
+
+- `kio-rclone-config` could open unbounded duplicate windows: any repeated
+  `listDir()` call on the "Configure Remotes…" KIO entry (double clicks,
+  indexers, or a recursive tool walking a kio-fuse mount of `rclone:/`)
+  launched a brand new process with no single-instance guard. The utility now
+  registers as a unique D-Bus application; a second launch attempt raises the
+  existing window instead of opening another one.
+- The configuration window and its dialogs now use the project's own icon
+  instead of the generic `folder-cloud` icon.
+
 ## 0.3.0 — 2026-07-16
 
 ### Fixed

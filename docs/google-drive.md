@@ -1,202 +1,113 @@
-# Google Drive y tu proyecto de Google Cloud
+# Google Drive and your Google Cloud project
 
-Usar un Client ID propio es la forma recomendada de conectar Google Drive con
-KIO Rclone. Evita la cuota compartida del Client ID público de rclone y hace
-que tu límite de API dependa de tu proyecto, no de los demás usuarios.
+Using your own Client ID is the recommended way to connect Google Drive to KIO
+Rclone. It avoids rclone's shared public quota and makes your API limit depend
+on your project.
 
-Esta guía crea un cliente **personal** para usar con tu propia cuenta y tus
-propios remotos. No es una receta para publicar una aplicación OAuth para
-terceros.
+This guide is for a personal client used with your own account and remotes. It
+is not a recipe for publishing an OAuth application to other users.
 
 > [!TIP]
-> rclone también mantiene una [guía oficial para crear tu propio Client ID](https://rclone.org/drive/#making-your-own-client-id).
-> Si Google cambia el nombre de un botón en la consola, sigue esa guía junto a
-> esta página: los conceptos y los valores son los mismos.
+> rclone also maintains an [official guide to creating your own Drive Client
+> ID](https://rclone.org/drive/#making-your-own-client-id). Use it if Google
+> changes a console label; the concepts and values are the same.
 
-## Antes de empezar
+## Before you start
 
-Necesitas:
+You need a Google account, access to [Google Cloud
+Console](https://console.cloud.google.com/), KIO Rclone installed, and rclone
+working in your session. You do not need a web server, custom callback URL, or
+service account. Create an OAuth client of type **Desktop app**.
 
-- una cuenta de Google;
-- acceso a [Google Cloud Console](https://console.cloud.google.com/);
-- KIO Rclone instalado;
-- rclone funcionando en tu sesión.
+## 1. Create a project and enable Drive API
 
-No necesitas un servidor web, una URL de callback propia ni una cuenta de
-servicio. Para este caso usa un **OAuth client de tipo Desktop app**.
+1. Open [Create project](https://console.cloud.google.com/projectcreate).
+2. Name it, for example `KIO Rclone personal`, and select it.
+3. Open the [API library](https://console.cloud.google.com/apis/library/drive.googleapis.com)
+   and click **Enable** for **Google Drive API**.
 
-## Qué permiso pide KIO Rclone
+## 2. Configure Google Auth Platform
 
-El remoto creado por KIO Rclone solicita el scope de Drive completo:
+Open **Google Auth Platform** and complete **Branding**, **Audience**, and
+**Data Access**. Add an app name, support email, and developer contact.
 
-```text
-https://www.googleapis.com/auth/drive
-```
-
-Es el scope que permite listar, descargar, subir, crear carpetas, renombrar y
-borrar los archivos a los que tu cuenta ya tiene acceso. No crees un proyecto
-con ese Client ID para otras personas si no entiendes las obligaciones de
-OAuth/verification de Google.
-
-## Paso 1: crea un proyecto
-
-1. Abre [Crear proyecto](https://console.cloud.google.com/projectcreate).
-2. Pulsa **New Project**.
-3. Dale un nombre claro, por ejemplo `KIO Rclone personal`.
-4. Selecciona el proyecto recién creado en la barra superior de la consola.
-
-Un proyecto separado para este uso evita mezclar sus cuotas y configuración
-OAuth con aplicaciones ajenas.
-
-## Paso 2: habilita la Google Drive API
-
-1. Abre la [biblioteca de APIs](https://console.cloud.google.com/apis/library/drive.googleapis.com).
-2. Comprueba que el proyecto correcto está seleccionado.
-3. Pulsa **Enable** en **Google Drive API**.
-
-Google exige habilitar el producto API antes de que el cliente OAuth pueda
-pedir sus scopes. La guía oficial de Google también cubre
-[proyectos y credenciales](https://developers.google.com/workspace/guides/create-project).
-
-## Paso 3: configura Google Auth Platform
-
-En la consola abre **Google Auth Platform**. La interfaz de Google puede
-mostrar estos pasos como **Branding**, **Audience** y **Data Access**.
-
-### Branding
-
-Completa como mínimo:
-
-- nombre de la app, por ejemplo `KIO Rclone personal`;
-- correo de soporte;
-- correo de contacto del desarrollador.
-
-Para un cliente personal no necesitas inventar una página web pública. Usa
-datos reales que puedas reconocer si Google muestra la pantalla de
-consentimiento.
-
-### Audience
-
-Elige según tu cuenta:
-
-| Tipo de cuenta | Opción habitual |
-| --- | --- |
-| Gmail, Google personal o varias cuentas externas | **External** |
-| Solo usuarios de una organización Google Workspace propia | **Internal**, si tu administrador lo permite |
-
-Con **External** la app empieza normalmente en **Testing**. Añade tu propia
-dirección de Google en la lista de test users antes de autorizar.
-
-### Data Access
-
-Añade el scope de Drive completo si la consola te pide declarar scopes:
+For a personal Gmail account choose **External** and add your own address as a
+test user. Choose **Internal** only when every user belongs to your managed
+Google Workspace organization. If requested, declare this Drive scope:
 
 ```text
 https://www.googleapis.com/auth/drive
 ```
 
-La pantalla de consentimiento debe reflejar que la aplicación tendrá acceso
-a Drive. No añadas Gmail, Calendar u otros scopes: KIO Rclone no los necesita.
+Do not add Gmail, Calendar, or other scopes: KIO Rclone does not need them.
 
-## Paso 4: crea las credenciales OAuth
+## 3. Create OAuth credentials
 
-1. Abre **Google Auth Platform → Clients**.
-2. Pulsa **Create client**.
-3. Elige **Desktop app** como tipo de aplicación.
-4. Ponle un nombre, por ejemplo `KIO Rclone en mi PC`.
-5. Crea el cliente.
-6. Copia el **Client ID** y el **Client secret** inmediatamente, o descarga el
-   JSON de las credenciales.
+1. Open **Google Auth Platform → Clients**.
+2. Click **Create client**, choose **Desktop app**, and give it a name.
+3. Copy the **Client ID** and **Client secret**, or download the credentials JSON.
 
-El token que rclone guarda después es lo que concede acceso a tu Drive. No
-subas el JSON ni el archivo `rclone.conf` a Git, y no pegues credenciales o
-tokens en tickets ni chats.
-[La ayuda oficial de clientes OAuth](https://support.google.com/cloud/answer/15549257)
-describe el flujo actual de la consola.
+Never commit the JSON or `rclone.conf`, and never paste credentials or tokens
+into tickets or chats.
 
-## Paso 5: conéctalo con KIO Rclone
+## 4. Connect it to KIO Rclone
 
-1. Ejecuta:
+Run `kio-rclone-config`, select your Google Drive remote, choose **Google
+OAuth…**, and paste the Client ID and secret. Accept the dialog and complete
+the browser flow opened by rclone. Then return to Dolphin and open `rclone:/`.
 
-   ```bash
-   kio-rclone-config
-   ```
+If offered **Import existing local OAuth override**, it migrates credentials;
+rclone still stores and refreshes the token.
 
-2. Selecciona tu remoto de Google Drive.
-3. Pulsa **Google OAuth…**.
-4. Pega el Client ID y el Client secret que acabas de crear.
-5. Acepta y completa el navegador que abre rclone.
-6. Vuelve a Dolphin y entra en `rclone:/`.
+## 5. Verify safely
 
-Si esta máquina ya tiene un override OAuth de KDE, el diálogo puede ofrecer
-**Import existing local OAuth override**. Es una migración de credenciales:
-KIO Rclone sigue usando rclone para guardar y refrescar el token.
-
-## Paso 6: verifica sin revelar nada
-
-Prueba una operación de lectura:
-
-```bash
+~~~bash
 rclone lsd 'Google Drive:'
-```
-
-Para revisar tu configuración sin publicar tokens:
-
-```bash
 rclone config redacted
-```
+~~~
 
-Después abre `rclone:/Google%20Drive/` en Dolphin y prueba crear una carpeta
-dentro de un directorio de pruebas.
+Then open `rclone:/Google%20Drive/` and test a disposable folder.
 
-## Modo Testing y tokens de siete días
+## Testing mode and seven-day tokens
 
-Este punto es importante. Google limita las apps **External** que siguen en
-**Testing** a los test users que agregaste. Además, cuando una app pide scopes
-de Drive, la autorización y el refresh token de un test user expiran después
-de siete días.
+External apps in **Testing** are limited to their test users. For Drive
+scopes, authorization and refresh tokens for test users expire after seven
+days. If you are asked to log in weekly, check the project's publishing state.
 
-Si cada semana te vuelve a pedir login, revisa primero que el proyecto sigue
-en Testing; no es un bug de KIO Rclone. Google documenta este comportamiento en
-[Manage App Audience](https://support.google.com/cloud/answer/15549945).
+For a strictly personal Client ID, rclone documents publishing an app without
+verification and accepting Google's unverified-app warning. Do this only for
+your own accounts; public or multi-user apps must follow Google's current
+verification requirements.
 
-Para un Client ID estrictamente personal, rclone explica la opción de publicar
-tu app sin verificar y aceptar el aviso de app no verificada, con el fin de
-evitar ese vencimiento semanal. Hazlo solo si entiendes la pantalla de Google,
-es para tus propias cuentas y no estás distribuyendo ese Client ID a terceros.
-Para una app pública, múltiples usuarios o scopes restringidos, revisa los
-requisitos actuales de verificación de Google antes de pasar a producción.
+## Common errors
 
-## Google Workspace y cuentas administradas
-
-En una empresa o centro educativo puede fallar aunque el Client ID sea válido:
-
-- **Internal** solo permite usuarios de la organización correspondiente.
-- El administrador puede bloquear apps OAuth externas.
-- La política de API puede limitar el scope de Drive.
-- Puede hacer falta aprobar el Client ID en Google Admin.
-
-En esos casos, comparte con el administrador el Client ID y el scope exacto
-que solicita la aplicación; no compartas tokens ni tu Client secret.
-
-## Errores comunes
-
-| Error | Causa probable | Qué hacer |
+| Error | Likely cause | Action |
 | --- | --- | --- |
-| `access_denied` | Tu cuenta no está en test users o una política bloquea la app. | Añade la cuenta en Audience o consulta al admin Workspace. |
-| `org_internal` | Intentaste usar un cliente Internal desde fuera de la organización. | Usa una cuenta de la organización o crea un cliente External personal. |
-| `invalid_client` | Client ID/secret copiado mal o de otro proyecto. | Vuelve a copiar las credenciales y reconecta el remoto. |
-| Login cada siete días | App External sigue en Testing con scope de Drive. | Lee la sección anterior y decide la configuración de publicación adecuada. |
-| Listado lento / `RATE_LIMIT_EXCEEDED` | Client ID compartido o cuota del proyecto. | Usa tu Client ID y revisa la cuota/API en Cloud Console. |
+| `access_denied` | Account is not a test user or a policy blocks the app. | Add the account or contact the Workspace administrator. |
+| `org_internal` | An Internal client is used outside its organization. | Use an organization account or an External client. |
+| `invalid_client` | Credentials are wrong or from another project. | Copy them again and reconnect the remote. |
+| `RATE_LIMIT_EXCEEDED` | Shared Client ID or project quota. | Use your Client ID and check Cloud Console quota. |
 
-## Seguridad mínima
+## Google Workspace and managed accounts
 
-- Crea un proyecto exclusivo para este uso.
-- No subas el JSON de credenciales a Git.
-- No compartas Client secret, refresh token ni `rclone.conf` sin redactar.
-- Usa `rclone config redacted` para pedir ayuda.
-- Si pierdes el control del equipo, revoca el acceso desde tu cuenta de Google
-  y vuelve a autorizar el remoto.
+In a company or school, the Client ID can be valid and still fail:
 
-¿Todo listo? Vuelve a [Primeros pasos](/getting-started) o consulta
-[Problemas frecuentes](/troubleshooting).
+- **Internal** only permits users in the corresponding organization.
+- An administrator may block external OAuth apps.
+- API policy may restrict the Drive scope.
+- Google Admin may need to approve the Client ID.
+
+Share the Client ID and exact requested scope with the administrator; do not
+share tokens or your Client secret.
+
+## Minimum security
+
+- Create a project exclusively for this use.
+- Never commit the credentials JSON.
+- Do not share the Client secret, refresh token, or unredacted `rclone.conf`.
+- Use `rclone config redacted` when asking for help.
+- If the computer is compromised, revoke access from your Google account and
+  authorize the remote again.
+
+See [Getting started](/en/getting-started) or [Troubleshooting](/en/troubleshooting)
+when you are done.

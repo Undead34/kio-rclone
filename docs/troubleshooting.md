@@ -1,80 +1,53 @@
-# Problemas frecuentes
+# Troubleshooting
 
-## Google Drive tarda mucho antes de mover bytes
+## Google Drive is slow before bytes move
 
-Casi siempre es cuota o OAuth, no tu Wi-Fi. El Client ID compartido de rclone
-es usado por muchas personas y Google puede limitar consultas antes de que la
-transferencia empiece.
+The shared rclone Client ID may be quota-limited. Configure [your own Client
+ID](/en/google-drive), authorize the remote again, and retry.
 
-**Solución:** configura un Client ID propio en
-[Google Drive y GCP](/google-drive), autoriza de nuevo el remoto y vuelve a
-probar.
+## Access denied, invalid_grant, or repeated login
 
-## “Access denied”, “invalid_grant” o el remoto pide login
+Run `kio-rclone-config`, select the remote, and choose **Reconnect…**. For
+Google Drive, verify that the Client ID and secret match the project used for
+the token. If the project is in **Testing**, check the seven-day token limit
+in the [Google Drive guide](/en/google-drive#testing-mode-and-seven-day-tokens).
 
-La autorización expiró, se revocó o el Client ID cambió.
+## The bar says 100% but the job is still running
 
-1. Abre `kio-rclone-config`.
-2. Selecciona el remoto.
-3. Pulsa **Reconnect…**.
-4. Si es Google Drive, comprueba que usas el mismo Client ID/secret con el que
-   quieres renovar el token.
+Wait for **Finalizing upload…** and **Committing upload…**. The provider may
+still be confirming or publishing the final object.
 
-Si el proyecto Google sigue en modo **Testing**, revisa el vencimiento de siete
-días en la guía [GCP](/google-drive#modo-testing-y-tokens-de-siete-dias).
+## LibreOffice opens an empty or corrupt document
 
-## La barra dice 100% pero la tarea aún sigue
+Use KIO Rclone 0.3.0 or later. Native Google exports and duplicate names are
+opened read-only after local materialization. Resolve duplicates in
+Drive/rclone before editing.
 
-Espera los textos **Finalizing upload…** y **Committing upload…**. Drive u otro
-proveedor todavía puede estar confirmando el último bloque o publicando el
-nombre definitivo. No cierres ni canceles la tarea si quieres que termine
-correctamente.
+Native Google documents exported as DOCX/XLSX/PPTX also open read-only. Save a
+copy under another name if you want to turn one into an ordinary Office file;
+automatic re-import could replace the original collaborative document.
 
-## LibreOffice abre un documento vacío o dice que está corrupto
+## A TXT or other ordinary file does not keep changes
 
-Actualiza a KIO Rclone 0.3.0 o posterior. Esa versión resuelve dos causas
-específicas de Google Drive: exportaciones nativas cuyo tamaño aparece como
-desconocido y objetos distintos que comparten el mismo nombre.
+In 0.3.0, saving publishes from a temporary remote name. A cancellation,
+network failure, or another modification during flush preserves the complete
+remote version instead of leaving partial bytes.
 
-Si Dolphin indica que hay duplicados, KIO Rclone abre exactamente el objeto
-más reciente cuando Drive proporciona su ID, pero mantiene la ruta de solo
-lectura. Renombra o elimina los duplicados desde Drive/rclone antes de editar.
+If it still fails, check that the backend supports `rcat` and `moveto`, that
+there is no other object with the same name, and that no other application
+changed the file during upload.
 
-Los documentos nativos de Google exportados como DOCX/XLSX/PPTX también se
-abren de solo lectura. Guarda una copia con otro nombre si quieres convertirlos
-en archivos Office ordinarios; la reimportación automática podría reemplazar
-el documento colaborativo original.
+## `rclone:/` does not appear
 
-## Un TXT u otro archivo ordinario no conserva los cambios
+1. Confirm installation with `pacman -Q kio-rclone`.
+2. Run `kbuildsycoca6 --noincremental`.
+3. Restart Dolphin.
+4. Confirm that `rclone version` works.
 
-En 0.3.0 el guardado se publica desde un nombre remoto temporal. Una
-cancelación, fallo de red o nueva modificación durante el flush conserva la
-versión remota completa en vez de dejar bytes parciales.
+## It fails only at a company or Google Workspace account
 
-Si aún falla, comprueba que el backend soporte `rcat` y `moveto`, que no haya
-otro objeto con el mismo nombre y que ninguna otra aplicación haya modificado
-el archivo durante la subida.
+An administrator may restrict external OAuth apps, Drive scopes, or internal
+apps. See the Workspace section in [Google Drive and GCP](/en/google-drive).
 
-## No aparece `rclone:/`
-
-1. Confirma que el paquete está instalado: `pacman -Q kio-rclone`.
-2. Reconstruye la caché de servicios:
-   ~~~bash
-   kbuildsycoca6 --noincremental
-   ~~~
-3. Cierra y vuelve a abrir Dolphin.
-4. Confirma que rclone existe:
-   ~~~bash
-   rclone version
-   ~~~
-
-## Falla solo en una empresa o cuenta de Google Workspace
-
-El administrador puede limitar apps OAuth externas, scopes de Drive o el uso de
-apps internas. Consulta la sección de Workspace en
-[Google Drive y GCP](/google-drive#google-workspace-y-cuentas-administradas).
-
-## Cómo pedir ayuda sin filtrar secretos
-
-Sigue [Logs y diagnóstico seguro](/LOGGING). Comparte versión, configuración
-redactada, pasos exactos y el error visible; nunca tokens ni Client Secret.
+For help, share versions, redacted configuration, exact steps, and the visible
+error—never tokens or client secrets.

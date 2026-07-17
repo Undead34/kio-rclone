@@ -1,0 +1,21 @@
+pkgbase = kio-rclone
+	pkgdesc = Browse rclone remotes from Dolphin and other KIO applications
+	pkgver = 0.3.1
+	pkgrel = 1
+	url = https://github.com/Undead34/kio-rclone
+	arch = x86_64
+	license = GPL-2.0-or-later
+	makedepends = cmake
+	makedepends = extra-cmake-modules
+	makedepends = ninja
+	depends = kcoreaddons
+	depends = kdbusaddons
+	depends = ki18n
+	depends = kio
+	depends = qt6-base
+	depends = rclone
+	options = !debug
+	source = kio-rclone-0.3.1.tar.gz::https://github.com/Undead34/kio-rclone/archive/refs/tags/v0.3.1.tar.gz
+	sha256sums = SKIP
+
+pkgname = kio-rclone

@@ -1,0 +1,66 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'README.md'
+      - 'CHANGELOG.md'
+      - '.github/workflows/docs.yml'
+
+# No secrets are used anywhere in this workflow. Keep it that way: build/test
+# on arbitrary pull requests (including from forks) must never need write
+# access or repo secrets. Publishing (releases/AUR) belongs in a separate,
+# tag-triggered workflow that forked PRs cannot reach.
+permissions:
+  contents: read
+
+concurrency:
+  group: build-test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test (Arch Linux, KF6/Qt6)
+    runs-on: ubuntu-24.04
+    # Arch container pinned by digest (not a mutable tag) so a compromised or
+    # silently-updated ":latest"/":base-devel" tag can't change what CI runs.
+    # Also mirrors packaging/arch/PKGBUILD's target distro.
+    container:
+      image: archlinux@sha256:212b1e518e94ee9c52be55e8a32da75fcf11e7b5610b80b49479e67880102406
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        # actions/checkout@v5 (pin kept in sync with .github/workflows/docs.yml)
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        # Keep this in sync with packaging/arch/PKGBUILD's depends/makedepends.
+        run: |
+          pacman -Syu --noconfirm --needed \
+            git cmake extra-cmake-modules ninja pkgconf \
+            qt6-base kcoreaddons ki18n kio rclone appstream
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

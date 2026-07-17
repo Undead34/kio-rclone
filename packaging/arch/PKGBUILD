@@ -1,13 +1,15 @@
-# Maintainer: KIO Rclone contributors
+# Maintainer: Gabriel Maizo <maizogabriel@proton.me>
 
 pkgname=kio-rclone
-pkgver=0.3.0
+pkgver=0.3.1
 pkgrel=1
 pkgdesc='Browse rclone remotes from Dolphin and other KIO applications'
+url='https://github.com/Undead34/kio-rclone'
 arch=('x86_64')
 license=('GPL-2.0-or-later')
 depends=(
   'kcoreaddons'
+  'kdbusaddons'
   'ki18n'
   'kio'
   'qt6-base'
@@ -19,12 +21,16 @@ makedepends=(
   'ninja'
 )
 options=('!debug')
-source=()
-sha256sums=()
+source=("$pkgname-$pkgver.tar.gz::https://github.com/Undead34/kio-rclone/archive/refs/tags/v$pkgver.tar.gz")
+# Regenerate with `updpkgsums` (pacman-contrib) after bumping pkgver, before
+# ever submitting this PKGBUILD to the AUR. Not needed for local/CI builds,
+# which build from a tag they just checked out and have no separate source
+# to verify integrity against.
+sha256sums=('SKIP')
 
 build() {
   cmake \
-    -S "$startdir/../.." \
+    -S "$srcdir/$pkgname-$pkgver" \
     -B "$srcdir/build" \
     -G Ninja \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \

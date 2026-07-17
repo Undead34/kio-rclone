@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 KIO Rclone contributors
+SPDX-License-Identifier: CC0-1.0
+-->
+<component type="desktop-application">
+  <id>org.kde.kio-rclone-config</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0-or-later</project_license>
+  <developer id="io.github.undead34">
+    <name>Gabriel Maizo</name>
+  </developer>
+  <name>Rclone Remotes</name>
+  <name xml:lang="es">Remotos Rclone</name>
+  <summary>Configure cloud storage for Dolphin</summary>
+  <summary xml:lang="es">Configura almacenamiento en la nube para Dolphin</summary>
+  <description>
+    <p>
+      KIO Rclone browses the remotes already configured in rclone from Dolphin
+      and every other KIO-aware application, exposing them as a normal-looking
+      rclone:/ location. It deliberately does not depend on KDE Online
+      Accounts or LibKGAPI: rclone owns OAuth, provider APIs, retries and the
+      user's credentials.
+    </p>
+    <p xml:lang="es">
+      KIO Rclone permite navegar, desde Dolphin y cualquier otra aplicación
+      compatible con KIO, los remotos ya configurados en rclone, exponiéndolos
+      como una ubicación rclone:/ normal. Deliberadamente no depende de
+      Cuentas en línea de KDE ni de LibKGAPI: rclone es quien maneja OAuth,
+      las APIs de cada proveedor, los reintentos y las credenciales del
+      usuario.
+    </p>
+    <p>
+      This configuration utility manages rclone remotes: add Google Drive,
+      reconnect an expired session, or set up a private Google OAuth client to
+      avoid rclone's shared, quota-limited client. Credentials and OAuth
+      tokens are always stored by rclone itself and are never copied into KIO
+      Rclone.
+    </p>
+    <p xml:lang="es">
+      Esta utilidad de configuración administra remotos de rclone: agregar
+      Google Drive, reconectar una sesión vencida, o configurar un cliente
+      OAuth de Google privado para evitar el cliente compartido y limitado en
+      cuota de rclone. Las credenciales y los tokens OAuth siempre quedan
+      guardados por rclone mismo, nunca se copian a KIO Rclone.
+    </p>
+    <p>Supported operations once a remote is configured:</p>
+    <p xml:lang="es">Operaciones disponibles una vez configurado un remoto:</p>
+    <ul>
+      <li>Browse remotes and folders</li>
+      <li xml:lang="es">Navegar remotos y carpetas</li>
+      <li>Download and upload through Dolphin, with live progress</li>
+      <li xml:lang="es">Descargar y subir archivos desde Dolphin, con progreso en vivo</li>
+      <li>Create, rename and delete files and directories</li>
+      <li xml:lang="es">Crear, renombrar y eliminar archivos y carpetas</li>
+      <li>Open and edit ordinary documents through KIOFuse</li>
+      <li xml:lang="es">Abrir y editar documentos comunes a través de KIOFuse</li>
+      <li>Pause and cancel transfers through normal KIO backpressure</li>
+      <li xml:lang="es">Pausar y cancelar transferencias con la contrapresión normal de KIO</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">org.kde.kio-rclone-config.desktop</launchable>
+  <url type="homepage">https://github.com/Undead34/kio-rclone</url>
+  <url type="bugtracker">https://github.com/Undead34/kio-rclone/issues</url>
+  <url type="help">https://undead34.github.io/kio-rclone/</url>
+  <categories>
+    <category>Network</category>
+    <category>FileTransfer</category>
+    <category>Qt</category>
+    <category>KDE</category>
+  </categories>
+  <keywords>
+    <keyword>rclone</keyword>
+    <keyword>cloud</keyword>
+    <keyword>cloud storage</keyword>
+    <keyword xml:lang="es">nube</keyword>
+    <keyword xml:lang="es">almacenamiento en la nube</keyword>
+    <keyword>dolphin</keyword>
+    <keyword>google drive</keyword>
+    <keyword>s3</keyword>
+    <keyword>dropbox</keyword>
+    <keyword>onedrive</keyword>
+    <keyword>remote</keyword>
+    <keyword xml:lang="es">remoto</keyword>
+    <keyword>kio</keyword>
+  </keywords>
+  <icon type="stock">org.kde.kio-rclone-config</icon>
+  <provides>
+    <binary>kio-rclone-config</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.3.1" date="2026-07-17">
+      <description>
+        <p>
+          Fixes the configuration window opening unbounded duplicate copies of
+          itself when its KIO entry is listed repeatedly. It now enforces a
+          single running instance and raises the existing window instead.
+        </p>
+      </description>
+    </release>
+    <release version="0.3.0" date="2026-07-16">
+      <description>
+        <p>
+          Fixes safe, atomic remote file transfers: uploads publish only after
+          the full transfer succeeds, duplicate remote names resolve to one
+          deterministic entry, and Google-native document exports report their
+          real size before opening.
+        </p>
+      </description>
+    </release>
+    <release version="0.2.0" date="2026-07-10">
+      <description>
+        <p>
+          Adds live rclone upload progress, streams only the requested remote
+          file during downloads, and adds private Google OAuth client
+          configuration.
+        </p>
+      </description>
+    </release>
+  </releases>
+</component>

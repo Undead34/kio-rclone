@@ -1,71 +1,51 @@
-# Transferencias, pausa y progreso
-
-Una copia de Dolphin parece simple, pero entre un archivo local y un proveedor
-cloud hay dos flujos que deben mantenerse coordinados:
+# Transfers, pause, and progress
 
 ~~~text
-archivo local ⇄ KIO ⇄ KIO Rclone ⇄ rclone ⇄ proveedor
+local file ⇄ KIO ⇄ KIO Rclone ⇄ rclone ⇄ provider
 ~~~
 
-## Subidas
+## Uploads
 
-Al subir, KIO Rclone inicia `rclone rcat` contra un nombre remoto temporal y va
-entregándole datos solo cuando rclone puede aceptarlos. Si Dolphin pausa la
-tarea, KIO deja de alimentar el worker; el proceso de rclone se queda sin
-nuevos bytes que enviar.
+KIO Rclone starts `rclone rcat` with a temporary remote name and feeds it data
+as rclone accepts it. The final name is untouched until the complete upload is
+validated; then `rclone moveto` publishes it. Cancellation or failure removes
+the temporary object and preserves the previous version.
 
-El nombre definitivo no se toca durante esa fase. KIO Rclone valida el tamaño
-recibido y comprueba que otra aplicación no haya cambiado el destino. Sólo
-entonces ejecuta `rclone moveto` para publicar el archivo completo. Si se
-cancela o falla la subida, borra el temporal y conserva la versión anterior.
-
-La notificación puede pasar por estas fases:
-
-| Estado | Significado |
+| Status | Meaning |
 | --- | --- |
-| Preparing upload… | rclone está creando la operación y resolviendo el remoto. |
-| Uploading… 42% · 8.1 MiB/s | Estadística real que rclone reporta desde el backend. |
-| Finalizing upload… | Todos los bytes locales llegaron a rclone; el proveedor aún confirma el último bloque. |
-| Committing upload… | La carga completa se está moviendo al nombre definitivo. |
-| Completado | rclone salió correctamente y KIO confirmó la tarea. |
+| Preparing upload… | rclone is creating the operation and resolving the remote. |
+| Uploading… 42% · 8.1 MiB/s | Live statistics reported by the backend. |
+| Finalizing upload… | All local bytes reached rclone; the provider is confirming the last block. |
+| Committing upload… | The complete object is moving to its final name. |
+| Completed | rclone exited successfully and KIO confirmed the job. |
 
 > [!IMPORTANT]
-> La barra principal de Dolphin puede alcanzar 100% antes de terminar
-> `Finalizing upload…`. Es una limitación del contador de `FileCopyJob` de KIO,
-> no una copia terminada a medias. Espera a que la notificación desaparezca con
-> éxito.
+> Dolphin's main bar can reach 100% before finalization finishes. Wait for the
+> notification to complete successfully.
 
-## Descargas
+## Downloads
 
-Los archivos únicos con tamaño conocido se entregan por chunks a KIO. Pausar
-bloquea el consumidor y aplica contrapresión al proceso que está leyendo desde
-rclone. Cancelar termina el proceso y la tarea de KIO.
+Known-size unique files stream to KIO in chunks. Pause applies backpressure to
+the rclone process and cancel terminates it. Unknown-size Google exports and
+duplicate names are first materialized locally so KIOFuse and LibreOffice get
+a real size and one complete file.
 
-Para una exportación nativa de Google con tamaño desconocido, o cuando existen
-objetos duplicados, primero se crea un archivo temporal local. Así KIOFuse y
-LibreOffice reciben un tamaño real y un único archivo, nunca varios ZIP/Office
-concatenados.
+## Performance
 
-## Rendimiento
+Provider OAuth quota, backend latency/limits, and chunk size usually matter
+more than the worker. Google Drive uses 8 MiB chunks by default.
 
-Tres cosas influyen más que el worker:
+For an honest measurement, compare the same file, network, remote, and Client
+ID. Do not compare a transfer under shared quota with one under a private OAuth
+project.
 
-1. El Client ID OAuth del proveedor. En Google Drive, usa uno propio.
-2. La cuota, latencia y límites del backend remoto.
-3. El tamaño de chunk configurado para el backend. Google Drive usa 8 MiB por
-   defecto; reducirlo ahorra memoria, pero puede bajar el rendimiento.
+## What to try if something seems wrong
 
-Para una medición honesta, compara el mismo archivo, red, remoto y Client ID.
-No compares una transferencia bajo una cuota compartida con otra bajo un
-proyecto OAuth privado.
+- Pause a large download: network activity should settle.
+- Resume it: the copy should continue and finish without duplicating the file.
+- Upload a multi-chunk file and watch the percentage, speed, and
+  **Finalizing upload…** status.
+- Cancel it: the remote file should not appear as a completed copy.
+- Press F5 when done: Dolphin should request the remote listing again.
 
-## Qué probar si algo parece raro
-
-- Pausa una descarga grande: la actividad de red debe estabilizarse.
-- Reanuda: la copia debe continuar y terminar sin duplicar el archivo.
-- Sube un archivo de varios chunks: observa porcentaje, velocidad y
-  `Finalizing upload…`.
-- Cancela: el archivo remoto no debería figurar como una copia terminada.
-- Pulsa F5 al terminar: Dolphin debe pedir de nuevo el listado remoto.
-
-Si falla, sigue la guía de [diagnóstico seguro](/LOGGING).
+If it fails, follow the [safe diagnostics guide](/en/LOGGING).

@@ -1,53 +1,53 @@
 ---
 layout: home
-description: Integración de KDE Dolphin con remotos cloud de rclone mediante KIO.
+description: KDE Dolphin integration for rclone cloud remotes through KIO.
 
 hero:
   name: KIO Rclone
-  text: Tu nube como una ubicación de Dolphin
-  tagline: Navega, copia y gestiona cualquier remoto de rclone sin KDE Online Accounts.
+  text: Your cloud as a Dolphin location
+  tagline: Browse, copy, and manage any rclone remote without KDE Online Accounts.
   image:
     src: /kio-rclone.svg
     alt: KIO Rclone
   actions:
     - theme: brand
-      text: Empezar
-      link: /getting-started
+      text: Get started
+      link: /en/getting-started
     - theme: alt
-      text: Configurar Google Drive
-      link: /google-drive
+      text: Configure Google Drive
+      link: /en/google-drive
 
 features:
   - icon: 🐬
-    title: Integración real con Dolphin
-    details: Abre rclone:/ como una ubicación más. Listado, copiar, pegar, crear carpetas, renombrar y borrar.
+    title: Native Dolphin integration
+    details: Open rclone:/ like any other location. List, copy, paste, create folders, rename, and delete.
   - icon: 🔐
-    title: Tus credenciales, en rclone
-    details: No hay KAccounts ni LibKGAPI. rclone gestiona OAuth, tokens, reintentos y proveedores.
+    title: Your credentials stay in rclone
+    details: No KAccounts or LibKGAPI. rclone handles OAuth, tokens, retries, and providers.
   - icon: ⏯️
-    title: Pausa y cancelación útiles
-    details: Las transferencias pasan por KIO para que Dolphin pueda frenar el flujo de bytes, no solo cambiar una etiqueta.
+    title: Useful pause and cancellation
+    details: Transfers go through KIO so Dolphin can actually stop the byte stream.
   - icon: ⚡
-    title: Progreso remoto visible
-    details: Las subidas muestran porcentaje, velocidad, ETA y la fase de confirmación final de rclone.
+    title: Visible remote progress
+    details: Uploads show percentage, speed, ETA, and rclone's final confirmation phase.
   - icon: ☁️
-    title: Más que Google Drive
-    details: Funciona con los remotos que ya tengas configurados en rclone, sin reimplementar cada API.
+    title: More than Google Drive
+    details: Works with the remotes you already configured in rclone.
   - icon: 🧩
-    title: Nativo y simple
-    details: Un worker KIO pequeño, un configurador Qt y paquetes normales de tu distribución.
-
+    title: Native and simple
+    details: A small KIO worker, a Qt configurator, and regular distribution packages.
 ---
 
-## Una sola fuente de verdad
+## One source of truth
 
-KIO Rclone no crea otra cuenta ni otra copia de tu configuración. Abre el
-remoto que ya funciona con rclone y lo presenta a Dolphin mediante `rclone:/`.
+KIO Rclone does not create another account or duplicate your configuration. It
+opens the remote that already works with rclone and presents it to Dolphin as
+`rclone:/`.
 
 ~~~text
-Dolphin → KIO Rclone → rclone → tu proveedor
+Dolphin → KIO Rclone → rclone → your provider
 ~~~
 
-Empieza en [Primeros pasos](/getting-started), revisa las
-[funciones](/features) o configura [Google Drive con tu propio proyecto de
-Google Cloud](/google-drive).
+Start with [Getting started](/en/getting-started), review the
+[features](/en/features), or configure [Google Drive with your own Google
+Cloud project](/en/google-drive).
