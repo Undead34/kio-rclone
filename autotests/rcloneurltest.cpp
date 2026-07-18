@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 KIO Rclone contributors
+ * SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -17,6 +17,8 @@ private Q_SLOTS:
     void parsesRemotePath();
     void supportsHostForm();
     void buildsRemoteUrl();
+    void recognizesConfigureEntry();
+    void treatsConfigureEntryDescendantsAsConfigureEntry();
 };
 
 void RcloneUrlTest::parsesRoot()
@@ -47,6 +49,31 @@ void RcloneUrlTest::buildsRemoteUrl()
     const QUrl url = RcloneUrl::remoteUrl(QStringLiteral("Google Drive"));
     QCOMPARE(url.scheme(), QStringLiteral("rclone"));
     QCOMPARE(url.path(QUrl::FullyDecoded), QStringLiteral("/Google Drive/"));
+}
+
+void RcloneUrlTest::recognizesConfigureEntry()
+{
+    const RcloneUrl url(QUrl(QStringLiteral("rclone:/") + RcloneUrl::ConfigureEntry));
+    QVERIFY(url.isValid());
+    QVERIFY(url.isConfigureEntry());
+    QVERIFY(!url.isRoot());
+    QCOMPARE(url.remote(), RcloneUrl::ConfigureEntry);
+    QVERIFY(url.remoteSpec().isEmpty());
+
+    // The configure entry occupies a remote slot with an empty path, so
+    // isRemoteRoot() also matches it. Every worker handler therefore checks
+    // isConfigureEntry() *before* isRemoteRoot(); this locks that ordering
+    // requirement so a future reorder cannot silently treat the launcher as a
+    // real remote.
+    QVERIFY(url.isRemoteRoot());
+}
+
+void RcloneUrlTest::treatsConfigureEntryDescendantsAsConfigureEntry()
+{
+    const RcloneUrl url(QUrl(QStringLiteral("rclone:/") + RcloneUrl::ConfigureEntry + QStringLiteral("/child")));
+    QVERIFY(url.isValid());
+    QVERIFY(url.isConfigureEntry());
+    QVERIFY(url.remoteSpec().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(RcloneUrlTest)

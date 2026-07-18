@@ -30,33 +30,90 @@ offline cache, background synchronization or mount manager.
 
 ## Installation
 
-### Arch Linux
+Pick one method. Each install has a matching uninstall that fully reverses it.
+Every install and uninstall ends with `kbuildsycoca6 --noincremental`, which
+rebuilds the KDE service cache so `rclone:/` is registered or dropped.
 
-Install [`kio-rclone`](https://aur.archlinux.org/packages/kio-rclone) from the
-AUR with your helper of choice:
+Other distributions are planned; see the
+[distribution plan](docs/distribution-plan.md).
+
+### Arch Linux (AUR) — recommended
+
+Install [`kio-rclone`](https://aur.archlinux.org/packages/kio-rclone) with your
+helper of choice:
 
 ~~~bash
 yay -S kio-rclone
 kbuildsycoca6 --noincremental
 ~~~
 
-Other distributions are planned; see the
-[distribution plan](docs/distribution-plan.md).
+Uninstall:
 
-### From source
+~~~bash
+yay -Rns kio-rclone
+kbuildsycoca6 --noincremental
+~~~
+
+### From source, system-wide (`/usr`)
+
+Needs root, installs where Qt already looks (no environment setup). Do not mix
+with the AUR package — see [/usr conflict recovery](#usr-conflict-recovery).
+
+Install:
+
+~~~bash
+cmake -S . -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build build
+ctest --test-dir build --output-on-failure
+sudo cmake --install build
+kbuildsycoca6 --noincremental
+~~~
+
+Uninstall (removes exactly the files the install wrote):
+
+~~~bash
+sudo xargs rm -v < build/install_manifest.txt
+kbuildsycoca6 --noincremental
+~~~
+
+### From source, user-only (`$HOME/.local`)
+
+No root. Qt does not scan `~/.local` for plugins, so the worker and the config
+app need `QT_PLUGIN_PATH` and `PATH` set for your session; a logout/login
+applies them.
+
+Install:
 
 ~~~bash
 cmake -S . -B build -G Ninja -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build build
 ctest --test-dir build --output-on-failure
 cmake --install build
-source build/prefix.sh   # user-local installs only: Qt must find the worker
+
+mkdir -p ~/.config/environment.d
+cat > ~/.config/environment.d/kio-rclone.conf <<'EOF'
+QT_PLUGIN_PATH=${HOME}/.local/lib/qt6/plugins:${QT_PLUGIN_PATH}
+PATH=${HOME}/.local/bin:${PATH}
+EOF
+
+# log out and back in, then:
+kbuildsycoca6 --noincremental
 ~~~
 
-Install to a user prefix (`$HOME/.local`), not to `/usr`. A `sudo cmake
---install` into `/usr` leaves files that no pacman package owns, so a later
-`yay -S kio-rclone` fails with `conflicting files`. If that already happened,
-let pacman take ownership of them:
+Uninstall:
+
+~~~bash
+xargs rm -v < build/install_manifest.txt
+rm ~/.config/environment.d/kio-rclone.conf
+kbuildsycoca6 --noincremental
+# log out and back in
+~~~
+
+### /usr conflict recovery
+
+A `sudo cmake --install` into `/usr` leaves files that no pacman package owns,
+so a later `yay -S kio-rclone` fails with `conflicting files`. Let pacman take
+ownership of them:
 
 ~~~bash
 sudo pacman -U --overwrite '/usr/*' <path>/kio-rclone-*-x86_64.pkg.tar.zst

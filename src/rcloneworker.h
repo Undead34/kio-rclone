@@ -1,6 +1,5 @@
 /*
  * SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
- * SPDX-FileCopyrightText: 2026 KIO Rclone contributors
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -113,7 +112,6 @@ class RcloneWorker : public KIO::WorkerBase
       [[nodiscard]] KIO::UDSEntry itemEntry(const RcloneItem &item) const;
 
       [[nodiscard]] KIO::WorkerResult ensureBackend() const;
-      [[nodiscard]] KIO::WorkerResult launchConfiguration();
 
       [[nodiscard]] bool remoteExists(const QString &remote, QString *error = nullptr) const;
       [[nodiscard]] bool destinationExists(const QString &remoteSpec,

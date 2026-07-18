@@ -1,5 +1,5 @@
 # Spanish translation for kio-rclone.
-# Copyright (C) 2026 KIO Rclone contributors
+# Copyright (C) 2026 Gabriel Maizo González <maizogabriel@gmail.com>
 # This file is distributed under the same license as the kio-rclone package.
 #
 msgid ""
@@ -8,7 +8,7 @@ msgstr ""
 "Report-Msgid-Bugs-To: https://github.com/Undead34/kio-rclone/issues\n"
 "POT-Creation-Date: 2026-07-18 09:17-0400\n"
 "PO-Revision-Date: 2026-07-18 09:00-0400\n"
-"Last-Translator: KIO Rclone contributors\n"
+"Last-Translator: Gabriel Maizo González <maizogabriel@gmail.com>\n"
 "Language-Team: Spanish\n"
 "Language: es\n"
 "MIME-Version: 1.0\n"

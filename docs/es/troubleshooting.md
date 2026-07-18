@@ -32,8 +32,8 @@ correctamente.
 
 ## LibreOffice abre un documento vacío o dice que está corrupto
 
-Actualiza a KIO Rclone 0.3.0 o posterior. Esa versión resuelve dos causas
-específicas de Google Drive: exportaciones nativas cuyo tamaño aparece como
+Las exportaciones nativas de Google y los nombres duplicados se abren de solo
+lectura tras materializarse localmente: exportaciones cuyo tamaño aparece como
 desconocido y objetos distintos que comparten el mismo nombre.
 
 Si Dolphin indica que hay duplicados, KIO Rclone abre exactamente el objeto
@@ -47,9 +47,9 @@ el documento colaborativo original.
 
 ## Un TXT u otro archivo ordinario no conserva los cambios
 
-En 0.3.0 el guardado se publica desde un nombre remoto temporal. Una
-cancelación, fallo de red o nueva modificación durante el flush conserva la
-versión remota completa en vez de dejar bytes parciales.
+El guardado se publica desde un nombre remoto temporal. Una cancelación, fallo
+de red o nueva modificación durante el flush conserva la versión remota
+completa en vez de dejar bytes parciales.
 
 Si aún falla, comprueba que el backend soporte `rcat` y `moveto`, que no haya
 otro objeto con el mismo nombre y que ninguna otra aplicación haya modificado
@@ -78,3 +78,10 @@ apps internas. Consulta la sección de Workspace en
 
 Sigue [Logs y diagnóstico seguro](/es/logging). Comparte versión, configuración
 redactada, pasos exactos y el error visible; nunca tokens ni Client Secret.
+
+---
+
+<sub>Las exportaciones de Google en solo lectura, el manejo de nombres
+duplicados y el guardado atómico anteriores llegaron en 0.3.0; las versiones
+más antiguas no tienen soporte. Consulta el
+[changelog](https://github.com/Undead34/kio-rclone/blob/main/CHANGELOG.md).</sub>

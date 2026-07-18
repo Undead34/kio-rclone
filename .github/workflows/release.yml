@@ -83,11 +83,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+
+          # Use this version's CHANGELOG.md section as the release body. The
+          # section runs from its "## <version>" heading to the next "## "
+          # heading; "### " subheadings are kept. GitHub appends its own
+          # "What's Changed"/Full Changelog below it via --generate-notes, so an
+          # empty or missing section still yields auto-generated notes.
+          awk -v ver="$version" '
+            $0 ~ ("^## " ver "([^0-9.]|$)") {grab=1; next}
+            grab && /^## / {exit}
+            grab {print}
+          ' CHANGELOG.md > notes.md
+
           # GitHub attaches the source tarballs automatically; add the built
           # Arch package and its checksum for testers who prefer pacman -U over
           # building from the AUR.
+          release_args=(--repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes)
+          if [[ -s notes.md ]]; then
+            release_args+=(--notes-file notes.md)
+          fi
           gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes \
+            "${release_args[@]}" \
             dist/*.pkg.tar.zst dist/SHA256SUMS

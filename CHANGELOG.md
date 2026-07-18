@@ -4,6 +4,19 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## 0.4.1 — 2026-07-18
+
+### Changed
+
+- The "Configure Remotes…" entry is now a shortcut file that points at the
+  installed application's `.desktop` launcher (via `UDS_TARGET_URL`) instead of
+  a pseudo-directory the worker "entered" by spawning the process itself.
+  Listing `rclone:/` no longer launches any UI, so recursive walks (Baloo,
+  `find`, kio-fuse) cannot trigger it. This removes the lock-file, launch-stamp
+  and cooldown guard added in 0.4.0; a single window is now guaranteed solely by
+  the application's `KDBusService::Unique` registration, and repeated launches
+  activate the existing window (with correct Wayland/X11 focus handling).
+
 ## 0.4.0 — 2026-07-18
 
 ### Added

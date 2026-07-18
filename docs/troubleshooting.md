@@ -19,9 +19,8 @@ still be confirming or publishing the final object.
 
 ## LibreOffice opens an empty or corrupt document
 
-Use KIO Rclone 0.3.0 or later. Native Google exports and duplicate names are
-opened read-only after local materialization. Resolve duplicates in
-Drive/rclone before editing.
+Native Google exports and duplicate names are opened read-only after local
+materialization. Resolve duplicates in Drive/rclone before editing.
 
 Native Google documents exported as DOCX/XLSX/PPTX also open read-only. Save a
 copy under another name if you want to turn one into an ordinary Office file;
@@ -29,9 +28,9 @@ automatic re-import could replace the original collaborative document.
 
 ## A TXT or other ordinary file does not keep changes
 
-In 0.3.0, saving publishes from a temporary remote name. A cancellation,
-network failure, or another modification during flush preserves the complete
-remote version instead of leaving partial bytes.
+Saving publishes from a temporary remote name. A cancellation, network
+failure, or another modification during flush preserves the complete remote
+version instead of leaving partial bytes.
 
 If it still fails, check that the backend supports `rcat` and `moveto`, that
 there is no other object with the same name, and that no other application
@@ -51,3 +50,9 @@ apps. See the Workspace section in [Google Drive and GCP](/google-drive).
 
 For help, share versions, redacted configuration, exact steps, and the visible
 error—never tokens or client secrets.
+
+---
+
+<sub>The read-only Google exports, duplicate-name handling and atomic saves
+above landed in 0.3.0; older releases are unsupported. See the
+[changelog](https://github.com/Undead34/kio-rclone/blob/main/CHANGELOG.md).</sub>

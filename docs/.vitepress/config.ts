@@ -76,7 +76,7 @@ export default defineConfig({
                 skipToContentLabel: 'Saltar al contenido',
                 footer: {
                     message: 'GPL-2.0-or-later · Sin telemetría · Las credenciales siguen en rclone',
-                    copyright: 'KIO Rclone contributors',
+                    copyright: 'Gabriel Maizo González',
                 },
             },
         },
@@ -203,7 +203,7 @@ export default defineConfig({
 
         footer: {
             message: 'GPL-2.0-or-later · No telemetry · Credentials stay in rclone',
-            copyright: 'KIO Rclone contributors',
+            copyright: 'Gabriel Maizo González',
         },
     },
 });

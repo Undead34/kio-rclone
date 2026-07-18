@@ -9,6 +9,7 @@ target_link_libraries(kio-rclone-config
         Qt6::Widgets
         KF6::DBusAddons
         KF6::I18n
+        KF6::WindowSystem
 )
 
 install(TARGETS kio-rclone-config

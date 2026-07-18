@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2026 KIO Rclone contributors
+ * SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -10,7 +10,6 @@
 #include <KLocalizedString>
 
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -19,7 +18,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
-#include <QLockFile>
 #include <QLoggingCategory>
 #include <QMimeDatabase>
 #include <QProcess>
@@ -28,6 +26,7 @@
 #include <QUuid>
 
 #include <limits>
+#include <optional>
 #include <sys/stat.h>
 #include <utility>
 
@@ -38,21 +37,20 @@ namespace
 constexpr qsizetype DownloadChunkSize = 64 * 1024;
 constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
 
-// A recursive walk of rclone:/ (a kiofuse mount being indexed, a file dialog,
-// or `find`) re-lists the "Configure Remotes…" entry many times in a burst,
-// and closing the window while such a walk is in flight would immediately
-// reopen it. Collapse launches that happen within this window of the previous
-// one (or of the previous instance's exit). It also covers the startup gap
-// before a freshly launched instance has taken the single-instance lock.
-constexpr qint64 ConfigLaunchCooldownMs = 3000;
-
-QString configGuardBasePath()
+std::optional<QUrl> configurationLauncherUrl()
 {
-    QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
-    if (runtimeDir.isEmpty()) {
-        runtimeDir = QDir::tempPath();
+    const QString desktopFile = QStandardPaths::locate(QStandardPaths::ApplicationsLocation, QStringLiteral("org.kde.kio-rclone-config.desktop"));
+
+    if (desktopFile.isEmpty()) {
+        return std::nullopt;
     }
-    return runtimeDir + QStringLiteral("/kio-rclone-config");
+
+    return QUrl::fromLocalFile(desktopFile);
+}
+
+KIO::WorkerResult configurationEntryMutationError(int error)
+{
+    return KIO::WorkerResult::fail(error, i18n("“Configure Remotes…” is a virtual launcher and cannot be modified."));
 }
 
 void appendLimited(QByteArray &destination, const QByteArray &data)
@@ -126,9 +124,11 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
     if (!rcloneUrl.isValid()) {
         return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
     }
+
     if (rcloneUrl.isConfigureEntry()) {
-        return launchConfiguration();
+        return KIO::WorkerResult::fail(KIO::ERR_IS_FILE, url.toDisplayString());
     }
+
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
     }
@@ -248,22 +248,36 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
 KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
 {
     const RcloneUrl rcloneUrl(url);
-    if (!rcloneUrl.isValid() || rcloneUrl.isRoot() || rcloneUrl.isRemoteRoot() || rcloneUrl.isConfigureEntry()) {
+
+    if (!rcloneUrl.isValid()) {
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+    }
+
+    if (rcloneUrl.isConfigureEntry()) {
+        mimeType(QStringLiteral("application/x-desktop"));
+        return KIO::WorkerResult::pass();
+    }
+
+    if (rcloneUrl.isRoot() || rcloneUrl.isRemoteRoot()) {
         mimeType(QStringLiteral("inode/directory"));
         return KIO::WorkerResult::pass();
     }
+
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
     }
 
     QString error;
     const auto item = sourceItem(rcloneUrl, &error);
+
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
+
     if (!item) {
         return errorResult(error, KIO::ERR_DOES_NOT_EXIST, url);
     }
+
     mimeType(fallbackMimeType(*item));
     return KIO::WorkerResult::pass();
 }
@@ -271,9 +285,26 @@ KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
 KIO::WorkerResult RcloneWorker::get(const QUrl &url)
 {
     const RcloneUrl rcloneUrl(url);
-    if (!rcloneUrl.isValid() || rcloneUrl.remoteSpec().isEmpty() || rcloneUrl.isRemoteRoot()) {
+
+    if (!rcloneUrl.isValid()) {
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+    }
+
+    if (rcloneUrl.isConfigureEntry()) {
+        const auto launcher = configurationLauncherUrl();
+
+        if (!launcher) {
+            return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, i18n("The KIO Rclone configuration launcher is not installed."));
+        }
+
+        redirection(*launcher);
+        return KIO::WorkerResult::pass();
+    }
+
+    if (rcloneUrl.remoteSpec().isEmpty() || rcloneUrl.isRemoteRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
     }
+
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
     }
@@ -377,9 +408,19 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
     Q_UNUSED(permissions)
 
     const RcloneUrl rcloneUrl(url);
-    if (!rcloneUrl.isValid() || rcloneUrl.remoteSpec().isEmpty() || rcloneUrl.isRemoteRoot()) {
+
+    if (!rcloneUrl.isValid()) {
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+    }
+
+    if (rcloneUrl.isConfigureEntry()) {
+        return configurationEntryMutationError(KIO::ERR_WRITE_ACCESS_DENIED);
+    }
+
+    if (rcloneUrl.remoteSpec().isEmpty() || rcloneUrl.isRemoteRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, url.toDisplayString());
     }
+
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
     }
@@ -494,8 +535,21 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
     Q_UNUSED(permissions)
 
     const RcloneUrl rcloneUrl(url);
-    if (!rcloneUrl.isValid() || rcloneUrl.remotePath().isEmpty()) {
+
+    if (!rcloneUrl.isValid()) {
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+    }
+
+    if (rcloneUrl.isConfigureEntry()) {
+        return configurationEntryMutationError(KIO::ERR_FILE_ALREADY_EXIST);
+    }
+
+    if (rcloneUrl.remotePath().isEmpty()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_MKDIR, url.toDisplayString());
+    }
+
+    if (const auto result = ensureBackend(); !result.success()) {
+        return result;
     }
 
     std::optional<RcloneItem> existingItem;
@@ -517,7 +571,15 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
 
     const RcloneUrl source(src);
     const RcloneUrl destination(dest);
-    if (!source.isValid() || !destination.isValid() || source.remoteSpec().isEmpty() || destination.remoteSpec().isEmpty()) {
+
+    if (!source.isValid() || !destination.isValid()) {
+        const QUrl &invalidUrl = !source.isValid() ? src : dest;
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, invalidUrl.toDisplayString());
+    }
+    if (source.isConfigureEntry() || destination.isConfigureEntry()) {
+        return configurationEntryMutationError(KIO::ERR_CANNOT_RENAME);
+    }
+    if (source.remoteSpec().isEmpty() || destination.remoteSpec().isEmpty()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_RENAME, src.toDisplayString());
     }
     if (source.remoteSpec() == destination.remoteSpec()) {
@@ -560,15 +622,31 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
         }
     }
 
-    return commandResult(runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec(), QStringLiteral("--ignore-times")}), KIO::ERR_CANNOT_RENAME, src);
+    return commandResult(runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec(), QStringLiteral("--ignore-times")}),
+                         KIO::ERR_CANNOT_RENAME,
+                         src);
 }
 
 KIO::WorkerResult RcloneWorker::copy(const QUrl &src, const QUrl &dest, int permissions, KIO::JobFlags flags)
 {
-    Q_UNUSED(src)
-    Q_UNUSED(dest)
     Q_UNUSED(permissions)
     Q_UNUSED(flags)
+
+    const RcloneUrl source(src);
+    const RcloneUrl destination(dest);
+
+    if (!source.isValid() || !destination.isValid()) {
+        const QUrl &invalidUrl = !source.isValid() ? src : dest;
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, invalidUrl.toDisplayString());
+    }
+
+    if (source.isConfigureEntry()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, i18n("“Configure Remotes…” is a virtual launcher and cannot be copied."));
+    }
+
+    if (destination.isConfigureEntry()) {
+        return configurationEntryMutationError(KIO::ERR_WRITE_ACCESS_DENIED);
+    }
 
     // KIO's get + put fallback preserves pause/cancel backpressure. A direct
     // rclone copy process would continue independently while Dolphin is paused.
@@ -580,9 +658,17 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
     clearCachedDownload();
 
     const RcloneUrl rcloneUrl(url);
-    if (!rcloneUrl.isValid() || rcloneUrl.remotePath().isEmpty()) {
+
+    if (!rcloneUrl.isValid()) {
+        return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+    }
+    if (rcloneUrl.isConfigureEntry()) {
+        return configurationEntryMutationError(KIO::ERR_CANNOT_DELETE);
+    }
+    if (rcloneUrl.remotePath().isEmpty()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_DELETE, url.toDisplayString());
     }
+
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
     }
@@ -651,14 +737,27 @@ KIO::UDSEntry RcloneWorker::rootEntry() const
 KIO::UDSEntry RcloneWorker::configureEntry() const
 {
     KIO::UDSEntry entry;
-    entry.reserve(7);
+    entry.reserve(8);
+
     entry.fastInsert(KIO::UDSEntry::UDS_NAME, RcloneUrl::ConfigureEntry);
+
     entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, i18n("Configure Remotes…"));
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IXUSR);
+
+    // Not a directory: it cannot be entered or listed.
+    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFREG);
+
+    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IRGRP | S_IROTH);
+
     entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("configure"));
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
+
+    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("application/x-desktop"));
+
+    if (const auto launcher = configurationLauncherUrl()) {
+        entry.fastInsert(KIO::UDSEntry::UDS_TARGET_URL, launcher->toString());
+    }
+
     entry.fastInsert(KIO::UDSEntry::UDS_HIDDEN, 0);
+
     return entry;
 }
 
@@ -707,58 +806,6 @@ KIO::WorkerResult RcloneWorker::ensureBackend() const
     return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS,
                                    i18n("rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to "
                                         "its full path."));
-}
-
-KIO::WorkerResult RcloneWorker::launchConfiguration()
-{
-    const QString guardBase = configGuardBasePath();
-
-    // The configuration entry is a pseudo-directory: "entering" it lands here.
-    // Any recursive walk of rclone:/ enters it too, so guard against opening
-    // more than one window. This is independent of the config app's own
-    // KDBusService::Unique guard, which cannot dedupe when the app is launched
-    // from a kioworker that has no reachable D-Bus session bus.
-
-    // 1. If a window is already open, its process holds this lock; just return
-    //    to the remote list instead of spawning another instance. A dead
-    //    holder's lock is reclaimed automatically via the PID check.
-    QLockFile instanceLock(guardBase + QStringLiteral(".lock"));
-    if (!instanceLock.tryLock(0)) {
-        redirection(RcloneUrl::rootUrl());
-        return KIO::WorkerResult::pass();
-    }
-    instanceLock.unlock(); // release immediately; the launched app takes it
-
-    // 2. Collapse launch bursts and reopen-right-after-close. The stamp is
-    //    refreshed here before spawning and again by the app when it quits.
-    const QString stampPath = guardBase + QStringLiteral(".launch");
-    const QFileInfo stampInfo(stampPath);
-    if (stampInfo.exists() && stampInfo.lastModified().msecsTo(QDateTime::currentDateTime()) < ConfigLaunchCooldownMs) {
-        redirection(RcloneUrl::rootUrl());
-        return KIO::WorkerResult::pass();
-    }
-
-    QString executable = QStandardPaths::findExecutable(QStringLiteral("kio-rclone-config"));
-    if (executable.isEmpty()) {
-        const QString localExecutable = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + QStringLiteral("/.local/bin/kio-rclone-config");
-        if (QFileInfo(localExecutable).isExecutable()) {
-            executable = localExecutable;
-        }
-    }
-    if (executable.isEmpty()) {
-        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS, i18n("The KIO Rclone configuration utility could not be started."));
-    }
-
-    if (QFile stamp(stampPath); stamp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        stamp.close();
-    }
-
-    if (!QProcess::startDetached(executable, {})) {
-        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS, i18n("The KIO Rclone configuration utility could not be started."));
-    }
-
-    redirection(RcloneUrl::rootUrl());
-    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::commandResult(const RcloneResult &result, int fallbackError, const QUrl &url) const

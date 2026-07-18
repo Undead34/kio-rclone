@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(kio-rclone VERSION 0.4.0 LANGUAGES CXX)
+project(kio-rclone VERSION 0.4.1 LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.5.0)
 set(KF_MIN_VERSION 6.3.0)
@@ -24,11 +24,13 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     DBusAddons
     I18n
     KIO
+    WindowSystem
 )
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_definitions(
     -DQT_NO_URL_CAST_FROM_STRING

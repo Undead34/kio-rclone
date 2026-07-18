@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-SPDX-FileCopyrightText: 2026 KIO Rclone contributors
+SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
 SPDX-License-Identifier: CC0-1.0
 -->
 <component type="desktop-application">
@@ -90,6 +90,17 @@ SPDX-License-Identifier: CC0-1.0
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.1" date="2026-07-18">
+      <description>
+        <p>
+          The "Configure Remotes…" entry is now a shortcut to the installed
+          launcher instead of a folder the file worker opened by launching the
+          application itself. Listing rclone:/ no longer starts any window, so
+          recursive scans cannot trigger it, and a single window is guaranteed
+          by the application's own single-instance registration.
+        </p>
+      </description>
+    </release>
     <release version="0.4.0" date="2026-07-18">
       <description>
         <p>

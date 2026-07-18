@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# SPDX-FileCopyrightText: 2026 KIO Rclone contributors
+# SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # KDE-standard message extraction entry point. KDE's l10n infrastructure

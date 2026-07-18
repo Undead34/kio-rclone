@@ -15,7 +15,7 @@ kbuildsycoca6 --noincremental
 
 If you already had a version installed, `pacman` replaces it; you do not need
 to uninstall it first. To build from source instead, see the
-[README](https://github.com/Undead34/kio-rclone#from-source).
+[README](https://github.com/Undead34/kio-rclone#installation).
 
 ## 2. Configure a remote
 
