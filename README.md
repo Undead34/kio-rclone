@@ -53,6 +53,15 @@ cmake --install build
 source build/prefix.sh   # user-local installs only: Qt must find the worker
 ~~~
 
+Install to a user prefix (`$HOME/.local`), not to `/usr`. A `sudo cmake
+--install` into `/usr` leaves files that no pacman package owns, so a later
+`yay -S kio-rclone` fails with `conflicting files`. If that already happened,
+let pacman take ownership of them:
+
+~~~bash
+sudo pacman -U --overwrite '/usr/*' <path>/kio-rclone-*-x86_64.pkg.tar.zst
+~~~
+
 ## Quick start
 
 1. Configure at least one rclone remote (`rclone config` or **Rclone Remotes**).
@@ -72,8 +81,8 @@ Remotes** can set one up; see the
   strings run `scripts/update-translations.sh`.
 
 Layout: `src/` KIO worker · `app/` Rclone Remotes GUI · `desktop/` Dolphin
-network entry · `autotests/` test suite · `po/` translations ·
-`packaging/` distro packaging · `docs/` documentation site.
+network entry · `autotests/` test suite · `po/` translations · `docs/`
+documentation site. Arch packaging lives in a separate AUR repository.
 
 ## Contributing
 
