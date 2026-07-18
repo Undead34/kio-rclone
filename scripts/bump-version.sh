@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Bumps the version number everywhere it must be a literal (not derivable at
-# build time): CMakeLists.txt, packaging/arch/PKGBUILD, package.json.
+# build time): CMakeLists.txt, packaging/arch/PKGBUILD, docs/package.json.
 #
 # What this script does NOT do, on purpose:
 #   - Write CHANGELOG.md's new section. That's release notes; only a human
@@ -35,12 +35,12 @@ cd "$repo_root"
 
 sed -i "s/^project(kio-rclone VERSION [0-9.]\+/project(kio-rclone VERSION $new_version/" CMakeLists.txt
 sed -i "s/^pkgver=.*/pkgver=$new_version/" packaging/arch/PKGBUILD
-sed -i "s/\"version\": \"[0-9.]\+\"/\"version\": \"$new_version\"/" package.json
+sed -i "s/\"version\": \"[0-9.]\+\"/\"version\": \"$new_version\"/" docs/package.json
 
 echo "Bumped to $new_version in:"
 echo "  - CMakeLists.txt"
 echo "  - packaging/arch/PKGBUILD (pkgver; sha256sums still needs the real tag hash)"
-echo "  - package.json"
+echo "  - docs/package.json"
 echo
 echo "Still needs your input before tagging:"
 echo "  - CHANGELOG.md: add a \"## $new_version — $(date +%Y-%m-%d)\" section"

@@ -1,6 +1,6 @@
 /build*/
 /.cache/
 compile_commands.json
-/node_modules/
+/docs/node_modules/
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
