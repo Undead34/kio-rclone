@@ -1,68 +1,142 @@
 :root {
-    --vp-c-brand-1: #1688d4;
-    --vp-c-brand-2: #0f6dac;
-    --vp-c-brand-3: #0b5487;
-    --vp-c-brand-soft: rgba(22, 136, 212, 0.14);
-    --vp-home-hero-name-color: transparent;
-    --vp-home-hero-name-background: linear-gradient(120deg, #55c7ff 8%, #1688d4 45%, #806cff 92%);
-    --vp-home-hero-image-background-image: radial-gradient(circle at center, rgba(60, 178, 255, 0.34), transparent 64%);
-    --vp-home-hero-image-filter: drop-shadow(0 0 3.5rem rgba(28, 145, 222, 0.36));
+  --vp-c-brand-1: #1688d4;
+  --vp-c-brand-2: #0f6dac;
+  --vp-c-brand-3: #0b5487;
+  --vp-c-brand-soft: rgba(22, 136, 212, 0.14);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(
+    120deg,
+    #55c7ff 8%,
+    #1688d4 45%,
+    #806cff 92%
+  );
+
+  /* =========================================
+       EL TRUCO DEL DEGRADADO DIFUMINADO
+       ========================================= */
+  /* 1. Usamos un gradiente lineal más grande y suave */
+  --vp-home-hero-image-background-image: linear-gradient(
+    -45deg,
+    rgba(85, 199, 255, 0.15) 30%,
+    rgba(128, 108, 255, 0.15) 70%
+  );
+  /* 2. LA MAGIA: Un blur enorme difumina completamente los bordes creando un aura profesional */
+  --vp-home-hero-image-filter: blur(70px);
 }
 
 .dark {
-    --vp-c-brand-1: #5fc4ff;
-    --vp-c-brand-2: #31aaf0;
-    --vp-c-brand-3: #1688d4;
-    --vp-c-brand-soft: rgba(95, 196, 255, 0.16);
+  --vp-c-brand-1: #5fc4ff;
+  --vp-c-brand-2: #31aaf0;
+  --vp-c-brand-3: #1688d4;
+  --vp-c-brand-soft: rgba(95, 196, 255, 0.16);
 }
 
 .VPNavBarTitle .logo {
-    border-radius: 0.55rem;
+  border-radius: 0.5rem;
 }
 
+/* =========================================
+   HERO & IMAGEN (Estilo KIO Rclone)
+   ========================================= */
 .VPHero .image-container {
-    transform: translateY(-0.5rem);
+  transform: none; /* Quitamos traslaciones, que quede centrado natural */
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .VPHero .image-src {
-    max-width: 15rem;
-    max-height: 15rem;
+  max-width: 18rem;
+  max-height: 18rem;
+  border-radius: 32px;
+  padding: 2.5rem;
 }
 
 .VPFeature {
-    border-color: var(--vp-c-divider);
-    background: linear-gradient(145deg, var(--vp-c-bg-soft), var(--vp-c-bg));
-    transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  background-color: transparent;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+
+  height: 100%;
+
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.dark .VPFeature {
+  background-color: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .VPFeature:hover {
-    border-color: var(--vp-c-brand-1);
-    box-shadow: 0 0.75rem 2rem rgba(22, 136, 212, 0.12);
-    transform: translateY(-0.2rem);
+  border-color: var(--vp-c-brand-1);
+  transform: none;
+  box-shadow: none;
+}
+
+.dark .VPFeature:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.VPFeature .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background-color: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.dark .VPFeature .icon {
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.VPFeature .title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 8px; /* Título muy pegado a la descripción */
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.VPFeature .details {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
 }
 
 .vp-doc h2 {
-    border-top: 0;
-    margin-top: 3.5rem;
-    padding-top: 0;
+  border-top: 1px solid var(--vp-c-divider);
+  margin-top: 3.5rem;
+  padding-top: 1.5rem;
+  letter-spacing: -0.01em;
 }
 
 .vp-doc .custom-block.tip {
-    border-color: var(--vp-c-brand-1);
+  border-color: var(--vp-c-brand-1);
+  border-radius: 8px;
+  background-color: transparent;
+  border: 1px solid var(--vp-c-divider);
 }
 
 .vp-doc table {
-    display: table;
-    width: 100%;
+  display: table;
+  width: 100%;
 }
 
 @media (max-width: 640px) {
-    .VPHero .image-container {
-        transform: none;
-    }
-
-    .VPHero .image-src {
-        max-width: 10rem;
-        max-height: 10rem;
-    }
+  .VPHero .image-src {
+    max-width: 14rem;
+    max-height: 14rem;
+    padding: 1.5rem;
+  }
+  .VPFeature {
+    padding: 20px;
+  }
 }
