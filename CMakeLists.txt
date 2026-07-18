@@ -40,6 +40,10 @@ add_subdirectory(src)
 add_subdirectory(config)
 add_subdirectory(desktop)
 
+# Compiles po/<lang>/kio6_rclone.po and installs the .mo catalogs. Regenerate
+# the catalogs with scripts/update-translations.sh.
+ki18n_install(po)
+
 if(BUILD_TESTING)
     find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
     add_subdirectory(autotests)

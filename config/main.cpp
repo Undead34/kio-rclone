@@ -31,6 +31,7 @@ QString configGuardBasePath()
 int main(int argc, char **argv)
 {
     QApplication application(argc, argv);
+    KLocalizedString::setApplicationDomain("kio6_rclone");
     application.setOrganizationDomain(QStringLiteral("kde.org"));
     application.setApplicationName(QStringLiteral("kio-rclone-config"));
     application.setApplicationDisplayName(i18n("Rclone Remotes"));
