@@ -4,6 +4,31 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## 0.4.0 — 2026-07-18
+
+### Added
+
+- **Add Remote** now covers OneDrive and Dropbox alongside Google Drive. The
+  provider form is generated from `rclone config providers`, so its fields
+  always match what the installed rclone accepts, and OneDrive gets a guided
+  drive-selection step after authorization.
+- **Edit** dialog for existing remotes: rename them and switch their OAuth
+  client without leaving the application.
+- Encrypted rclone configurations are supported: a single password prompt
+  unlocks the configuration for the rest of the session.
+- OAuth clients already configured in KDE System Settings can be imported into
+  a new or existing remote with one click.
+- Spanish translation of the KIO worker and the configuration application,
+  with standard KDE translation infrastructure (`kio6_rclone` domain, `po/`
+  catalogs).
+
+### Fixed
+
+- Duplicate configuration windows could still open when the application was
+  launched without a reachable D-Bus session bus (for example from a recursive
+  walk of a kio-fuse mount). A lock-file instance guard and a short launch
+  cooldown now cover that path.
+
 ## 0.3.1 — 2026-07-17
 
 ### Fixed

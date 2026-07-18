@@ -1,6 +1,6 @@
 {
   "name": "kio-rclone",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "KDE Dolphin integration for rclone cloud remotes: browse, upload, download, edit files, and manage cloud storage through KIO.",
   "keywords": [
     "kde",

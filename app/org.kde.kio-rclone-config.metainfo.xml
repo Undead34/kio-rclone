@@ -90,6 +90,16 @@ SPDX-License-Identifier: CC0-1.0
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.0" date="2026-07-18">
+      <description>
+        <p>
+          Adds OneDrive and Dropbox to the guided Add Remote flow, an Edit
+          dialog for renaming remotes and changing their OAuth client, support
+          for encrypted rclone configurations, and a Spanish translation of the
+          whole interface.
+        </p>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-07-17">
       <description>
         <p>
