@@ -5,16 +5,17 @@ rclone can list the remote from a terminal, then open it in Dolphin.
 
 ## 1. Install the package
 
-On Arch Linux, from the project checkout:
+On Arch Linux, install [`kio-rclone`](https://aur.archlinux.org/packages/kio-rclone)
+from the AUR:
 
 ~~~bash
-cd packaging/arch
-makepkg -si
+yay -S kio-rclone
 kbuildsycoca6 --noincremental
 ~~~
 
 If you already had a version installed, `pacman` replaces it; you do not need
-to uninstall it first.
+to uninstall it first. To build from source instead, see the
+[README](https://github.com/Undead34/kio-rclone#from-source).
 
 ## 2. Configure a remote
 

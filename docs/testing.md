@@ -34,10 +34,11 @@ finalization messages.
 
 ## Package test
 
-The Arch package runs `ctest` from its `check()` function:
+The Arch package recipe lives in its own
+[AUR repository](https://aur.archlinux.org/packages/kio-rclone) and runs
+`ctest` from its `check()` function. From a checkout of that repository:
 
 ~~~bash
-cd packaging/arch
 makepkg -f
 ~~~
 

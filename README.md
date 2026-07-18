@@ -32,9 +32,11 @@ offline cache, background synchronization or mount manager.
 
 ### Arch Linux
 
+Install [`kio-rclone`](https://aur.archlinux.org/packages/kio-rclone) from the
+AUR with your helper of choice:
+
 ~~~bash
-cd packaging/arch
-makepkg -si
+yay -S kio-rclone
 kbuildsycoca6 --noincremental
 ~~~
 

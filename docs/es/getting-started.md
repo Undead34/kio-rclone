@@ -6,16 +6,17 @@ Dolphin.
 
 ## 1. Instala el paquete
 
-En Arch Linux, desde el checkout del proyecto:
+En Arch Linux, instala [`kio-rclone`](https://aur.archlinux.org/packages/kio-rclone)
+desde el AUR:
 
 ~~~bash
-cd packaging/arch
-makepkg -si
+yay -S kio-rclone
 kbuildsycoca6 --noincremental
 ~~~
 
 Si ya tenías una versión instalada, `pacman` la sustituye; no necesitas
-desinstalarla primero.
+desinstalarla primero. Para compilar desde el código, consulta el
+[README](https://github.com/Undead34/kio-rclone#from-source).
 
 ## 2. Configura un remoto
 

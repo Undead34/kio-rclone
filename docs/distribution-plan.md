@@ -48,19 +48,21 @@ subdirectory.
 
 ## Phase 1 — Arch Linux first
 
-The repository already contains a native PKGBUILD. The first public target
-should be an AUR source package, after checking that the package name is
+The Arch recipe lives in its own AUR repository, separate from this source
+tree, so the PKGBUILD is not part of the tarball it checksums. The first public
+target is that AUR source package, after checking that the package name is
 available and that the PKGBUILD passes namcap/review.
 
 Release workflow:
 
-1. Update version, changelog and release notes.
-2. Build with `makepkg -f`; `check()` must pass.
-3. Inspect the resulting file list and dependencies.
-4. Tag the exact source commit.
-5. Publish the source package to the AUR from a dedicated packaging checkout.
-6. Attach a built package, checksum and test log to the forge release for
-   testers; do not present it as an official Arch binary repository yet.
+1. Update version, changelog and release notes; commit.
+2. Tag the exact source commit and push; the release workflow builds, tests
+   and publishes the GitHub Release.
+3. In the AUR repository: bump `pkgver`, run `updpkgsums` (fills the real
+   source hash), regenerate `.SRCINFO`, and push. `makepkg -f` must build and
+   pass `check()`.
+4. Confirm a fresh Arch user can install the recipe and complete the smoke
+   test; do not present it as an official Arch binary repository yet.
 
 Exit gate: a fresh Arch user can install from the package recipe, open
 `rclone:/`, configure a remote and complete the smoke test.
