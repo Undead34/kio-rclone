@@ -10,13 +10,16 @@
 #include <KLocalizedString>
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QLockFile>
 #include <QLoggingCategory>
 #include <QMimeDatabase>
 #include <QProcess>
@@ -34,6 +37,23 @@ namespace
 {
 constexpr qsizetype DownloadChunkSize = 64 * 1024;
 constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
+
+// A recursive walk of rclone:/ (a kiofuse mount being indexed, a file dialog,
+// or `find`) re-lists the "Configure Remotes…" entry many times in a burst,
+// and closing the window while such a walk is in flight would immediately
+// reopen it. Collapse launches that happen within this window of the previous
+// one (or of the previous instance's exit). It also covers the startup gap
+// before a freshly launched instance has taken the single-instance lock.
+constexpr qint64 ConfigLaunchCooldownMs = 3000;
+
+QString configGuardBasePath()
+{
+    QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (runtimeDir.isEmpty()) {
+        runtimeDir = QDir::tempPath();
+    }
+    return runtimeDir + QStringLiteral("/kio-rclone-config");
+}
 
 void appendLimited(QByteArray &destination, const QByteArray &data)
 {
@@ -691,6 +711,33 @@ KIO::WorkerResult RcloneWorker::ensureBackend() const
 
 KIO::WorkerResult RcloneWorker::launchConfiguration()
 {
+    const QString guardBase = configGuardBasePath();
+
+    // The configuration entry is a pseudo-directory: "entering" it lands here.
+    // Any recursive walk of rclone:/ enters it too, so guard against opening
+    // more than one window. This is independent of the config app's own
+    // KDBusService::Unique guard, which cannot dedupe when the app is launched
+    // from a kioworker that has no reachable D-Bus session bus.
+
+    // 1. If a window is already open, its process holds this lock; just return
+    //    to the remote list instead of spawning another instance. A dead
+    //    holder's lock is reclaimed automatically via the PID check.
+    QLockFile instanceLock(guardBase + QStringLiteral(".lock"));
+    if (!instanceLock.tryLock(0)) {
+        redirection(RcloneUrl::rootUrl());
+        return KIO::WorkerResult::pass();
+    }
+    instanceLock.unlock(); // release immediately; the launched app takes it
+
+    // 2. Collapse launch bursts and reopen-right-after-close. The stamp is
+    //    refreshed here before spawning and again by the app when it quits.
+    const QString stampPath = guardBase + QStringLiteral(".launch");
+    const QFileInfo stampInfo(stampPath);
+    if (stampInfo.exists() && stampInfo.lastModified().msecsTo(QDateTime::currentDateTime()) < ConfigLaunchCooldownMs) {
+        redirection(RcloneUrl::rootUrl());
+        return KIO::WorkerResult::pass();
+    }
+
     QString executable = QStandardPaths::findExecutable(QStringLiteral("kio-rclone-config"));
     if (executable.isEmpty()) {
         const QString localExecutable = QStandardPaths::writableLocation(QStandardPaths::HomeLocation) + QStringLiteral("/.local/bin/kio-rclone-config");
@@ -698,7 +745,15 @@ KIO::WorkerResult RcloneWorker::launchConfiguration()
             executable = localExecutable;
         }
     }
-    if (executable.isEmpty() || !QProcess::startDetached(executable, {})) {
+    if (executable.isEmpty()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS, i18n("The KIO Rclone configuration utility could not be started."));
+    }
+
+    if (QFile stamp(stampPath); stamp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        stamp.close();
+    }
+
+    if (!QProcess::startDetached(executable, {})) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_LAUNCH_PROCESS, i18n("The KIO Rclone configuration utility could not be started."));
     }
 

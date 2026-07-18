@@ -11,6 +11,22 @@
 #include <KLocalizedString>
 
 #include <QApplication>
+#include <QDir>
+#include <QFile>
+#include <QLockFile>
+#include <QStandardPaths>
+
+namespace
+{
+QString configGuardBasePath()
+{
+    QString runtimeDir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
+    if (runtimeDir.isEmpty()) {
+        runtimeDir = QDir::tempPath();
+    }
+    return runtimeDir + QStringLiteral("/kio-rclone-config");
+}
+} // namespace
 
 int main(int argc, char **argv)
 {
@@ -25,6 +41,25 @@ int main(int argc, char **argv)
     // launch this executable again. Without a single-instance guard, every
     // call opened a brand new window instead of reusing the existing one.
     KDBusService service(KDBusService::Unique);
+
+    // Fallback single-instance guard for when the session bus is unreachable
+    // (e.g. launched from a kioworker walking a kiofuse mount), where
+    // KDBusService::Unique cannot dedupe. The KIO worker also refuses to spawn
+    // us while this lock is held; holding it here keeps that check honest.
+    const QString guardBase = configGuardBasePath();
+    QLockFile instanceLock(guardBase + QStringLiteral(".lock"));
+    if (!instanceLock.tryLock(100)) {
+        return 0; // another window is already open; do not open a second one
+    }
+
+    // Refresh the launch cooldown stamp on exit so a recursive walk still in
+    // flight when the user closes the window does not immediately reopen it.
+    QObject::connect(&application, &QApplication::aboutToQuit, [guardBase]() {
+        QFile stamp(guardBase + QStringLiteral(".launch"));
+        if (stamp.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            stamp.close();
+        }
+    });
 
     ConfigWindow window;
     QObject::connect(&service, &KDBusService::activateRequested, &window, [&window](const QStringList &, const QString &) {
