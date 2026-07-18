@@ -1,15 +1,14 @@
 # KIO Rclone
 
 Browse the remotes already configured in [rclone](https://rclone.org/) from
-Dolphin and every other KIO-aware application, through a normal-looking
-`rclone:/` location.
+Dolphin and every other KIO-aware application, through an `rclone:/`
+location.
 
 rclone owns OAuth, provider APIs, retries and credentials — KIO Rclone adds no
 second account database and works with every rclone backend. The same
 configuration remains usable from the terminal, scripts or mounts.
 
-**Documentation:** [English](https://undead34.github.io/kio-rclone/) ·
-[Español](https://undead34.github.io/kio-rclone/es/)
+**Documentation:** [🇪🇸 Español](https://undead34.github.io/kio-rclone/es/) · [🇺🇸 English](https://undead34.github.io/kio-rclone/)
 
 ## Features
 
@@ -22,9 +21,8 @@ configuration remains usable from the terminal, scripts or mounts.
 - Translated UI (English, Spanish).
 
 > [!WARNING]
-> Do not edit documents in place through `rclone:/` yet — the KIOFuse path is
-> not reliable enough and has caused data loss during development. Copy the
-> file locally, edit it, and upload it back.
+> In-place document editing through `rclone:/` (via KIOFuse) is not yet
+> reliable and can lose data. Copy files locally to edit them.
 > [Details](https://undead34.github.io/kio-rclone/transfers).
 
 KIO Rclone is a browser and transfer bridge, not a sync client: there is no
@@ -58,15 +56,15 @@ source build/prefix.sh   # user-local installs only: Qt must find the worker
 1. Configure at least one rclone remote (`rclone config` or **Rclone Remotes**).
 2. Open `rclone:/` in Dolphin's location bar.
 
-For Google Drive, configure a private OAuth client — rclone's shared client is
-quota-limited and being retired during 2026. **Rclone Remotes** detects this
-and walks you through it; see the
+Google Drive requires a private OAuth client for regular use: rclone's shared
+client is quota-limited and scheduled for retirement in 2026. **Rclone
+Remotes** can set one up; see the
 [Google Drive guide](https://undead34.github.io/kio-rclone/google-drive).
 
 ## Development
 
-- Tests: `ctest --test-dir build --output-on-failure` — deliberately
-  cloud-free; see [testing](docs/testing.md).
+- Tests: `ctest --test-dir build --output-on-failure` (no cloud access
+  required; see [testing](docs/testing.md)).
 - Documentation site (VitePress): `cd docs && pnpm install && pnpm docs:dev`.
 - Translations: edit `po/<lang>/kio6_rclone.po`; after changing `i18n()`
   strings run `scripts/update-translations.sh`.
@@ -77,7 +75,10 @@ network entry · `autotests/` test suite · `po/` translations ·
 
 ## Contributing
 
-Keep commits small and functional, run the test suite first, and never add
-credentials, tokens, real remote names or private paths — use
-`rclone config redacted` in bug reports. Licensed under GPL-2.0-or-later;
-source files carry SPDX headers.
+Bug reports and pull requests are welcome at
+[github.com/Undead34/kio-rclone](https://github.com/Undead34/kio-rclone/issues).
+When sharing rclone configuration in a report, use `rclone config redacted`.
+
+## License
+
+[GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html)
