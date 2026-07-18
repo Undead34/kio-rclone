@@ -48,7 +48,7 @@ jobs:
           cmake_version="$(grep -oP 'project\(kio-rclone VERSION \K[0-9.]+' CMakeLists.txt)"
           pkgbuild_version="$(grep -oP '^pkgver=\K.*' packaging/arch/PKGBUILD)"
           package_json_version="$(grep -oP '"version":\s*"\K[0-9.]+' package.json)"
-          metainfo_version="$(grep -oP '<release version="\K[0-9.]+' config/org.kde.kio-rclone-config.metainfo.xml | head -1)"
+          metainfo_version="$(grep -oP '<release version="\K[0-9.]+' app/org.kde.kio-rclone-config.metainfo.xml | head -1)"
           mismatches=()
           [[ "$tag_version" == "$cmake_version" ]] || mismatches+=("CMakeLists.txt ($cmake_version)")
           [[ "$tag_version" == "$pkgbuild_version" ]] || mismatches+=("PKGBUILD ($pkgbuild_version)")

@@ -9,7 +9,7 @@
 # What this script does NOT do, on purpose:
 #   - Write CHANGELOG.md's new section. That's release notes; only a human
 #     (or an assistant told what actually changed) can write those honestly.
-#   - Add a <release> entry to config/org.kde.kio-rclone-config.metainfo.xml.
+#   - Add a <release> entry to app/org.kde.kio-rclone-config.metainfo.xml.
 #     Same reason: it needs real prose, not a version string.
 #   - Update packaging/arch/PKGBUILD's sha256sums. That hash only exists
 #     once the tagged tarball is published on GitHub; compute it after
@@ -44,6 +44,6 @@ echo "  - package.json"
 echo
 echo "Still needs your input before tagging:"
 echo "  - CHANGELOG.md: add a \"## $new_version — $(date +%Y-%m-%d)\" section"
-echo "  - config/org.kde.kio-rclone-config.metainfo.xml: add a <release version=\"$new_version\"> entry"
+echo "  - app/org.kde.kio-rclone-config.metainfo.xml: add a <release version=\"$new_version\"> entry"
 echo "  - packaging/arch/.SRCINFO: regenerate with"
 echo "      (cd packaging/arch && makepkg --printsrcinfo > .SRCINFO)"

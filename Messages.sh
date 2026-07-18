@@ -7,4 +7,4 @@
 # (scripty) provides $XGETTEXT and $podir; outside that infrastructure, run
 # scripts/update-translations.sh, which sets both and then merges the result
 # into the existing po/*/ catalogs.
-$XGETTEXT `find src config -name \*.cpp -o -name \*.h` -o $podir/kio6_rclone.pot
+$XGETTEXT `find src app -name \*.cpp -o -name \*.h` -o $podir/kio6_rclone.pot

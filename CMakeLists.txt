@@ -37,7 +37,7 @@ add_definitions(
 )
 
 add_subdirectory(src)
-add_subdirectory(config)
+add_subdirectory(app)
 add_subdirectory(desktop)
 
 # Compiles po/<lang>/kio6_rclone.po and installs the .mo catalogs. Regenerate
