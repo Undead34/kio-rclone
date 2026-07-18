@@ -22,7 +22,7 @@ mounts or another frontend.
 | Browse remotes and folders | Available |
 | Download and upload through Dolphin | Available |
 | Create, rename and delete files/directories | Available |
-| Open and edit ordinary documents through KIOFuse | Available with whole-file caching |
+| Open and edit ordinary documents through KIOFuse | ⚠️ Not recommended yet — copy locally, edit, upload back |
 | Pause and cancel transfers | Available through KIO backpressure |
 | Google Drive private OAuth flow | Available in **Rclone Remotes** |
 | Full offline cache, sync UI or mount manager | Not part of this project |
@@ -59,7 +59,7 @@ kbuildsycoca6 --noincremental
 To replace an older package with a package already built in this checkout:
 
 ~~~bash
-sudo pacman -U ./kio-rclone-0.3.0-1-x86_64.pkg.tar.zst
+sudo pacman -U ./kio-rclone-0.3.1-1-x86_64.pkg.tar.zst
 kbuildsycoca6 --noincremental
 ~~~
 
@@ -107,34 +107,30 @@ remain meaningful.
 
 ### Transfer behaviour
 
-| Situation | What KIO Rclone does |
-| --- | --- |
-| Normal download | Streams one unique, known-size remote file. |
-| Unknown size or duplicate name | Materializes the selected object locally and reports its real size before opening it. |
-| Upload | Streams to a unique remote staging name, validates the source size and publishes it with `moveto` only after `rcat` succeeds. |
-| Progress | Shows rclone's remote upload percentage, rate and ETA in the notification. |
-| Final remote commit | Shows **Finalizing upload…** and **Committing upload…** until the staged file is published. |
-| Pause | Stops KIO's producer/consumer flow, so rclone stops receiving data. |
-
-Dolphin can briefly show a 100% bar while a cloud provider commits its final
-chunk. This is a KIO `FileCopyJob` detail: its main byte counter follows the
-source side of the stream. The notification text remains the authoritative
-state until the job completes.
-
-Google Drive's default upload chunk is 8 MiB; larger chunks improve throughput
-at the cost of memory. KIO Rclone does not override that provider setting with
-a smaller value. See [rclone's Drive options](https://rclone.org/drive/#drive-chunk-size)
-and [`rcat` documentation](https://rclone.org/commands/rclone_rcat/).
+Uploads stream to a unique staging name and publish with `moveto` only after
+the transfer succeeds, so a cancelled or failed upload never overwrites the
+previous remote file; downloads and progress reporting have similar safety
+details. See [Transfers, pause, and progress](docs/transfers.md) for the full
+breakdown.
 
 ### Opening and editing documents
 
-Applications that need a local seekable file, including LibreOffice and text
-editors, normally reach `rclone:/` through KIOFuse. KIO Rclone deliberately
-keeps its KIO `opening` capability disabled so KIOFuse provides the whole-file
-cache; ordinary remote files are uploaded back safely when that cache is
-flushed.
+> **Do not edit documents in place through `rclone:/` yet.** Applications
+> that need a local seekable file, including LibreOffice and text editors,
+> normally reach `rclone:/` through KIOFuse. This path is not battle-tested
+> and has caused real data loss during development. Until KIO Rclone has a
+> more robust editing story (tracked as a future improvement, not yet
+> implemented), treat it as read-mostly: **copy the file to a local path,
+> edit the local copy, then upload the result back yourself.**
 
-Two cloud cases are intentionally read-only:
+Applications that need a local seekable file normally reach `rclone:/`
+through KIOFuse. KIO Rclone deliberately keeps its KIO `opening` capability
+disabled so KIOFuse provides the whole-file cache instead; in principle,
+ordinary remote files are uploaded back when that cache is flushed, but this
+path has not been reliable enough in practice to trust with anything you
+cannot afford to lose.
+
+Two cloud cases are additionally read-only:
 
 - Google-native documents exported by rclone have no stable size until they
   are downloaded. KIO Rclone materializes them so LibreOffice receives the
@@ -145,25 +141,17 @@ Two cloud cases are intentionally read-only:
   exact object instead of concatenating duplicates. Resolve the duplicate
   names in the provider before editing that path.
 
-This release implements reliable whole-file editing, not remote random-access
-I/O or an offline synchronization cache.
+This release does not implement reliable in-place document editing, remote
+random-access I/O, or an offline synchronization cache.
 
 ## Configuration and credentials
 
-The configuration application only operates on rclone's normal configuration.
-It does not copy OAuth tokens into KIO Rclone settings.
-
-For Google Drive:
-
-1. Launch `kio-rclone-config`.
-2. Select the Drive remote.
-3. Choose **Google OAuth…**.
-4. Enter your Google OAuth desktop client credentials, or import the existing
-   local override when offered.
-5. Complete the browser authorization opened by rclone.
-
-The client secret and token must never be pasted into an issue or a support
-chat. Use `rclone config redacted` when a redacted configuration is needed.
+The configuration application only operates on rclone's normal configuration
+and never copies OAuth tokens into KIO Rclone's own settings. For Google
+Drive, set up a private OAuth client from **Rclone Remotes** → **Google
+OAuth…**; see [Google Drive and GCP](docs/google-drive.md) for the full
+walkthrough. Never share a client secret, token, or unredacted rclone config
+in an issue — use `rclone config redacted` instead.
 
 ## Requirements
 
@@ -216,32 +204,20 @@ application server, database or credentials are needed to host them.
 
 ## Testing
 
-The automated suite is deliberately cloud-free:
-
-- URL parsing and URL construction
-- rclone JSON listing/config parsing
-- local-backend integration
-- transfer pause/backpressure for both download and upload
-- live upload progress and finalization messages
-
-Run it with:
-
 ~~~bash
 ctest --test-dir build --output-on-failure
 ~~~
 
-The Arch package runs the same suite in `check()`. The full manual and release
-test matrix is in [docs/testing.md](docs/testing.md).
+The automated suite is deliberately cloud-free (URL parsing, rclone JSON
+parsing, local-backend integration, transfer pause/progress) and also runs in
+the Arch package's `check()`. See [Testing KIO Rclone](docs/testing.md) for
+the full automated and manual test matrix.
 
 ## Diagnostics and support
 
-KIO Rclone has no telemetry and does not write OAuth tokens to its own files.
-Provider errors are returned to Dolphin; rclone handles credentials in its own
-configuration.
-
-For a useful, safe bug report, collect the rclone version, a redacted config,
-the exact operation and the visible KIO error. Do **not** share access tokens,
-client secrets or an unredacted rclone config. See [docs/logging.md](docs/logging.md).
+KIO Rclone has no telemetry and never writes OAuth tokens to its own files.
+See [Logs and safe diagnostics](docs/logging.md) for what's safe to collect
+and share in a bug report.
 
 ## Scope and known boundaries
 
