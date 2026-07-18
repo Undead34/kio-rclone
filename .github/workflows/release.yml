@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   release:
-    name: Verify the tag builds and publish the GitHub Release
+    name: Build the Arch package and publish the GitHub Release
     runs-on: ubuntu-24.04
     container:
       image: archlinux@sha256:212b1e518e94ee9c52be55e8a32da75fcf11e7b5610b80b49479e67880102406
@@ -35,8 +35,9 @@ jobs:
         # Keep this in sync with the AUR recipe's depends/makedepends.
         run: |
           pacman -Syu --noconfirm --needed \
-            git cmake extra-cmake-modules ninja pkgconf \
-            qt6-base kcoreaddons ki18n kio rclone appstream github-cli
+            base-devel git cmake extra-cmake-modules ninja pkgconf \
+            qt6-base kcoreaddons ki18n kio rclone appstream github-cli \
+            pacman-contrib
 
       - name: Verify tag matches the project version
         # Catches the "bumped some files but not others" mistake. The three
@@ -58,26 +59,35 @@ jobs:
             exit 1
           fi
 
-      - name: Build and test the tagged tree
-        # A clean-room release gate: prove the tag compiles and its tests pass
-        # on a fresh Arch system before publishing. The Arch package itself is
-        # built from the separate AUR recipe, not here.
+      - name: Build the Arch package from the AUR recipe
+        # Build the release binary the same way AUR users do: fetch the recipe,
+        # point it at this tag, fill the real source hash (updpkgsums, no SKIP),
+        # and run makepkg. makepkg compiles and runs ctest through the recipe's
+        # build() and check(), so this is also the release build/test gate: if
+        # the tag does not compile or a test fails, no Release is published.
         run: |
           set -euo pipefail
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
-          cmake --build build
-          ctest --test-dir build --output-on-failure
+          version="${GITHUB_REF_NAME#v}"
+          # makepkg refuses to run as root, so build as an unprivileged user.
+          useradd -m builder
+          git clone --depth 1 https://aur.archlinux.org/kio-rclone.git /home/builder/pkg
+          sed -i "s/^pkgver=.*/pkgver=$version/" /home/builder/pkg/PKGBUILD
+          chown -R builder:builder /home/builder/pkg
+          su - builder -c 'cd ~/pkg && updpkgsums && makepkg -f --noconfirm'
+          install -d dist
+          cp /home/builder/pkg/*.pkg.tar.zst dist/
+          ( cd dist && sha256sum *.pkg.tar.zst > SHA256SUMS )
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # GitHub attaches "Source code (zip/tar.gz)" to every Release
-          # automatically; Arch users install through the AUR recipe, which
-          # points at that source tarball.
+          # GitHub attaches the source tarballs automatically; add the built
+          # Arch package and its checksum for testers who prefer pacman -U over
+          # building from the AUR.
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes
+            --generate-notes \
+            dist/*.pkg.tar.zst dist/SHA256SUMS
