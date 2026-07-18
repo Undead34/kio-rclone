@@ -6,8 +6,8 @@ on:
       - 'v*'
 
 # Elevated only in the one job that needs it (contents: write, to publish
-# the Release and its assets). Only a tag push on this repo can reach this
-# workflow at all -- pull_request never triggers it, so a fork can't.
+# the Release). Only a tag push on this repo can reach this workflow at all --
+# pull_request never triggers it, so a fork can't.
 permissions:
   contents: read
 
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   release:
-    name: Build Arch package and publish GitHub Release
+    name: Verify the tag builds and publish the GitHub Release
     runs-on: ubuntu-24.04
     container:
       image: archlinux@sha256:212b1e518e94ee9c52be55e8a32da75fcf11e7b5610b80b49479e67880102406
@@ -32,43 +32,42 @@ jobs:
           persist-credentials: false
 
       - name: Install build dependencies
-        # Keep in sync with packaging/arch/PKGBUILD's depends/makedepends.
+        # Keep this in sync with the AUR recipe's depends/makedepends.
         run: |
           pacman -Syu --noconfirm --needed \
-            base-devel git cmake extra-cmake-modules ninja pkgconf \
+            git cmake extra-cmake-modules ninja pkgconf \
             qt6-base kcoreaddons ki18n kio rclone appstream github-cli
 
       - name: Verify tag matches the project version
-        # Catches exactly the "bumped 3 of 4 files" mistake this project
-        # hit once. scripts/bump-version.sh keeps these three in sync;
-        # this step is the safety net in case someone edits by hand instead.
+        # Catches the "bumped some files but not others" mistake. The three
+        # in-repo version literals are kept in sync by scripts/bump-version.sh;
+        # this step is the safety net when someone edits by hand. The AUR
+        # recipe's pkgver lives in its own repository and is bumped there.
         run: |
           set -euo pipefail
           tag_version="${GITHUB_REF_NAME#v}"
           cmake_version="$(grep -oP 'project\(kio-rclone VERSION \K[0-9.]+' CMakeLists.txt)"
-          pkgbuild_version="$(grep -oP '^pkgver=\K.*' packaging/arch/PKGBUILD)"
-          package_json_version="$(grep -oP '"version":\s*"\K[0-9.]+' package.json)"
+          package_json_version="$(grep -oP '"version":\s*"\K[0-9.]+' docs/package.json)"
           metainfo_version="$(grep -oP '<release version="\K[0-9.]+' app/org.kde.kio-rclone-config.metainfo.xml | head -1)"
           mismatches=()
           [[ "$tag_version" == "$cmake_version" ]] || mismatches+=("CMakeLists.txt ($cmake_version)")
-          [[ "$tag_version" == "$pkgbuild_version" ]] || mismatches+=("PKGBUILD ($pkgbuild_version)")
-          [[ "$tag_version" == "$package_json_version" ]] || mismatches+=("package.json ($package_json_version)")
+          [[ "$tag_version" == "$package_json_version" ]] || mismatches+=("docs/package.json ($package_json_version)")
           [[ "$tag_version" == "$metainfo_version" ]] || mismatches+=("metainfo.xml ($metainfo_version)")
           if [[ ${#mismatches[@]} -gt 0 ]]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match: ${mismatches[*]}. Run scripts/bump-version.sh $tag_version, update CHANGELOG.md and metainfo.xml, commit, and retag."
             exit 1
           fi
 
-      - name: Build Arch package with makepkg
+      - name: Build and test the tagged tree
+        # A clean-room release gate: prove the tag compiles and its tests pass
+        # on a fresh Arch system before publishing. The Arch package itself is
+        # built from the separate AUR recipe, not here.
         run: |
           set -euo pipefail
-          # makepkg refuses to run as root; build as an unprivileged user.
-          # All dependencies are already installed above, so makepkg needs
-          # no elevated access at all here (no --syncdeps, no sudo).
-          useradd -m builder
-          chown -R builder:builder "$GITHUB_WORKSPACE"
-          su builder -c 'cd packaging/arch && makepkg --noconfirm'
-          sha256sum packaging/arch/*.pkg.tar.zst > packaging/arch/SHA256SUMS
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=ON
+          cmake --build build
+          ctest --test-dir build --output-on-failure
 
       - name: Publish GitHub Release
         env:
@@ -76,9 +75,9 @@ jobs:
         run: |
           set -euo pipefail
           # GitHub attaches "Source code (zip/tar.gz)" to every Release
-          # automatically; we only need to upload the built package here.
+          # automatically; Arch users install through the AUR recipe, which
+          # points at that source tarball.
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            packaging/arch/*.pkg.tar.zst packaging/arch/SHA256SUMS
+            --generate-notes

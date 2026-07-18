@@ -5,18 +5,12 @@ on:
     branches: [main]
     paths-ignore:
       - 'docs/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
       - 'README.md'
       - 'CHANGELOG.md'
       - '.github/workflows/docs.yml'
   pull_request:
     paths-ignore:
       - 'docs/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
       - 'README.md'
       - 'CHANGELOG.md'
       - '.github/workflows/docs.yml'
@@ -38,7 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     # Arch container pinned by digest (not a mutable tag) so a compromised or
     # silently-updated ":latest"/":base-devel" tag can't change what CI runs.
-    # Also mirrors packaging/arch/PKGBUILD's target distro.
+    # Arch is also the first packaging target (see the kio-rclone AUR recipe).
     container:
       image: archlinux@sha256:212b1e518e94ee9c52be55e8a32da75fcf11e7b5610b80b49479e67880102406
     timeout-minutes: 20
@@ -50,7 +44,7 @@ jobs:
           persist-credentials: false
 
       - name: Install build dependencies
-        # Keep this in sync with packaging/arch/PKGBUILD's depends/makedepends.
+        # Keep this in sync with the AUR recipe's depends/makedepends.
         run: |
           pacman -Syu --noconfirm --needed \
             git cmake extra-cmake-modules ninja pkgconf \
