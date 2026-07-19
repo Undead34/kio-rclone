@@ -3,7 +3,7 @@
         "rclone": {
             "Class": ":internet",
             "ExtraNames": [],
-            "Icon": "folder-cloud",
+            "Icon": "folder-kio-rclone",
             "deleteRecursive": true,
             "deleting": true,
             "input": "none",

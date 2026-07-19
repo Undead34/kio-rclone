@@ -16,6 +16,7 @@ class RcloneBackendTest : public QObject
 
 private Q_SLOTS:
     void parsesRemoteLists();
+    void parsesRemoteTypes();
     void parsesRemoteInfo();
     void parsesListing();
     void listsLocalRemote();
@@ -36,6 +37,30 @@ void RcloneBackendTest::parsesRemoteLists()
         &error);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(current, QStringList({QStringLiteral("Archive"), QStringLiteral("Photos")}));
+}
+
+void RcloneBackendTest::parsesRemoteTypes()
+{
+    QString error;
+    const QHash<QString, QString> types = RcloneBackend::parseRemoteTypes(
+        R"({
+          "Photos": {"type": "drive", "scope": "drive"},
+          "Backup": {"type": "dropbox"},
+          "Nas": {"type": ""}
+      })",
+        &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(types.value(QStringLiteral("Photos")), QStringLiteral("drive"));
+    QCOMPARE(types.value(QStringLiteral("Backup")), QStringLiteral("dropbox"));
+    // Entries without a usable type are dropped, so the map only carries
+    // remotes we can actually resolve an icon for.
+    QVERIFY(!types.contains(QStringLiteral("Nas")));
+
+    // Malformed input yields an empty map and a reported error rather than a crash.
+    QString badError;
+    const QHash<QString, QString> broken = RcloneBackend::parseRemoteTypes(R"(not json)", &badError);
+    QVERIFY(broken.isEmpty());
+    QVERIFY(!badError.isEmpty());
 }
 
 void RcloneBackendTest::parsesRemoteInfo()

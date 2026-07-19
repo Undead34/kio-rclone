@@ -1,8 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
+# SPDX-License-Identifier: CC0-1.0
 [Desktop Entry]
 Type=Link
 Name=Rclone Cloud Storage
 Name[es]=Almacenamiento en la nube (Rclone)
 Comment=Browse cloud storage configured with rclone
 Comment[es]=Navega el almacenamiento en la nube configurado con rclone
-Icon=org.kde.kio-rclone-config
+Icon=folder-kio-rclone
 URL=rclone:/

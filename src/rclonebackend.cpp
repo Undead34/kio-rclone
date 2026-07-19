@@ -148,6 +148,16 @@ QStringList RcloneBackend::remotes(QString *error, const CancellationCallback &i
     return parseRemoteList(result.standardOutput, error);
 }
 
+QHash<QString, QString> RcloneBackend::remoteTypes(QString *error, const CancellationCallback &isCancelled) const
+{
+    const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("dump")}, 30000, isCancelled);
+    if (!result.success()) {
+        setError(error, result.errorMessage());
+        return {};
+    }
+    return parseRemoteTypes(result.standardOutput, error);
+}
+
 std::optional<RcloneRemoteInfo> RcloneBackend::remoteInfo(const QString &remote, QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("redacted"), remote}, 30000, isCancelled);
@@ -184,6 +194,26 @@ QStringList RcloneBackend::parseRemoteList(const QByteArray &json, QString *erro
     }
     remotes.sort(Qt::CaseInsensitive);
     return remotes;
+}
+
+QHash<QString, QString> RcloneBackend::parseRemoteTypes(const QByteArray &json, QString *error)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        setError(error, parseError.errorString());
+        return {};
+    }
+
+    QHash<QString, QString> types;
+    const QJsonObject remotes = document.object();
+    for (auto it = remotes.constBegin(); it != remotes.constEnd(); ++it) {
+        const QString type = it.value().toObject().value(QStringLiteral("type")).toString();
+        if (!type.isEmpty()) {
+            types.insert(it.key(), type);
+        }
+    }
+    return types;
 }
 
 std::optional<RcloneRemoteInfo> RcloneBackend::parseRemoteInfo(const QByteArray &config, QString *error)

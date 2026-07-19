@@ -1,0 +1,40 @@
+<!-- SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com> -->
+<!-- SPDX-FileCopyrightText: 2014 Uri Herrera and the KDE Breeze icon theme authors -->
+<!-- SPDX-License-Identifier: LGPL-3.0-or-later -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <defs id="defs3051">
+    <style type="text/css" id="current-color-scheme">
+      .ColorScheme-Text {
+        color:#31363b;
+      }
+      .ColorScheme-Accent {
+        color:#3daee9;
+      }
+      </style>
+  </defs>
+  <!-- Breeze folder base (exact geometry, theme-aware accent) -->
+  <path
+     style="fill:currentColor;fill-opacity:1;stroke:none"
+     d="M 5,6 V 16 H 4 V 42 H 44 V 13 H 43 V 9 H 24 L 21,6 Z"
+     class="ColorScheme-Accent"
+     />
+  <path
+     style="fill-opacity:0.33;fill-rule:evenodd"
+     d="m 5,6 v 10 h 12 l 3,-3 H 43 V 9 H 24 L 21,6 Z"
+     />
+  <path
+     style="fill:#ffffff;fill-opacity:0.2;fill-rule:evenodd"
+     d="M 21 6 L 23 10 L 43 10 L 43 9 L 24 9 L 21 6 z M 20 13 L 17 16 L 4 16 L 4 17 L 18 17 L 20 13 z "
+     />
+  <path
+     style="fill-opacity:0.2;fill-rule:evenodd"
+     d="M 20 13 L 16 15 L 5 15 L 5 16 L 17 16 L 20 13 z M 4 41 L 4 42 C 4 42 44 42 44 42 L 44 41 L 4 41 z "
+     class="ColorScheme-Text"
+     />
+  <!-- rclone cloud mark, centered on the front panel (filled variant) -->
+  <g transform="translate(8.64 13.98) scale(0.12)">
+    <path fill="#ffffff" fill-opacity="0.6" d="M184.8 193H74.2C48.1 193 27 172.2 27 146.4c0-23.1 17.1-42.5 39.8-46.1C73.9 70.7 99.4 49 130 49c36.1 0 65.5 29.1 65.9 65.1 19.3 4.9 33.1 22.2 33.1 42.5 0 20.1-16.3 36.4-36.2 36.4Z"/>
+    <path fill="currentColor" class="ColorScheme-Accent" d="M91 134.5a9 9 0 0 1 12.7 0l17.1 17.1a9 9 0 0 1 0 12.8l-17.1 17.1a9 9 0 1 1-12.7-12.8l10.7-10.7L91 147.3a9 9 0 0 1 0-12.8Zm73.1 0a9 9 0 0 1 12.8 12.8L166.2 158l10.7 10.7a9 9 0 1 1-12.8 12.8L147 164.4a9 9 0 0 1 0-12.8l17.1-17.1Z"/>
+    <path fill="currentColor" class="ColorScheme-Accent" d="M127 126.5h2a9 9 0 0 1 0 18h-2a9 9 0 0 1 0-18Zm0 43h2a9 9 0 0 1 0 18h-2a9 9 0 0 1 0-18Z"/>
+  </g>
+</svg>

@@ -53,6 +53,22 @@ KIO::WorkerResult configurationEntryMutationError(int error)
     return KIO::WorkerResult::fail(error, i18n("“Configure Remotes…” is a virtual launcher and cannot be modified."));
 }
 
+// Maps an rclone remote type (the config "type =" value) to a themed places
+// icon. Providers that ship a dedicated Breeze icon get it; everything else
+// falls back to the generic cloud folder. A theme missing the named icon
+// degrades to the plain folder icon (via the inode/directory MIME type), so no
+// existence check is needed here.
+QString iconForRemoteType(const QString &type)
+{
+    static const QHash<QString, QString> icons = {
+        {QStringLiteral("drive"), QStringLiteral("folder-gdrive")},
+        {QStringLiteral("dropbox"), QStringLiteral("folder-dropbox")},
+        {QStringLiteral("onedrive"), QStringLiteral("folder-onedrive")},
+        {QStringLiteral("webdav"), QStringLiteral("folder-owncloud")},
+    };
+    return icons.value(type, QStringLiteral("folder-cloud"));
+}
+
 void appendLimited(QByteArray &destination, const QByteArray &data)
 {
     const qsizetype remaining = MaximumDiagnosticSize - destination.size();
@@ -142,11 +158,18 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
             return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, url);
         }
 
+        // Resolve every remote's provider type in a single call so the listing
+        // can show a matching icon (Drive, Dropbox…). Cosmetic: a failure here
+        // simply falls back to the generic cloud folder.
+        const QHash<QString, QString> types = m_backend.remoteTypes(nullptr, [this]() {
+            return wasKilled();
+        });
+
         KIO::UDSEntryList entries;
         entries.reserve(remotes.size() + 2);
         entries.append(rootEntry());
         for (const QString &remote : remotes) {
-            entries.append(remoteEntry(remote));
+            entries.append(remoteEntry(remote, false, types.value(remote)));
         }
         entries.append(configureEntry());
         listEntries(entries);
@@ -215,11 +238,19 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
         return result;
     }
     if (rcloneUrl.isRemoteRoot()) {
+        // A single config dump both confirms the remote exists and yields its
+        // provider type, so the stat entry can carry the matching icon.
         QString error;
-        if (!remoteExists(rcloneUrl.remote(), &error)) {
-            return error.isEmpty() ? KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, url.toDisplayString()) : errorResult(error, KIO::ERR_CANNOT_STAT, url);
+        const QHash<QString, QString> types = m_backend.remoteTypes(&error, [this]() {
+            return wasKilled();
+        });
+        if (!error.isEmpty()) {
+            return errorResult(error, KIO::ERR_CANNOT_STAT, url);
         }
-        statEntry(remoteEntry(rcloneUrl.remote()));
+        if (!types.contains(rcloneUrl.remote())) {
+            return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, url.toDisplayString());
+        }
+        statEntry(remoteEntry(rcloneUrl.remote(), false, types.value(rcloneUrl.remote())));
         return KIO::WorkerResult::pass();
     }
 
@@ -729,7 +760,7 @@ KIO::UDSEntry RcloneWorker::rootEntry() const
     entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, i18n("Rclone Remotes"));
     entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
     entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder-cloud"));
+    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder-kio-rclone"));
     entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
     return entry;
 }
@@ -761,7 +792,7 @@ KIO::UDSEntry RcloneWorker::configureEntry() const
     return entry;
 }
 
-KIO::UDSEntry RcloneWorker::remoteEntry(const QString &name, bool currentDirectory) const
+KIO::UDSEntry RcloneWorker::remoteEntry(const QString &name, bool currentDirectory, const QString &type) const
 {
     KIO::UDSEntry entry;
     entry.reserve(6);
@@ -769,7 +800,7 @@ KIO::UDSEntry RcloneWorker::remoteEntry(const QString &name, bool currentDirecto
     entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, currentDirectory ? name : name);
     entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
     entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder-cloud"));
+    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, iconForRemoteType(type));
     entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
     return entry;
 }

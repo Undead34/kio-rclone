@@ -7,6 +7,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -62,6 +63,7 @@ public:
 
     [[nodiscard]] RcloneResult run(const QStringList &arguments, int timeoutMs = 120000, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QStringList remotes(QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
+    [[nodiscard]] QHash<QString, QString> remoteTypes(QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] std::optional<RcloneRemoteInfo>
     remoteInfo(const QString &remote, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QList<RcloneItem> list(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
@@ -72,6 +74,7 @@ public:
     [[nodiscard]] static QList<RcloneItem> parseItemList(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static std::optional<RcloneItem> parseItem(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static QStringList parseRemoteList(const QByteArray &json, QString *error = nullptr);
+    [[nodiscard]] static QHash<QString, QString> parseRemoteTypes(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static std::optional<RcloneRemoteInfo> parseRemoteInfo(const QByteArray &config, QString *error = nullptr);
     [[nodiscard]] static bool isNotFoundError(const QString &error);
 

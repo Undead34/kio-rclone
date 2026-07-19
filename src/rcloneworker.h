@@ -108,7 +108,7 @@ class RcloneWorker : public KIO::WorkerBase
   private:
       [[nodiscard]] KIO::UDSEntry rootEntry() const;
       [[nodiscard]] KIO::UDSEntry configureEntry() const;
-      [[nodiscard]] KIO::UDSEntry remoteEntry(const QString &name, bool currentDirectory = false) const;
+      [[nodiscard]] KIO::UDSEntry remoteEntry(const QString &name, bool currentDirectory = false, const QString &type = {}) const;
       [[nodiscard]] KIO::UDSEntry itemEntry(const RcloneItem &item) const;
 
       [[nodiscard]] KIO::WorkerResult ensureBackend() const;

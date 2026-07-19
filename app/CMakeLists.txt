@@ -28,3 +28,8 @@ install(FILES ${CMAKE_SOURCE_DIR}/docs/public/kio-rclone.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
     RENAME org.kde.kio-rclone-config.svg
 )
+
+install(FILES folder-rclone-outline.svg
+    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/places
+    RENAME folder-kio-rclone.svg
+)
