@@ -154,9 +154,8 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     auto *title = new QLabel(i18n("<h2>Cloud storage in Dolphin</h2>"), this);
     layout->addWidget(title);
 
-    auto *description = new QLabel(i18n("KIO Rclone uses your normal rclone configuration. OAuth "
-                                        "and provider credentials are handled directly by "
-                                        "rclone, without KDE Online Accounts."),
+    auto *description = new QLabel(i18n("Connect a cloud provider to browse it in Dolphin under "
+                                        "<b>rclone:/</b>. Your configured remotes appear in the list below."),
                                    this);
     description->setWordWrap(true);
     layout->addWidget(description);
@@ -303,7 +302,7 @@ void ConfigWindow::refreshRemotes()
     if (!error.isEmpty()) {
         m_statusLabel->setText(error);
     } else if (remotes.isEmpty()) {
-        m_statusLabel->setText(i18n("No remotes are configured yet."));
+        m_statusLabel->setText(i18n("No remotes yet. Use “Add Remote…” to connect your first cloud provider."));
     } else if (sharedGoogleClients > 0) {
         m_statusLabel->setText(
             i18np("One Google Drive remote uses rclone's shared OAuth client. Configure your own client to avoid quota delays and service interruption.",

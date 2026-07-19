@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
+# SPDX-License-Identifier: CC0-1.0
 [Desktop Entry]
 Type=Application
 Name=Rclone Remotes
@@ -6,9 +8,9 @@ GenericName=Cloud Storage Configuration
 GenericName[es]=Configuración de almacenamiento en la nube
 Comment=Configure cloud storage for Dolphin
 Comment[es]=Configura almacenamiento en la nube para Dolphin
-Keywords=rclone;cloud;storage;dolphin;drive;s3;dropbox;onedrive;remote;
-Keywords[es]=rclone;nube;almacenamiento;dolphin;drive;s3;dropbox;onedrive;remoto;
+Keywords=kio;kio-rclone;kiorclone;rclone;cloud;storage;dolphin;drive;s3;dropbox;onedrive;remote;
+Keywords[es]=kio;kio-rclone;kiorclone;rclone;nube;almacenamiento;dolphin;drive;s3;dropbox;onedrive;remoto;
 Icon=org.kde.kio-rclone-config
 Exec=kio-rclone-config
-Categories=Qt;KDE;Settings;Network;
+Categories=Qt;KDE;Network;
 StartupNotify=true
