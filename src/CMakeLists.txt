@@ -1,5 +1,7 @@
 add_library(kio_rclone_common STATIC
     rclonebackend.cpp
+    rcloneentryformat.cpp
+    rcloneprocess.cpp
     rcloneurl.cpp
 )
 

@@ -13,7 +13,6 @@
 
 #include <memory>
 
-class QProcess;
 class RcloneUrl;
 
 class RcloneWorker : public KIO::WorkerBase
@@ -137,14 +136,6 @@ class RcloneWorker : public KIO::WorkerBase
       [[nodiscard]] KIO::WorkerResult errorResult(const QString &message,
                                                   int fallbackError,
                                                   const QUrl &url) const;
-
-      static void configureProcess(QProcess &process,
-                                   const QString &program,
-                                   const QStringList &arguments);
-      static void stopProcess(QProcess &process);
-      static void collectProcessOutput(QProcess &process,
-                                       QByteArray &standardOutput,
-                                       QByteArray &standardError);
 
       RcloneBackend m_backend;
 

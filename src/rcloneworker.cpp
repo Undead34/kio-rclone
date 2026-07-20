@@ -5,6 +5,8 @@
  */
 
 #include "rcloneworker.h"
+#include "rcloneentryformat.h"
+#include "rcloneprocess.h"
 #include "rcloneurl.h"
 
 #include <KLocalizedString>
@@ -35,7 +37,6 @@ Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 namespace
 {
 constexpr qsizetype DownloadChunkSize = 64 * 1024;
-constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
 
 std::optional<QUrl> configurationLauncherUrl()
 {
@@ -51,60 +52,6 @@ std::optional<QUrl> configurationLauncherUrl()
 KIO::WorkerResult configurationEntryMutationError(int error)
 {
     return KIO::WorkerResult::fail(error, i18n("“Configure Remotes…” is a virtual launcher and cannot be modified."));
-}
-
-// Maps an rclone remote type (the config "type =" value) to a themed places
-// icon. Providers that ship a dedicated Breeze icon get it; everything else
-// falls back to the generic cloud folder. A theme missing the named icon
-// degrades to the plain folder icon (via the inode/directory MIME type), so no
-// existence check is needed here.
-QString iconForRemoteType(const QString &type)
-{
-    static const QHash<QString, QString> icons = {
-        {QStringLiteral("drive"), QStringLiteral("folder-gdrive")},
-        {QStringLiteral("dropbox"), QStringLiteral("folder-dropbox")},
-        {QStringLiteral("onedrive"), QStringLiteral("folder-onedrive")},
-        {QStringLiteral("webdav"), QStringLiteral("folder-owncloud")},
-    };
-    return icons.value(type, QStringLiteral("folder-cloud"));
-}
-
-void appendLimited(QByteArray &destination, const QByteArray &data)
-{
-    const qsizetype remaining = MaximumDiagnosticSize - destination.size();
-    if (remaining > 0) {
-        destination.append(data.left(remaining));
-    }
-}
-
-QString fallbackMimeType(const RcloneItem &item)
-{
-    if (item.isDirectory) {
-        return QStringLiteral("inode/directory");
-    }
-    if (!item.mimeType.isEmpty()) {
-        return item.mimeType;
-    }
-    return QMimeDatabase().mimeTypeForFile(item.name, QMimeDatabase::MatchExtension).name();
-}
-
-QString itemVersion(const RcloneItem &item)
-{
-    return item.id + QLatin1Char('\n') + item.modificationTime.toUTC().toString(Qt::ISODateWithMs) + QLatin1Char('\n') + QString::number(item.size);
-}
-
-bool preferItem(const RcloneItem &candidate, const RcloneItem &current)
-{
-    if (candidate.modificationTime.isValid() != current.modificationTime.isValid()) {
-        return candidate.modificationTime.isValid();
-    }
-    if (candidate.modificationTime != current.modificationTime) {
-        return candidate.modificationTime > current.modificationTime;
-    }
-    if (!candidate.id.isEmpty() && !current.id.isEmpty() && candidate.id != current.id) {
-        return candidate.id < current.id;
-    }
-    return false;
 }
 
 class KIOPluginForMetaData : public QObject
@@ -203,7 +150,7 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
         }
 
         RcloneItem &selected = visibleItems[*existing];
-        if (preferItem(item, selected)) {
+        if (RcloneEntryFormat::preferItem(item, selected)) {
             selected = item;
         }
         selected.ambiguous = true;
@@ -309,7 +256,7 @@ KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
         return errorResult(error, KIO::ERR_DOES_NOT_EXIST, url);
     }
 
-    mimeType(fallbackMimeType(*item));
+    mimeType(RcloneEntryFormat::fallbackMimeType(*item));
     return KIO::WorkerResult::pass();
 }
 
@@ -349,7 +296,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return errorResult(error, KIO::ERR_CANNOT_READ, url);
     }
 
-    mimeType(fallbackMimeType(*item));
+    mimeType(RcloneEntryFormat::fallbackMimeType(*item));
     if (cachedDownloadMatches(rcloneUrl, *item)) {
         return sendCachedDownload(rcloneUrl);
     }
@@ -372,7 +319,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     const QString parentSpec = rcloneUrl.remote() + QLatin1Char(':') + parentPath;
 
     QProcess process;
-    configureProcess(process,
+    RcloneProcess::configureProcess(process,
                      m_backend.executable(),
                      {
                          QStringLiteral("cat"),
@@ -393,7 +340,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     }
     const QByteArray requestedFile = fileName.toUtf8() + '\n';
     if (process.write(requestedFile) != requestedFile.size() || !process.waitForBytesWritten(5000)) {
-        stopProcess(process);
+        RcloneProcess::stopProcess(process);
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, url.toDisplayString());
     }
     process.closeWriteChannel();
@@ -402,14 +349,14 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     qint64 processed = 0;
     while (process.state() != QProcess::NotRunning || process.bytesAvailable() > 0) {
         if (wasKilled()) {
-            stopProcess(process);
+            RcloneProcess::stopProcess(process);
             return KIO::WorkerResult::pass();
         }
 
         if (process.bytesAvailable() == 0) {
             process.waitForReadyRead(100);
         }
-        appendLimited(standardError, process.readAllStandardError());
+        RcloneProcess::appendLimited(standardError, process.readAllStandardError());
 
         while (process.bytesAvailable() > 0) {
             const QByteArray chunk = process.read(qMin<qint64>(DownloadChunkSize, process.bytesAvailable()));
@@ -421,7 +368,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
             processedSize(processed);
         }
     }
-    appendLimited(standardError, process.readAllStandardError());
+    RcloneProcess::appendLimited(standardError, process.readAllStandardError());
 
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         return errorResult(QString::fromUtf8(standardError).trimmed(), KIO::ERR_CANNOT_READ, url);
@@ -534,7 +481,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
 
     const auto destinationChanged = [&expectedDestination](const std::optional<RcloneItem> &current) {
         return expectedDestination.has_value() != current.has_value()
-            || (expectedDestination && current && (current->ambiguous || itemVersion(*expectedDestination) != itemVersion(*current)));
+            || (expectedDestination && current && (current->ambiguous || RcloneEntryFormat::itemVersion(*expectedDestination) != RcloneEntryFormat::itemVersion(*current)));
     };
     const auto currentDestination = [this, &rcloneUrl](QString *error) {
         return sourceItem(rcloneUrl, error);
@@ -800,7 +747,7 @@ KIO::UDSEntry RcloneWorker::remoteEntry(const QString &name, bool currentDirecto
     entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, currentDirectory ? name : name);
     entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
     entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, iconForRemoteType(type));
+    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, RcloneEntryFormat::iconForRemoteType(type));
     entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
     return entry;
 }
@@ -816,7 +763,7 @@ KIO::UDSEntry RcloneWorker::itemEntry(const RcloneItem &item) const
     if (item.size >= 0) {
         entry.fastInsert(KIO::UDSEntry::UDS_SIZE, item.size);
     }
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, fallbackMimeType(item));
+    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, RcloneEntryFormat::fallbackMimeType(item));
     if (item.ambiguous) {
         entry.fastInsert(KIO::UDSEntry::UDS_COMMENT, i18n("Multiple remote objects have this name. KIO Rclone is showing the newest one."));
     }
@@ -882,7 +829,7 @@ RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &re
 {
     RcloneResult result;
     QProcess process;
-    configureProcess(process,
+    RcloneProcess::configureProcess(process,
                      m_backend.executable(),
                      {
                          QStringLiteral("copyto"),
@@ -911,7 +858,7 @@ RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &re
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            appendLimited(result.standardError, line + '\n');
+            RcloneProcess::appendLimited(result.standardError, line + '\n');
             return;
         }
 
@@ -964,11 +911,11 @@ RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &re
 
         const QString message = object.value(QStringLiteral("msg")).toString().trimmed();
         if (!message.isEmpty()) {
-            appendLimited(result.standardError, message.toUtf8() + '\n');
+            RcloneProcess::appendLimited(result.standardError, message.toUtf8() + '\n');
         }
     };
     const auto collectOutput = [&process, &result, &pendingLog, &handleLogLine](bool flush) {
-        appendLimited(result.standardOutput, process.readAllStandardOutput());
+        RcloneProcess::appendLimited(result.standardOutput, process.readAllStandardOutput());
         pendingLog.append(process.readAllStandardError());
         for (;;) {
             const qsizetype newline = pendingLog.indexOf('\n');
@@ -988,7 +935,7 @@ RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &re
     while (process.state() != QProcess::NotRunning) {
         if (wasKilled()) {
             result.cancelled = true;
-            stopProcess(process);
+            RcloneProcess::stopProcess(process);
             break;
         }
         process.waitForFinished(100);
@@ -1044,7 +991,7 @@ std::optional<RcloneItem> RcloneWorker::sourceItem(const RcloneUrl &url, QString
             continue;
         }
         ++matches;
-        if (!selected || preferItem(item, *selected)) {
+        if (!selected || RcloneEntryFormat::preferItem(item, *selected)) {
             selected = item;
         }
     }
@@ -1067,7 +1014,7 @@ KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem
         return KIO::WorkerResult::pass();
     }
 
-    const QString remoteVersion = itemVersion(item);
+    const QString remoteVersion = RcloneEntryFormat::itemVersion(item);
     clearCachedDownload();
     if (item.ambiguous && item.id.isEmpty()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ,
@@ -1145,7 +1092,7 @@ KIO::WorkerResult RcloneWorker::resolveUnknownSize(const RcloneUrl &url, RcloneI
 
 bool RcloneWorker::cachedDownloadMatches(const RcloneUrl &url, const RcloneItem &item) const
 {
-    return m_cachedDownload && m_cachedDownloadSpec == url.remoteSpec() && m_cachedDownloadVersion == itemVersion(item);
+    return m_cachedDownload && m_cachedDownloadSpec == url.remoteSpec() && m_cachedDownloadVersion == RcloneEntryFormat::itemVersion(item);
 }
 
 KIO::WorkerResult RcloneWorker::sendCachedDownload(const RcloneUrl &url)
@@ -1188,34 +1135,6 @@ void RcloneWorker::clearCachedDownload()
     m_cachedDownload.reset();
     m_cachedDownloadSpec.clear();
     m_cachedDownloadVersion.clear();
-}
-
-void RcloneWorker::configureProcess(QProcess &process, const QString &program, const QStringList &arguments)
-{
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
-    process.setProcessEnvironment(environment);
-    process.setProgram(program);
-    process.setArguments(arguments);
-    process.setProcessChannelMode(QProcess::SeparateChannels);
-}
-
-void RcloneWorker::stopProcess(QProcess &process)
-{
-    if (process.state() == QProcess::NotRunning) {
-        return;
-    }
-    process.terminate();
-    if (!process.waitForFinished(1000)) {
-        process.kill();
-        process.waitForFinished(1000);
-    }
-}
-
-void RcloneWorker::collectProcessOutput(QProcess &process, QByteArray &standardOutput, QByteArray &standardError)
-{
-    appendLimited(standardOutput, process.readAllStandardOutput());
-    appendLimited(standardError, process.readAllStandardError());
 }
 
 #include "rcloneworker.moc"
