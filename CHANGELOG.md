@@ -9,8 +9,8 @@ user-visible protocol or packaging behavior.
 ### Added
 
 - Provider-specific icons for rclone remotes in `rclone:/`: Google Drive,
-  Dropbox, OneDrive and WebDAV get their themed Breeze places icon, resolved
-  from a single `rclone config dump` and shared between directory listing and
+  Dropbox and OneDrive get their themed Breeze places icon, resolved from a
+  single `rclone config dump` and shared between directory listing and
   `stat`. Other providers keep the generic cloud folder. The root and the
   network entry ship a dedicated icon instead of a generic one.
 

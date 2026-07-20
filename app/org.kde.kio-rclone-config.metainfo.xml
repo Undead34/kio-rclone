@@ -94,9 +94,8 @@ SPDX-License-Identifier: CC0-1.0
       <description>
         <p>
           Remotes in rclone:/ now show a themed icon for Google Drive,
-          Dropbox, OneDrive and WebDAV instead of a generic folder. The
-          configuration window's description and empty-state hint were
-          reworded.
+          Dropbox and OneDrive instead of a generic folder. The configuration
+          window's description and empty-state hint were reworded.
         </p>
       </description>
     </release>

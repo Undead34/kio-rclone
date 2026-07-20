@@ -18,7 +18,6 @@ QString iconForRemoteType(const QString &type)
         {QStringLiteral("drive"), QStringLiteral("folder-gdrive")},
         {QStringLiteral("dropbox"), QStringLiteral("folder-dropbox")},
         {QStringLiteral("onedrive"), QStringLiteral("folder-onedrive")},
-        {QStringLiteral("webdav"), QStringLiteral("folder-owncloud")},
     };
     return icons.value(type, QStringLiteral("folder-cloud"));
 }
