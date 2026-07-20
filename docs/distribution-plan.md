@@ -1,3 +1,7 @@
+---
+description: The staged plan for packaging and releasing KIO Rclone across distributions.
+---
+
 # Distribution and release plan
 
 This is a staged plan for shipping KIO Rclone without pretending it is a

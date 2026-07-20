@@ -1,3 +1,7 @@
+---
+description: Fixes for slow Google Drive transfers, OAuth errors, stuck uploads, and rclone:/ not appearing in Dolphin.
+---
+
 # Troubleshooting
 
 ## Google Drive is slow before bytes move

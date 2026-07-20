@@ -1,3 +1,7 @@
+---
+description: Crea tu propio cliente OAuth de Google Cloud para que Google Drive no dependa de la cuota compartida de rclone.
+---
+
 # Google Drive y tu proyecto de Google Cloud
 
 Usar un Client ID propio es la forma recomendada de conectar Google Drive con

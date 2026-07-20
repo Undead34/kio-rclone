@@ -1,3 +1,7 @@
+---
+description: Instala KIO Rclone, configura un remoto y ábrelo en rclone:/ desde Dolphin.
+---
+
 # Primeros pasos
 
 KIO Rclone usa exactamente los remotos que rclone ya conoce. Primero asegúrate

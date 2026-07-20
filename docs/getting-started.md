@@ -1,3 +1,7 @@
+---
+description: Install KIO Rclone, configure a remote, and open rclone:/ in Dolphin.
+---
+
 # Getting started
 
 KIO Rclone uses exactly the remotes that rclone already knows. First make sure

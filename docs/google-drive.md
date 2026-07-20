@@ -1,3 +1,7 @@
+---
+description: Create your own Google Cloud OAuth client so Google Drive in KIO Rclone isn't limited by rclone's shared quota.
+---
+
 # Google Drive and your Google Cloud project
 
 Using your own Client ID is the recommended way to connect Google Drive to KIO

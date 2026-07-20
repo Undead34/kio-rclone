@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://undead34.github.io/kio-rclone/sitemap.xml

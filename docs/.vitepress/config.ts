@@ -87,15 +87,32 @@ export default defineConfig({
         ['meta', { name: 'theme-color', content: '#1688d4' }],
         ['meta', { property: 'og:type', content: 'website' }],
         ['meta', { property: 'og:site_name', content: 'KIO Rclone' }],
-        ['meta', { property: 'og:title', content: 'KIO Rclone' }],
-        ['meta', { property: 'og:description', content: siteDescription }],
-        ['meta', { property: 'og:url', content: siteUrl }],
-        ['meta', { property: 'og:image', content: `${siteUrl}og-image.png` }],
-        ['meta', { name: 'twitter:card', content: 'summary' }],
-        ['meta', { name: 'twitter:title', content: 'KIO Rclone' }],
-        ['meta', { name: 'twitter:description', content: siteDescription }],
-        ['meta', { name: 'twitter:image', content: `${siteUrl}og-image.png` }],
     ],
+
+    // Static `head` entries above apply to every page equally. Title, OG/Twitter
+    // tags and the canonical URL need to differ per page instead, so they're
+    // computed here from each page's own frontmatter (title/description already
+    // resolved onto `title`/`description` by VitePress; falls back to the site
+    // description when a page sets none).
+    transformHead({ pageData, title, description }) {
+        const path = pageData.relativePath.endsWith('index.md')
+            ? pageData.relativePath.slice(0, -'index.md'.length)
+            : pageData.relativePath.replace(/\.md$/, '.html');
+        const url = `${siteUrl}${path}`;
+        const image = `${siteUrl}og-image.png`;
+
+        return [
+            ['link', { rel: 'canonical', href: url }],
+            ['meta', { property: 'og:title', content: title }],
+            ['meta', { property: 'og:description', content: description }],
+            ['meta', { property: 'og:url', content: url }],
+            ['meta', { property: 'og:image', content: image }],
+            ['meta', { name: 'twitter:card', content: 'summary' }],
+            ['meta', { name: 'twitter:title', content: title }],
+            ['meta', { name: 'twitter:description', content: description }],
+            ['meta', { name: 'twitter:image', content: image }],
+        ];
+    },
 
     themeConfig: {
         logo: '/kio-rclone.svg',

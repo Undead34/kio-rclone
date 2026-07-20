@@ -1,3 +1,7 @@
+---
+description: Qué puede hacer Dolphin a través de rclone:/ y qué no intenta reemplazar KIO Rclone.
+---
+
 # Funciones
 
 KIO Rclone intenta que el remoto se sienta natural en Dolphin, mientras deja

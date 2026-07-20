@@ -1,3 +1,7 @@
+---
+description: Qué registra KIO Rclone, qué nunca guarda y cómo reportar un error sin filtrar datos de la nube.
+---
+
 # Logs y diagnóstico seguro
 
 KIO Rclone debería poder depurarse sin recolectar datos privados de la nube.

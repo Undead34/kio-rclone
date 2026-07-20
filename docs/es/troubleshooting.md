@@ -1,3 +1,7 @@
+---
+description: Soluciones para transferencias lentas de Google Drive, errores de OAuth y rclone:/ que no aparece en Dolphin.
+---
+
 # Problemas frecuentes
 
 ## Google Drive tarda mucho antes de mover bytes

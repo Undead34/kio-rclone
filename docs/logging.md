@@ -1,3 +1,7 @@
+---
+description: What KIO Rclone logs, what it never stores, and how to file a bug report without leaking cloud data.
+---
+
 # Logs and safe diagnostics
 
 KIO Rclone should be debuggable without collecting private cloud data. It has

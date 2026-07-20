@@ -1,3 +1,7 @@
+---
+description: What Dolphin can do through rclone:/ — browsing, transfers, document editing — and what KIO Rclone does not try to replace.
+---
+
 # Features
 
 KIO Rclone makes a remote feel natural in Dolphin while leaving provider-

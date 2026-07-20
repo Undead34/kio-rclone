@@ -1,3 +1,7 @@
+---
+description: Automated tests, manual smoke tests, and the release compatibility matrix for KIO Rclone.
+---
+
 # Testing KIO Rclone
 
 This document separates fast, deterministic tests from manual cloud testing.

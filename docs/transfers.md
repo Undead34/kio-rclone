@@ -1,3 +1,7 @@
+---
+description: How KIO Rclone uploads and downloads through KIO, with pause, cancel, and atomic publishing.
+---
+
 # Transfers, pause, and progress
 
 <ArchitectureFlow compact />

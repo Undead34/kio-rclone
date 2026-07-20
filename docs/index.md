@@ -1,5 +1,7 @@
 ---
 layout: home
+title: KIO Rclone — rclone cloud storage in KDE Dolphin
+titleTemplate: false
 description: KDE Dolphin integration for rclone cloud remotes through KIO.
 
 hero:

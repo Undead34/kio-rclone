@@ -1,3 +1,7 @@
+---
+description: Cómo sube y descarga KIO Rclone a través de KIO, con pausa, cancelación y publicación atómica.
+---
+
 # Transferencias, pausa y progreso
 
 Una copia de Dolphin parece simple, pero entre un archivo local y un proveedor
