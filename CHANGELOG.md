@@ -4,6 +4,25 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## 0.4.2 — 2026-07-20
+
+### Added
+
+- Provider-specific icons for rclone remotes in `rclone:/`: Google Drive,
+  Dropbox, OneDrive and WebDAV get their themed Breeze places icon, resolved
+  from a single `rclone config dump` and shared between directory listing and
+  `stat`. Other providers keep the generic cloud folder. The root and the
+  network entry ship a dedicated icon instead of a generic one.
+
+### Changed
+
+- Reworded the configuration window's description and empty-state hint,
+  broadened the launcher's keywords, and dropped the Settings category from
+  its desktop entry.
+- The documentation site gives every page its own title, description and
+  Open Graph/Twitter tags instead of sharing the homepage's, and ships a
+  `robots.txt` pointing crawlers at the sitemap.
+
 ## 0.4.1 — 2026-07-18
 
 ### Changed

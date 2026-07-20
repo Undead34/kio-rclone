@@ -90,6 +90,16 @@ SPDX-License-Identifier: CC0-1.0
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.2" date="2026-07-20">
+      <description>
+        <p>
+          Remotes in rclone:/ now show a themed icon for Google Drive,
+          Dropbox, OneDrive and WebDAV instead of a generic folder. The
+          configuration window's description and empty-state hint were
+          reworded.
+        </p>
+      </description>
+    </release>
     <release version="0.4.1" date="2026-07-18">
       <description>
         <p>
