@@ -18,7 +18,7 @@ configuration remains usable from the terminal, scripts or mounts.
   failed transfer never overwrites the previous remote file.
 - **Rclone Remotes**, a graphical manager to add, edit and reconnect remotes
   (Google Drive, OneDrive, Dropbox, plus rclone's wizard for everything else).
-- Translated UI (English, Spanish).
+- Translated UI (English, Spanish, Greek).
 
 > [!WARNING]
 > In-place document editing through `rclone:/` (via KIOFuse) is not yet
@@ -78,9 +78,11 @@ kbuildsycoca6 --noincremental
 
 ### From source, user-only (`$HOME/.local`)
 
-No root. Qt does not scan `~/.local` for plugins, so the worker and the config
-app need `QT_PLUGIN_PATH` and `PATH` set for your session; a logout/login
-applies them.
+No root. Qt does not scan `~/.local` for plugins, so the worker needs
+`QT_PLUGIN_PATH` set for your session. Adding the user-local `bin` directory to
+`PATH` also lets terminals run `kio-rclone-config` by name; the installed
+application launcher uses its absolute path. A logout/login applies both
+variables.
 
 Install:
 
@@ -90,9 +92,14 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 cmake --install build
 
+# Test this build immediately in the current terminal.
+source build/prefix.sh
+kbuildsycoca6 --noincremental
+kio-rclone-config
+
 mkdir -p ~/.config/environment.d
 cat > ~/.config/environment.d/kio-rclone.conf <<'EOF'
-QT_PLUGIN_PATH=${HOME}/.local/lib/qt6/plugins:${QT_PLUGIN_PATH}
+QT_PLUGIN_PATH=${HOME}/.local/lib/plugins:${QT_PLUGIN_PATH}
 PATH=${HOME}/.local/bin:${PATH}
 EOF
 

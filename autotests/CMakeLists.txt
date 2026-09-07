@@ -88,3 +88,11 @@ add_test(NAME rcloneuploadtest COMMAND rcloneuploadtest)
 set_tests_properties(rcloneuploadtest PROPERTIES
     TIMEOUT 45
 )
+
+add_test(
+    NAME desktopfiletest
+    COMMAND ${CMAKE_COMMAND}
+        "-DDESKTOP_FILE=${CMAKE_BINARY_DIR}/app/org.kde.kio-rclone-config.desktop"
+        "-DEXPECTED_EXECUTABLE=${KDE_INSTALL_FULL_BINDIR}/kio-rclone-config"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/desktopfiletest.cmake
+)

@@ -30,6 +30,7 @@ Current tests:
 | `rcloneuploadtest` | Verifies staged publication, exact bytes, cancellation/failure cleanup and preservation of the previous remote file. |
 | `rclonedownloadtest` | Verifies unknown-size materialization and exact selection of duplicate remote objects. |
 | `appstreamtest` | Validates installed desktop metadata. |
+| `desktopfiletest` | Ensures the application launcher uses the absolute installed executable path. |
 
 `rclonepausetest` is especially important. It suspends a KIO copy, waits for
 the pipeline to settle, verifies that transfer growth stays bounded, then

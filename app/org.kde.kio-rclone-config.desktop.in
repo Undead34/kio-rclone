@@ -11,6 +11,6 @@ Comment[es]=Configura almacenamiento en la nube para Dolphin
 Keywords=kio;kio-rclone;kiorclone;rclone;cloud;storage;dolphin;drive;s3;dropbox;onedrive;remote;
 Keywords[es]=kio;kio-rclone;kiorclone;rclone;nube;almacenamiento;dolphin;drive;s3;dropbox;onedrive;remoto;
 Icon=org.kde.kio-rclone-config
-Exec=kio-rclone-config
+Exec="@KDE_INSTALL_FULL_BINDIR@/kio-rclone-config"
 Categories=Qt;KDE;Network;
 StartupNotify=true

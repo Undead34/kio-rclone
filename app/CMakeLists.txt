@@ -3,6 +3,12 @@ add_executable(kio-rclone-config
     main.cpp
 )
 
+configure_file(
+    org.kde.kio-rclone-config.desktop.in
+    org.kde.kio-rclone-config.desktop
+    @ONLY
+)
+
 target_link_libraries(kio-rclone-config
     PRIVATE
         kio_rclone_common
@@ -16,7 +22,7 @@ install(TARGETS kio-rclone-config
     ${KDE_INSTALL_TARGETS_DEFAULT_ARGS}
 )
 
-install(PROGRAMS org.kde.kio-rclone-config.desktop
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/org.kde.kio-rclone-config.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
