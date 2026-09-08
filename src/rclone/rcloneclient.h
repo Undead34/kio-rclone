@@ -51,12 +51,12 @@ struct RcloneRemoteInfo {
     bool hasRootFolderId = false;
 };
 
-class RcloneBackend
+class RcloneClient
 {
 public:
     using CancellationCallback = std::function<bool()>;
 
-    explicit RcloneBackend(QString executable = {});
+    explicit RcloneClient(QString executable = {});
 
     [[nodiscard]] QString executable() const;
     [[nodiscard]] bool isAvailable() const;

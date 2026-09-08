@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "directorylistingsettingsdialog.h"
+#include "settingsdialog.h"
 
 #include <KLocalizedString>
 
@@ -18,7 +18,7 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
-DirectoryListingSettingsDialog::DirectoryListingSettingsDialog(QWidget *parent)
+SettingsDialog::SettingsDialog(QWidget *parent)
     : QDialog(parent)
     , m_initialPolicy(DirectorySnapshotCache::policy())
 {
@@ -76,14 +76,14 @@ DirectoryListingSettingsDialog::DirectoryListingSettingsDialog(QWidget *parent)
     connect(m_freshness, qOverload<int>(&QSpinBox::valueChanged), this, [this](int seconds) {
         m_freshness->setSuffix(i18np(" second", " seconds", seconds));
     });
-    connect(buttons, &QDialogButtonBox::accepted, this, &DirectoryListingSettingsDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &DirectoryListingSettingsDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &SettingsDialog::reject);
 
     m_freshness->setSuffix(i18np(" second", " seconds", m_freshness->value()));
     updatePresentation();
 }
 
-DirectoryCachePolicy DirectoryListingSettingsDialog::selectedPolicy() const
+DirectoryCachePolicy SettingsDialog::selectedPolicy() const
 {
     DirectoryCachePolicy policy;
     policy.mode = static_cast<DirectoryCacheMode>(m_mode->currentData().toInt());
@@ -91,7 +91,7 @@ DirectoryCachePolicy DirectoryListingSettingsDialog::selectedPolicy() const
     return policy;
 }
 
-void DirectoryListingSettingsDialog::updatePresentation()
+void SettingsDialog::updatePresentation()
 {
     const bool usesFreshCache = static_cast<DirectoryCacheMode>(m_mode->currentData().toInt()) == DirectoryCacheMode::Fresh;
     m_freshness->setEnabled(usesFreshCache);
@@ -100,7 +100,7 @@ void DirectoryListingSettingsDialog::updatePresentation()
                            : i18n("Every directory opening checks rclone and the remote provider."));
 }
 
-void DirectoryListingSettingsDialog::accept()
+void SettingsDialog::accept()
 {
     const DirectoryCachePolicy policy = selectedPolicy();
     const bool policyChanged = policy.mode != m_initialPolicy.mode || policy.freshnessSeconds != m_initialPolicy.freshnessSeconds;

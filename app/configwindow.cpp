@@ -6,9 +6,9 @@
 
 #include "appid.h"
 #include "configwindow.h"
-#include "directorylistingsettingsdialog.h"
-#include "interactiverclonedialog.h"
-#include "rcloneurl.h"
+#include "dialogs/settingsdialog.h"
+#include "dialogs/rclonepromptdialog.h"
+#include "rclone/url.h"
 
 #include <KLocalizedString>
 
@@ -234,7 +234,7 @@ ConfigWindow::ConfigWindow(QWidget *parent)
 
 void ConfigWindow::showSettings()
 {
-    DirectoryListingSettingsDialog dialog(this);
+    SettingsDialog dialog(this);
     dialog.exec();
 }
 
@@ -257,7 +257,7 @@ bool ConfigWindow::promptConfigPassword()
     if (!accepted || password.isEmpty()) {
         return false;
     }
-    // Set for the remainder of this process: every subsequent RcloneBackend::run()
+    // Set for the remainder of this process: every subsequent RcloneClient::run()
     // call (in this class and QProcess calls below) reads the real environment,
     // so this single prompt covers the whole session, not just the current call.
     qputenv("RCLONE_CONFIG_PASS", password.toUtf8());
@@ -1051,7 +1051,7 @@ QString ConfigWindow::selectedRemote() const
 
 bool ConfigWindow::runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description)
 {
-    InteractiveRcloneDialog dialog(m_backend.executable(), arguments, title, description, this);
+    RclonePromptDialog dialog(m_backend.executable(), arguments, title, description, this);
     dialog.exec();
     if (!dialog.startError().isEmpty()) {
         QMessageBox::critical(this, i18n("Rclone Error"), dialog.startError());

@@ -8,15 +8,15 @@ target_link_libraries(rcloneurltest
 )
 add_test(NAME rcloneurltest COMMAND rcloneurltest)
 
-add_executable(rclonebackendtest
-    rclonebackendtest.cpp
+add_executable(rcloneclienttest
+    rcloneclienttest.cpp
 )
-target_link_libraries(rclonebackendtest
+target_link_libraries(rcloneclienttest
     PRIVATE
         kio_rclone_common
         Qt6::Test
 )
-add_test(NAME rclonebackendtest COMMAND rclonebackendtest)
+add_test(NAME rcloneclienttest COMMAND rcloneclienttest)
 
 add_executable(directorysnapshotcacheprobe
     directorysnapshotcacheprobe.cpp
@@ -137,23 +137,23 @@ set_tests_properties(rcloneuploadtest PROPERTIES
     TIMEOUT 45
 )
 
-add_executable(interactiverclonedialogtest
-    interactiverclonedialogtest.cpp
-    ${CMAKE_SOURCE_DIR}/app/interactiverclonedialog.cpp
+add_executable(rclonepromptdialogtest
+    rclonepromptdialogtest.cpp
+    ${CMAKE_SOURCE_DIR}/app/dialogs/rclonepromptdialog.cpp
 )
-target_include_directories(interactiverclonedialogtest
+target_include_directories(rclonepromptdialogtest
     PRIVATE
         ${CMAKE_SOURCE_DIR}/app
 )
-target_link_libraries(interactiverclonedialogtest
+target_link_libraries(rclonepromptdialogtest
     PRIVATE
         kio_rclone_common
         Qt6::Test
         Qt6::Widgets
         KF6::I18n
 )
-add_test(NAME interactiverclonedialogtest COMMAND interactiverclonedialogtest)
-set_tests_properties(interactiverclonedialogtest PROPERTIES
+add_test(NAME rclonepromptdialogtest COMMAND rclonepromptdialogtest)
+set_tests_properties(rclonepromptdialogtest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
 

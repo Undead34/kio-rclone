@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "directorysnapshotcache.h"
-#include "rclonebackend.h"
+#include "cache/directorysnapshotcache.h"
+#include "rclone/rcloneclient.h"
 
 #include <KIO/WorkerBase>
 #include <QTemporaryFile>
@@ -54,7 +54,7 @@ class RcloneWorker : public KIO::WorkerBase
       // TODO: Simular chmod vía la metadata genérica de rclone (mode/uid/gid); no todos los backends la exponen.
       // Confirmado con rclone v1.74.4: local expone "mode" (octal, escribible) en `lsjson --metadata`;
       // backends cloud (drive/s3/dropbox/etc.) no tienen ese concepto, ahí debe fallar directo.
-      // Plan: (1) agregar --metadata a list()/stat() en RcloneBackend y parsear "mode" en RcloneItem;
+      // Plan: (1) agregar --metadata a list()/stat() en RcloneClient y parsear "mode" en RcloneItem;
       // (2) si el item no trae "mode" -> fail(ERR_UNSUPPORTED_ACTION) sin intentar nada más;
       // (3) si lo trae -> moveto remoteSpec a un nombre temporal y moveto de vuelta con
       //     --metadata --metadata-set mode=<octal, preservando bits de tipo S_IFREG/S_IFDIR>.
@@ -74,7 +74,7 @@ class RcloneWorker : public KIO::WorkerBase
       // TODO: Implementar symlink únicamente para remotos backend "drive" (Google Drive), vía
       // `rclone backend shortcut`. Confirmado con `rclone backend help <tipo>`: solo "drive" tiene ese
       // comando entre los backends probados (onedrive/dropbox/box/s3/mega/pcloud/gcs no lo tienen).
-      // Plan: comprobar RcloneBackend::remoteInfo(dest.remote())->type == "drive" antes de intentar;
+      // Plan: comprobar RcloneClient::remoteInfo(dest.remote())->type == "drive" antes de intentar;
       // si no -> fail(ERR_UNSUPPORTED_ACTION). "target" puede llegar como URL rclone: o como ruta
       // relativa; resolverlo contra el mismo remote que "dest" (shortcuts cross-remote no aplican
       // salvo pasando -o target=otroRemote:, que no vamos a soportar por ahora).
@@ -140,7 +140,7 @@ class RcloneWorker : public KIO::WorkerBase
                                                   int fallbackError,
                                                   const QUrl &url) const;
 
-      RcloneBackend m_backend;
+      RcloneClient m_backend;
       DirectorySnapshotCache m_directorySnapshots;
 
       // Caché usada por get(); no debe reutilizarse como estado de FileJob sin controlar posición y modo de apertura.

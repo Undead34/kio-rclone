@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "directorysnapshotcache.h"
+#include "cache/directorysnapshotcache.h"
 
 #include <QDialog>
 
@@ -21,10 +21,10 @@ class QSpinBox;
  * Controls only update local dialog state. The persistent policy changes when
  * the user explicitly accepts the dialog; Cancel leaves it untouched.
  */
-class DirectoryListingSettingsDialog final : public QDialog
+class SettingsDialog final : public QDialog
 {
 public:
-    explicit DirectoryListingSettingsDialog(QWidget *parent = nullptr);
+    explicit SettingsDialog(QWidget *parent = nullptr);
 
 protected:
     void accept() override;

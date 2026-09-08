@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "rclonebackend.h"
+#include "rclone/rcloneclient.h"
 
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTest>
 
-class RcloneBackendTest : public QObject
+class RcloneClientTest : public QObject
 {
     Q_OBJECT
 
@@ -22,14 +22,14 @@ private Q_SLOTS:
     void listsLocalRemote();
 };
 
-void RcloneBackendTest::parsesRemoteLists()
+void RcloneClientTest::parsesRemoteLists()
 {
     QString error;
-    const QStringList legacy = RcloneBackend::parseRemoteList(R"(["Work:", "Personal:"])", &error);
+    const QStringList legacy = RcloneClient::parseRemoteList(R"(["Work:", "Personal:"])", &error);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(legacy, QStringList({QStringLiteral("Personal"), QStringLiteral("Work")}));
 
-    const QStringList current = RcloneBackend::parseRemoteList(
+    const QStringList current = RcloneClient::parseRemoteList(
         R"([
           {"name":"Photos","type":"drive","source":"file"},
           {"name":"Archive","type":"s3","source":"file"}
@@ -39,10 +39,10 @@ void RcloneBackendTest::parsesRemoteLists()
     QCOMPARE(current, QStringList({QStringLiteral("Archive"), QStringLiteral("Photos")}));
 }
 
-void RcloneBackendTest::parsesRemoteTypes()
+void RcloneClientTest::parsesRemoteTypes()
 {
     QString error;
-    const QHash<QString, QString> types = RcloneBackend::parseRemoteTypes(
+    const QHash<QString, QString> types = RcloneClient::parseRemoteTypes(
         R"({
           "Photos": {"type": "drive", "scope": "drive"},
           "Backup": {"type": "dropbox"},
@@ -58,15 +58,15 @@ void RcloneBackendTest::parsesRemoteTypes()
 
     // Malformed input yields an empty map and a reported error rather than a crash.
     QString badError;
-    const QHash<QString, QString> broken = RcloneBackend::parseRemoteTypes(R"(not json)", &badError);
+    const QHash<QString, QString> broken = RcloneClient::parseRemoteTypes(R"(not json)", &badError);
     QVERIFY(broken.isEmpty());
     QVERIFY(!badError.isEmpty());
 }
 
-void RcloneBackendTest::parsesRemoteInfo()
+void RcloneClientTest::parsesRemoteInfo()
 {
     QString error;
-    const auto sharedClient = RcloneBackend::parseRemoteInfo(
+    const auto sharedClient = RcloneClient::parseRemoteInfo(
         R"([Google Drive]
 type = drive
 scope = drive
@@ -79,7 +79,7 @@ token = XXX
     QVERIFY(!sharedClient->hasClientId);
     QVERIFY(!sharedClient->hasRootFolderId);
 
-    const auto privateClient = RcloneBackend::parseRemoteInfo(
+    const auto privateClient = RcloneClient::parseRemoteInfo(
         R"([Work]
 type = drive
 client_id = 123.apps.googleusercontent.com
@@ -92,7 +92,7 @@ root_folder_id = root-id
     QVERIFY(privateClient->hasRootFolderId);
 }
 
-void RcloneBackendTest::parsesListing()
+void RcloneClientTest::parsesListing()
 {
     const QByteArray json = R"([
         {
@@ -115,7 +115,7 @@ void RcloneBackendTest::parsesListing()
     ])";
 
     QString error;
-    const QList<RcloneItem> items = RcloneBackend::parseItemList(json, &error);
+    const QList<RcloneItem> items = RcloneClient::parseItemList(json, &error);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(items.size(), 2);
     QVERIFY(items.at(0).isDirectory);
@@ -124,9 +124,9 @@ void RcloneBackendTest::parsesListing()
     QCOMPARE(items.at(1).id, QStringLiteral("abc"));
 }
 
-void RcloneBackendTest::listsLocalRemote()
+void RcloneClientTest::listsLocalRemote()
 {
-    const RcloneBackend backend;
+    const RcloneClient backend;
     if (!backend.isAvailable()) {
         QSKIP("rclone is not installed");
     }
@@ -151,6 +151,6 @@ void RcloneBackendTest::listsLocalRemote()
     QCOMPARE(item->size, 5);
 }
 
-QTEST_GUILESS_MAIN(RcloneBackendTest)
+QTEST_GUILESS_MAIN(RcloneClientTest)
 
-#include "rclonebackendtest.moc"
+#include "rcloneclienttest.moc"

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "rclonebackend.h"
+#include "rcloneclient.h"
 
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -75,22 +75,22 @@ QString RcloneResult::errorMessage() const
     return QStringLiteral("rclone exited with code %1").arg(exitCode);
 }
 
-RcloneBackend::RcloneBackend(QString executable)
+RcloneClient::RcloneClient(QString executable)
     : m_executable(executable.isEmpty() ? locateExecutable() : std::move(executable))
 {
 }
 
-QString RcloneBackend::executable() const
+QString RcloneClient::executable() const
 {
     return m_executable;
 }
 
-bool RcloneBackend::isAvailable() const
+bool RcloneClient::isAvailable() const
 {
     return !m_executable.isEmpty() && QFileInfo(m_executable).isExecutable();
 }
 
-RcloneResult RcloneBackend::run(const QStringList &arguments, int timeoutMs, const CancellationCallback &isCancelled) const
+RcloneResult RcloneClient::run(const QStringList &arguments, int timeoutMs, const CancellationCallback &isCancelled) const
 {
     RcloneResult result;
     if (!isAvailable()) {
@@ -137,7 +137,7 @@ RcloneResult RcloneBackend::run(const QStringList &arguments, int timeoutMs, con
     return result;
 }
 
-QStringList RcloneBackend::remotes(QString *error, const CancellationCallback &isCancelled) const
+QStringList RcloneClient::remotes(QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("listremotes"), QStringLiteral("--json")}, 30000, isCancelled);
     if (!result.success()) {
@@ -148,7 +148,7 @@ QStringList RcloneBackend::remotes(QString *error, const CancellationCallback &i
     return parseRemoteList(result.standardOutput, error);
 }
 
-QHash<QString, QString> RcloneBackend::remoteTypes(QString *error, const CancellationCallback &isCancelled) const
+QHash<QString, QString> RcloneClient::remoteTypes(QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("dump")}, 30000, isCancelled);
     if (!result.success()) {
@@ -158,7 +158,7 @@ QHash<QString, QString> RcloneBackend::remoteTypes(QString *error, const Cancell
     return parseRemoteTypes(result.standardOutput, error);
 }
 
-std::optional<RcloneRemoteInfo> RcloneBackend::remoteInfo(const QString &remote, QString *error, const CancellationCallback &isCancelled) const
+std::optional<RcloneRemoteInfo> RcloneClient::remoteInfo(const QString &remote, QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("redacted"), remote}, 30000, isCancelled);
     if (!result.success()) {
@@ -168,7 +168,7 @@ std::optional<RcloneRemoteInfo> RcloneBackend::remoteInfo(const QString &remote,
     return parseRemoteInfo(result.standardOutput, error);
 }
 
-QStringList RcloneBackend::parseRemoteList(const QByteArray &json, QString *error)
+QStringList RcloneClient::parseRemoteList(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
@@ -196,7 +196,7 @@ QStringList RcloneBackend::parseRemoteList(const QByteArray &json, QString *erro
     return remotes;
 }
 
-QHash<QString, QString> RcloneBackend::parseRemoteTypes(const QByteArray &json, QString *error)
+QHash<QString, QString> RcloneClient::parseRemoteTypes(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
@@ -216,7 +216,7 @@ QHash<QString, QString> RcloneBackend::parseRemoteTypes(const QByteArray &json, 
     return types;
 }
 
-std::optional<RcloneRemoteInfo> RcloneBackend::parseRemoteInfo(const QByteArray &config, QString *error)
+std::optional<RcloneRemoteInfo> RcloneClient::parseRemoteInfo(const QByteArray &config, QString *error)
 {
     RcloneRemoteInfo info;
     bool foundSection = false;
@@ -255,7 +255,7 @@ std::optional<RcloneRemoteInfo> RcloneBackend::parseRemoteInfo(const QByteArray 
     return info;
 }
 
-QList<RcloneItem> RcloneBackend::list(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
+QList<RcloneItem> RcloneClient::list(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("lsjson"), remoteSpec}, 120000, isCancelled);
     if (!result.success()) {
@@ -265,7 +265,7 @@ QList<RcloneItem> RcloneBackend::list(const QString &remoteSpec, QString *error,
     return parseItemList(result.standardOutput, error);
 }
 
-std::optional<RcloneItem> RcloneBackend::stat(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
+std::optional<RcloneItem> RcloneClient::stat(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("lsjson"), remoteSpec, QStringLiteral("--stat")}, 60000, isCancelled);
     if (!result.success()) {
@@ -275,7 +275,7 @@ std::optional<RcloneItem> RcloneBackend::stat(const QString &remoteSpec, QString
     return parseItem(result.standardOutput, error);
 }
 
-std::optional<RcloneSpace> RcloneBackend::about(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
+std::optional<RcloneSpace> RcloneClient::about(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("about"), remoteSpec, QStringLiteral("--json")}, 60000, isCancelled);
     if (!result.success()) {
@@ -304,7 +304,7 @@ std::optional<RcloneSpace> RcloneBackend::about(const QString &remoteSpec, QStri
     return space;
 }
 
-QString RcloneBackend::locateExecutable()
+QString RcloneClient::locateExecutable()
 {
     const QString overridden = qEnvironmentVariable("KIO_RCLONE_EXECUTABLE");
     if (!overridden.isEmpty() && QFileInfo(overridden).isExecutable()) {
@@ -320,7 +320,7 @@ QString RcloneBackend::locateExecutable()
     return QFileInfo(userLocal).isExecutable() ? userLocal : QString();
 }
 
-QList<RcloneItem> RcloneBackend::parseItemList(const QByteArray &json, QString *error)
+QList<RcloneItem> RcloneClient::parseItemList(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
@@ -340,7 +340,7 @@ QList<RcloneItem> RcloneBackend::parseItemList(const QByteArray &json, QString *
     return items;
 }
 
-std::optional<RcloneItem> RcloneBackend::parseItem(const QByteArray &json, QString *error)
+std::optional<RcloneItem> RcloneClient::parseItem(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
@@ -351,7 +351,7 @@ std::optional<RcloneItem> RcloneBackend::parseItem(const QByteArray &json, QStri
     return itemFromObject(document.object());
 }
 
-bool RcloneBackend::isNotFoundError(const QString &error)
+bool RcloneClient::isNotFoundError(const QString &error)
 {
     const QString lowered = error.toLower();
     return lowered.contains(QStringLiteral("not found")) || lowered.contains(QStringLiteral("doesn't exist"))

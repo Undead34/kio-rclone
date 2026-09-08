@@ -1,8 +1,13 @@
 add_executable(kio-rclone-config
     configwindow.cpp
-    directorylistingsettingsdialog.cpp
-    interactiverclonedialog.cpp
+    dialogs/settingsdialog.cpp
+    dialogs/rclonepromptdialog.cpp
     main.cpp
+)
+
+target_include_directories(kio-rclone-config
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 configure_file(

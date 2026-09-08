@@ -1,9 +1,9 @@
 add_library(kio_rclone_common STATIC
-    directorysnapshotcache.cpp
-    rclonebackend.cpp
-    rcloneentryformat.cpp
-    rcloneprocess.cpp
-    rcloneurl.cpp
+    cache/directorysnapshotcache.cpp
+    rclone/rcloneclient.cpp
+    rclone/entryformat.cpp
+    rclone/process.cpp
+    rclone/url.cpp
 )
 
 set_target_properties(kio_rclone_common PROPERTIES
@@ -30,9 +30,9 @@ target_link_libraries(kio_rclone_common
 
 kcoreaddons_add_plugin(kio_rclone
     SOURCES
-        kiodirectorynotifier.cpp
-        kioentryfactory.cpp
-        rcloneworker.cpp
+        kio/directorynotifier.cpp
+        kio/entrybuilder.cpp
+        kio/worker.cpp
     INSTALL_NAMESPACE kf6/kio
 )
 

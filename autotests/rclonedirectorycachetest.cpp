@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "directorysnapshotcache.h"
+#include "cache/directorysnapshotcache.h"
 
 #include <KIO/ListJob>
 #include <KIO/MimetypeJob>

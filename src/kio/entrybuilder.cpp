@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "kioentryfactory.h"
+#include "entrybuilder.h"
 
-#include "rcloneentryformat.h"
-#include "rcloneurl.h"
+#include "rclone/entryformat.h"
+#include "rclone/url.h"
 
 #include <KLocalizedString>
 
 #include <sys/stat.h>
 
-namespace KioEntryFactory
+namespace KioEntryBuilder
 {
 KIO::UDSEntry root()
 {

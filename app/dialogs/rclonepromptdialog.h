@@ -22,10 +22,10 @@ class QPlainTextEdit;
  * answer back to its standard input, so it does not need provider-specific
  * prompt handling.
  */
-class InteractiveRcloneDialog final : public QDialog
+class RclonePromptDialog final : public QDialog
 {
 public:
-    InteractiveRcloneDialog(const QString &program,
+    RclonePromptDialog(const QString &program,
                             const QStringList &arguments,
                             const QString &title,
                             const QString &description,

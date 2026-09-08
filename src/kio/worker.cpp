@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "rcloneworker.h"
-#include "kiodirectorynotifier.h"
-#include "kioentryfactory.h"
-#include "rcloneentryformat.h"
-#include "rcloneprocess.h"
-#include "rcloneurl.h"
+#include "worker.h"
+#include "directorynotifier.h"
+#include "entrybuilder.h"
+#include "rclone/entryformat.h"
+#include "rclone/process.h"
+#include "rclone/url.h"
 
 #include <KLocalizedString>
 
@@ -439,7 +439,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
-    if (!expectedDestination && !destinationError.isEmpty() && !RcloneBackend::isNotFoundError(destinationError)) {
+    if (!expectedDestination && !destinationError.isEmpty() && !RcloneClient::isNotFoundError(destinationError)) {
         return errorResult(destinationError, KIO::ERR_CANNOT_STAT, url);
     }
     if (expectedDestination) {
@@ -520,7 +520,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
-    if (!current && !currentError.isEmpty() && !RcloneBackend::isNotFoundError(currentError)) {
+    if (!current && !currentError.isEmpty() && !RcloneClient::isNotFoundError(currentError)) {
         return errorResult(currentError, KIO::ERR_CANNOT_STAT, url);
     }
     if (destinationChanged(current)) {
@@ -570,7 +570,7 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
         return KIO::WorkerResult::fail(existingItem && existingItem->isDirectory ? KIO::ERR_DIR_ALREADY_EXIST : KIO::ERR_FILE_ALREADY_EXIST,
                                        url.toDisplayString());
     }
-    if (!error.isEmpty() && !RcloneBackend::isNotFoundError(error)) {
+    if (!error.isEmpty() && !RcloneClient::isNotFoundError(error)) {
         return errorResult(error, KIO::ERR_CANNOT_STAT, url);
     }
 
@@ -629,7 +629,7 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
-    if (!destinationItem && !destinationError.isEmpty() && !RcloneBackend::isNotFoundError(destinationError)) {
+    if (!destinationItem && !destinationError.isEmpty() && !RcloneClient::isNotFoundError(destinationError)) {
         return errorResult(destinationError, KIO::ERR_CANNOT_STAT, dest);
     }
     if (destinationItem) {
@@ -754,22 +754,22 @@ KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
 
 KIO::UDSEntry RcloneWorker::rootEntry() const
 {
-    return KioEntryFactory::root();
+    return KioEntryBuilder::root();
 }
 
 KIO::UDSEntry RcloneWorker::configureEntry() const
 {
-    return KioEntryFactory::configure();
+    return KioEntryBuilder::configure();
 }
 
 KIO::UDSEntry RcloneWorker::remoteEntry(const QString &name, bool currentDirectory, const QString &type) const
 {
-    return KioEntryFactory::remote(name, currentDirectory, type);
+    return KioEntryBuilder::remote(name, currentDirectory, type);
 }
 
 KIO::UDSEntry RcloneWorker::itemEntry(const RcloneItem &item) const
 {
-    return KioEntryFactory::item(item);
+    return KioEntryBuilder::item(item);
 }
 
 KIO::WorkerResult RcloneWorker::ensureBackend() const
@@ -799,7 +799,7 @@ KIO::WorkerResult RcloneWorker::commandResult(const RcloneResult &result, int fa
 KIO::WorkerResult RcloneWorker::errorResult(const QString &message, int fallbackError, const QUrl &url) const
 {
     const QString lowered = message.toLower();
-    if (RcloneBackend::isNotFoundError(message)) {
+    if (RcloneClient::isNotFoundError(message)) {
         return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, url.toDisplayString());
     }
     if (lowered.contains(QStringLiteral("permission denied")) || lowered.contains(QStringLiteral("access denied"))
@@ -1160,4 +1160,4 @@ void RcloneWorker::clearCachedDownload()
     m_cachedDownloadVersion.clear();
 }
 
-#include "rcloneworker.moc"
+#include "worker.moc"

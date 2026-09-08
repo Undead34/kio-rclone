@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "rclonebackend.h"
+#include "rclone/rcloneclient.h"
 
 #include <KIO/UDSEntry>
 
@@ -19,7 +19,7 @@
  * UDS_NAME is a KIO URL path component, not arbitrary remote metadata. See
  * https://api.kde.org/kio-udsentry.html
  */
-namespace KioEntryFactory
+namespace KioEntryBuilder
 {
 [[nodiscard]] KIO::UDSEntry root();
 [[nodiscard]] KIO::UDSEntry configure();

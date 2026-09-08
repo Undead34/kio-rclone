@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "interactiverclonedialog.h"
+#include "dialogs/rclonepromptdialog.h"
 
 #include <QDialog>
 #include <QLineEdit>
@@ -13,7 +13,7 @@
 
 #include <QtTest>
 
-class InteractiveRcloneDialogTest final : public QObject
+class RclonePromptDialogTest final : public QObject
 {
     Q_OBJECT
 
@@ -22,9 +22,9 @@ private Q_SLOTS:
     void forwardsResponseToChildProcess();
 };
 
-void InteractiveRcloneDialogTest::handlesImmediateCompletion()
+void RclonePromptDialogTest::handlesImmediateCompletion()
 {
-    InteractiveRcloneDialog dialog(QStringLiteral("/bin/sh"),
+    RclonePromptDialog dialog(QStringLiteral("/bin/sh"),
                                    {QStringLiteral("-c"), QStringLiteral("exit 0")},
                                    QStringLiteral("Test"),
                                    QStringLiteral("Test"));
@@ -41,11 +41,11 @@ void InteractiveRcloneDialogTest::handlesImmediateCompletion()
     QVERIFY(dialog.succeeded());
 }
 
-void InteractiveRcloneDialogTest::forwardsResponseToChildProcess()
+void RclonePromptDialogTest::forwardsResponseToChildProcess()
 {
     const QString script = QStringLiteral("printf 'Prompt> '; IFS= read -r answer; "
                                           "printf '\\nreceived:%s\\n' \"$answer\"; test \"$answer\" = n");
-    InteractiveRcloneDialog dialog(QStringLiteral("/bin/sh"),
+    RclonePromptDialog dialog(QStringLiteral("/bin/sh"),
                                    {QStringLiteral("-c"), script},
                                    QStringLiteral("Test"),
                                    QStringLiteral("Test"));
@@ -80,6 +80,6 @@ void InteractiveRcloneDialogTest::forwardsResponseToChildProcess()
     QVERIFY(transcript->toPlainText().contains(QStringLiteral("received:n")));
 }
 
-QTEST_MAIN(InteractiveRcloneDialogTest)
+QTEST_MAIN(RclonePromptDialogTest)
 
-#include "interactiverclonedialogtest.moc"
+#include "rclonepromptdialogtest.moc"

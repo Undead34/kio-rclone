@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "rcloneurl.h"
+#include "url.h"
 
 const QString RcloneUrl::ConfigureEntry = QStringLiteral(".kio-rclone-config");
 const QString RcloneUrl::ConfigurationLauncherScheme = QStringLiteral(KIO_RCLONE_CONFIG_LAUNCH_SCHEME);

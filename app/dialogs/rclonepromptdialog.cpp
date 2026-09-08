@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "interactiverclonedialog.h"
+#include "rclonepromptdialog.h"
 
 #include "appid.h"
-#include "rcloneprocess.h"
+#include "rclone/process.h"
 
 #include <KLocalizedString>
 
@@ -24,7 +24,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-InteractiveRcloneDialog::InteractiveRcloneDialog(const QString &program,
+RclonePromptDialog::RclonePromptDialog(const QString &program,
                                                  const QStringList &arguments,
                                                  const QString &title,
                                                  const QString &description,
@@ -77,18 +77,18 @@ InteractiveRcloneDialog::InteractiveRcloneDialog(const QString &program,
         m_startError = m_process->errorString();
         QDialog::reject();
     });
-    connect(m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &InteractiveRcloneDialog::processFinished);
-    connect(m_response, &QLineEdit::returnPressed, this, &InteractiveRcloneDialog::sendResponse);
-    connect(buttons, &QDialogButtonBox::rejected, this, &InteractiveRcloneDialog::reject);
+    connect(m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &RclonePromptDialog::processFinished);
+    connect(m_response, &QLineEdit::returnPressed, this, &RclonePromptDialog::sendResponse);
+    connect(buttons, &QDialogButtonBox::rejected, this, &RclonePromptDialog::reject);
 }
 
-int InteractiveRcloneDialog::exec()
+int RclonePromptDialog::exec()
 {
-    QTimer::singleShot(0, this, &InteractiveRcloneDialog::startProcess);
+    QTimer::singleShot(0, this, &RclonePromptDialog::startProcess);
     return QDialog::exec();
 }
 
-void InteractiveRcloneDialog::startProcess()
+void RclonePromptDialog::startProcess()
 {
     if (m_started) {
         return;
@@ -99,27 +99,27 @@ void InteractiveRcloneDialog::startProcess()
     m_response->setFocus();
 }
 
-bool InteractiveRcloneDialog::succeeded() const
+bool RclonePromptDialog::succeeded() const
 {
     return m_succeeded;
 }
 
-bool InteractiveRcloneDialog::cancelled() const
+bool RclonePromptDialog::cancelled() const
 {
     return m_cancelled;
 }
 
-QString InteractiveRcloneDialog::diagnostic() const
+QString RclonePromptDialog::diagnostic() const
 {
     return QString::fromUtf8(m_diagnostic).trimmed();
 }
 
-QString InteractiveRcloneDialog::startError() const
+QString RclonePromptDialog::startError() const
 {
     return m_startError;
 }
 
-void InteractiveRcloneDialog::reject()
+void RclonePromptDialog::reject()
 {
     if (m_process->state() != QProcess::NotRunning) {
         m_cancelled = true;
@@ -128,7 +128,7 @@ void InteractiveRcloneDialog::reject()
     QDialog::reject();
 }
 
-void InteractiveRcloneDialog::appendOutput(const QByteArray &output)
+void RclonePromptDialog::appendOutput(const QByteArray &output)
 {
     if (output.isEmpty()) {
         return;
@@ -143,7 +143,7 @@ void InteractiveRcloneDialog::appendOutput(const QByteArray &output)
     m_transcript->ensureCursorVisible();
 }
 
-void InteractiveRcloneDialog::sendResponse()
+void RclonePromptDialog::sendResponse()
 {
     if (m_process->state() == QProcess::NotRunning) {
         return;
@@ -154,7 +154,7 @@ void InteractiveRcloneDialog::sendResponse()
     m_response->clear();
 }
 
-void InteractiveRcloneDialog::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
+void RclonePromptDialog::processFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     appendOutput(m_process->readAllStandardOutput());
     m_succeeded = exitStatus == QProcess::NormalExit && exitCode == 0;

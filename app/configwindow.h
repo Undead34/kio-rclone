@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "rclonebackend.h"
+#include "rclone/rcloneclient.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -62,7 +62,7 @@ private:
     [[nodiscard]] bool runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description);
     [[nodiscard]] bool validateRemoteName(const QString &name) const;
 
-    RcloneBackend m_backend;
+    RcloneClient m_backend;
     QHash<QString, RcloneRemoteInfo> m_remoteInfo;
     std::optional<QJsonArray> m_providersCache;
     QLabel *m_statusLabel = nullptr;

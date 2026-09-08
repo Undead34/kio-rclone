@@ -14,7 +14,7 @@ manual or a replacement for the API documentation linked below.
 | --- | --- | --- |
 | `RcloneWorker` | KIO request/response adaptation, progress, and KIO-visible errors. | rclone protocol parsing or cache policy details. |
 | `RcloneUrl` | Parsing and constructing `rclone:/` URLs. | Process invocation or KIO entries. |
-| `RcloneBackend` | rclone command arguments, process results, and rclone JSON decoding. | `KIO::WorkerResult`, `UDSEntry`, or DBus notification. |
+| `RcloneClient` | rclone command arguments, process results, and rclone JSON decoding. | `KIO::WorkerResult`, `UDSEntry`, or DBus notification. |
 | `DirectorySnapshotCache` | Short-lived, private directory snapshots. | Deciding whether a request is a reload or safe to serve from cache. |
 | `RcloneEntryFormat` | Provider icon, MIME fallback, version comparison, and duplicate preference. | Publishing entries to a KIO client. |
 | Configuration application | Widgets and interactive configuration flow. | Worker request handling. |
@@ -25,7 +25,7 @@ The intended direction of dependencies is:
 KDE / Dolphin
     │
     ▼
-RcloneWorker ──► operation policy ──► RcloneBackend ──► rclone
+RcloneWorker ──► operation policy ──► RcloneClient ──► rclone
     │                    │
     │                    └──────────► DirectorySnapshotCache
     ▼
@@ -95,7 +95,7 @@ code comment only when the local invariant would otherwise be surprising.
 
 | Change | Preferred home |
 | --- | --- |
-| Another rclone JSON field or command flag | `RcloneBackend` and its tests. |
+| Another rclone JSON field or command flag | `RcloneClient` and its tests. |
 | A different KIO error mapping or progress signal | `RcloneWorker` boundary code. |
 | Directory freshness, deduplication, or streaming choice | The directory-listing operation, with a policy-focused test. |
 | Snapshot serialization, size limit, expiry, or migration | `DirectorySnapshotCache`. |

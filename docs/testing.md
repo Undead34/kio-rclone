@@ -22,7 +22,7 @@ ctest --test-dir build/test --output-on-failure
 | Test | Coverage |
 | --- | --- |
 | `rcloneurltest` | `rclone:/` URL parsing and construction. |
-| `rclonebackendtest` | rclone JSON parsing and local backend behavior. |
+| `rcloneclienttest` | rclone JSON parsing and local backend behavior. |
 | `rclonepausetest` | Upload/download backpressure and resume behavior. |
 | `rcloneuploadtest` | Atomic publication, exact bytes, cancellation, and cleanup. |
 | `rclonedownloadtest` | Unknown-size and duplicate-object materialization. |
