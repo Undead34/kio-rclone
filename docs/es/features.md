@@ -39,6 +39,7 @@ Dolphin:
 
 Consulta los detalles en [Transferencias](/es/transfers).
 
+<!--
 ## Documentos, edición y Google Drive
 
 Los archivos ordinarios como TXT, ODT, DOCX, XLSX o PPTX se abren mediante la
@@ -53,6 +54,7 @@ Hay dos excepciones de solo lectura:
 - Si una carpeta contiene varios objetos con el mismo nombre, se muestra el
   más reciente y se descarga por su ID cuando el backend lo permite. La ruta
   queda bloqueada para edición hasta resolver los duplicados.
+-->
 
 ## Lo que no pretende ser
 

@@ -20,7 +20,7 @@ rutas locales.
 
 ## Información segura para un reporte de error
 
-Corré estos comandos y revisá su salida antes de adjuntarla:
+Ejecuta estos comandos y revisa su salida antes de adjuntarla:
 
 ~~~bash
 rclone version
@@ -43,7 +43,7 @@ Algunos sistemas reenvían los mensajes de KIO/Qt al journal del usuario:
 journalctl --user -b --no-pager | rg -i 'kio|rclone'
 ~~~
 
-Revisá esa salida en privado: puede contener nombres de archivo o rutas.
+Revisa esa salida en privado: puede contener nombres de archivo o rutas.
 
 ## Nunca compartas
 

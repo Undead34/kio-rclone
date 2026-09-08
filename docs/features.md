@@ -32,6 +32,7 @@ Transfers between locations pass through KIO, preserving Dolphin's controls:
 
 See [Transfers](/transfers) for details.
 
+<!--
 ## Documents, editing, and Google Drive
 
 Ordinary files such as TXT, ODT, DOCX, XLSX, and PPTX open through KIOFuse's
@@ -46,6 +47,7 @@ There are two read-only exceptions:
 - If a folder contains several objects with the same name, the newest is
   shown and downloaded by ID when the backend supports it. The path remains
   read-only until the duplicates are resolved.
+-->
 
 ## What it does not aim to replace
 

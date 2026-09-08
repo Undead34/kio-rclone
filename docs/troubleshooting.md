@@ -23,12 +23,13 @@ still be confirming or publishing the final object.
 
 ## LibreOffice opens an empty or corrupt document
 
-Native Google exports and duplicate names are opened read-only after local
-materialization. Resolve duplicates in Drive/rclone before editing.
+In-place document editing through `rclone:/` is not implemented reliably. If
+LibreOffice opens the document empty or corrupt:
 
-Native Google documents exported as DOCX/XLSX/PPTX also open read-only. Save a
-copy under another name if you want to turn one into an ordinary Office file;
-automatic re-import could replace the original collaborative document.
+1. Close the document without saving.
+2. Copy the file from `rclone:/` to a local filesystem.
+3. Open and edit the local copy.
+4. Upload the verified local file back to the remote when finished.
 
 ## A TXT or other ordinary file does not keep changes
 
@@ -54,9 +55,3 @@ apps. See the Workspace section in [Google Drive and GCP](/google-drive).
 
 For help, share versions, redacted configuration, exact steps, and the visible
 error—never tokens or client secrets.
-
----
-
-<sub>The read-only Google exports, duplicate-name handling and atomic saves
-above landed in 0.3.0; older releases are unsupported. See the
-[changelog](https://github.com/Undead34/kio-rclone/blob/main/CHANGELOG.md).</sub>

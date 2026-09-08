@@ -12,6 +12,11 @@ cloud hay dos flujos que deben mantenerse coordinados:
 Las subidas y descargas cruzan toda esta cadena por igual; solo cambia la
 dirección del flujo de bytes.
 
+> [!WARNING]
+> La edición directa de documentos mediante `rclone:/` aún no es lo bastante
+> fiable para archivos importantes. Copia los archivos localmente antes de
+> editarlos.
+
 ## Subidas
 
 Al subir, KIO Rclone inicia `rclone rcat` contra un nombre remoto temporal y va

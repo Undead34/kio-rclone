@@ -19,8 +19,9 @@ kbuildsycoca6 --noincremental
 ~~~
 
 Si ya tenías una versión instalada, `pacman` la sustituye; no necesitas
-desinstalarla primero. Para compilar desde el código, consulta el
-[README](https://github.com/Undead34/kio-rclone#installation).
+desinstalarla primero. Para una compilación desde el código o un prefijo local
+de desarrollo, consulta la [guía de desarrollo](/development#install-without-sudo)
+(en inglés).
 
 ## 2. Configura un remoto
 
@@ -39,7 +40,7 @@ Puedes:
 - usar **Other Providers…** para el configurador normal de rclone.
 
 > [!TIP]
-> Antes de culpar a Dolphin, comprueba el remoto en rclone. Por ejemplo:
+> Antes de investigar Dolphin, comprueba el remoto directamente con rclone:
 >
 > ~~~bash
 > rclone lsd 'Mi remoto:'
@@ -73,7 +74,7 @@ en una URL escrita a mano.
 Para entender qué ocurre cuando pausas una copia, lee
 [Transferencias](/es/transfers).
 
-## Google Drive: hazlo bien desde el inicio
+## Google Drive: configuración recomendada
 
 El Client ID compartido de rclone tiene cuota global y puede introducir esperas
 o límites. Para una experiencia estable, configura tu propio OAuth de Google

@@ -141,10 +141,11 @@ export default defineConfig({
                 items: [{ text: 'Logs and safe diagnostics', link: '/logging' }],
             },
             {
-                text: 'Project',
+                text: 'Contributing',
                 items: [
+                    { text: 'Development', link: '/development' },
                     { text: 'Testing', link: '/testing' },
-                    { text: 'Distribution and releases', link: '/distribution-plan' },
+                    { text: 'Releasing', link: '/releasing' },
                 ],
             },
         ],

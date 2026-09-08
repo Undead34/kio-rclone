@@ -1,130 +1,81 @@
 ---
-description: Automated tests, manual smoke tests, and the release compatibility matrix for KIO Rclone.
+description: Automated, localization, package, and manual checks required to validate KIO Rclone.
 ---
 
-# Testing KIO Rclone
+# Testing
 
-This document separates fast, deterministic tests from manual cloud testing.
-The automated suite must not need a personal OAuth token or a real remote.
+Automated tests must run without cloud credentials, a personal OAuth client, or
+a real remote. Use a dedicated remote and disposable folder for manual checks.
 
 ## Automated suite
 
-Configure and run the suite from the repository root:
+From the repository root:
 
 ~~~bash
-cmake -S . -B build -G Ninja \
+cmake -S . -B build/test -G Ninja \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DCMAKE_INSTALL_PREFIX=/usr \
   -DBUILD_TESTING=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --build build/test
+ctest --test-dir build/test --output-on-failure
 ~~~
 
-Current tests:
-
-| Test | Purpose |
+| Test | Coverage |
 | --- | --- |
-| `rcloneurltest` | Parses and builds `rclone:/` URLs. |
-| `rclonebackendtest` | Parses rclone JSON and exercises the local rclone backend. |
-| `rclonepausetest` | Checks download/upload backpressure with a fake rclone process. |
-| `rcloneuploadtest` | Verifies staged publication, exact bytes, cancellation/failure cleanup and preservation of the previous remote file. |
-| `rclonedownloadtest` | Verifies unknown-size materialization and exact selection of duplicate remote objects. |
-| `appstreamtest` | Validates installed desktop metadata. |
-| `desktopfiletest` | Ensures the application launcher uses its absolute executable path and registers the launcher MIME type and URI scheme. |
-| `mimefiletest` | Ensures the custom launcher MIME type is installed as valid shared MIME metadata. |
+| `rcloneurltest` | `rclone:/` URL parsing and construction. |
+| `rclonebackendtest` | rclone JSON parsing and local backend behavior. |
+| `rclonepausetest` | Upload/download backpressure and resume behavior. |
+| `rcloneuploadtest` | Atomic publication, exact bytes, cancellation, and cleanup. |
+| `rclonedownloadtest` | Unknown-size and duplicate-object materialization. |
+| `appstreamtest` | Installed AppStream metadata. |
+| `desktopfiletest` | Absolute launcher path plus MIME and URI-handler registration. |
+| `mimefiletest` | Installed shared MIME definition for the launcher. |
 
-`rclonepausetest` is especially important. It suspends a KIO copy, waits for
-the pipeline to settle, verifies that transfer growth stays bounded, then
-resumes and checks completion. It also verifies the live upload-status and
-finalization messages.
+## Localization
 
-## Package test
+Validate every changed catalog before review:
 
-The Arch package recipe lives in its own
-[AUR repository](https://aur.archlinux.org/packages/kio-rclone) and runs
-`ctest` from its `check()` function. From a checkout of that repository:
+~~~bash
+msgfmt --check --statistics -o /dev/null po/el/kio6_rclone.po
+~~~
+
+This checks catalog syntax and format placeholders, not visual rendering or
+translation coverage. Run [the installed-language check](/development#validate-an-installed-language)
+whenever a catalog changes.
+
+## Package check
+
+The Arch recipe lives in the separate
+[AUR repository](https://aur.archlinux.org/packages/kio-rclone). From that
+checkout:
 
 ~~~bash
 makepkg -f
-~~~
-
-Before installing a package, inspect it:
-
-~~~bash
 pacman -Qp ./kio-rclone-*.pkg.tar.zst
 pacman -Qlp ./kio-rclone-*.pkg.tar.zst
 ~~~
 
-## Manual smoke test
+`makepkg -f` runs the recipe's `check()` function. Do not publish a package
+that fails this step.
 
-Use a dedicated test remote and a disposable cloud folder. Do not test a
-release candidate by deleting or renaming files in a personal root directory.
+## Manual release check
+
+Use a private OAuth client for Google Drive and one non-Google backend. Record
+the rclone, Plasma, and KDE Frameworks versions with the result.
 
 1. Open `rclone:/` in a new Dolphin window.
-2. Open **Configure Remotes…**. It must launch Rclone Remotes directly, with
-   no desktop-entry open/launch prompt; press F5 in `rclone:/` and confirm the
-   listing alone does not open another configuration window.
-3. Enter the test remote and list a folder.
-4. Create a directory, press F5, then verify that it appears once.
-5. Upload a small file and confirm that the notification shows upload status.
-6. Download it, pause mid-transfer, confirm network activity settles, then
-   resume and compare its checksum.
-7. Rename the file within the remote, then remove it.
-8. Test an overwrite prompt and a cancel action.
-9. Restart Dolphin and verify the remote still opens.
-10. Open, edit and save a TXT plus one ODT/DOCX file through `rclone:/`; close
-   the application, reopen the file and verify the edited bytes/content.
-11. Open a native Google document exported by rclone and verify it has real
-    content, a nonzero size and is presented read-only.
-12. Create two disposable Drive objects with the same exported name. Verify
-    that Dolphin shows one read-only entry and LibreOffice opens one valid
-    document rather than concatenated/corrupt bytes.
+2. Open **Configure Remotes…**. It must open Rclone Remotes directly, without
+   a desktop-entry prompt. Press F5 in `rclone:/`; listing the root must not
+   open another configuration window.
+3. Browse the test remote; create a directory and refresh it once.
+4. Upload a small file, download it, compare its checksum, and verify pause,
+   resume, cancellation, and overwrite handling.
+5. Rename and delete the disposable file.
+6. Restart Dolphin and confirm that the remote remains available.
+7. Open a TXT and one ODT/DOCX file, then verify the saved content after
+   reopening it. Treat Google-native exports and duplicate remote names as
+   read-only cases.
+8. If the release changes a translation, run its visual locale check before
+   accepting the release.
 
-For Google Drive, perform this with a private OAuth client. A shared rclone
-client can introduce quota delays that make a release candidate look slow even
-when the worker is correct.
-
-## Manual compatibility matrix
-
-Run this matrix before a public release:
-
-| Area | Minimum coverage |
-| --- | --- |
-| KDE session | Current Plasma release on Wayland and, when available, X11 |
-| Local source | Upload from a local filesystem to a remote |
-| Local destination | Download from a remote to a local filesystem |
-| Provider | Google Drive with private OAuth; one non-Google rclone backend |
-| File size | Small file, multi-chunk file and a filename with spaces/Unicode |
-| Document editing | TXT and one ZIP-based office format saved and reopened |
-| Drive edge cases | Native export with unknown size and duplicate object names |
-| Failure path | Cancel, network interruption and denied/expired OAuth |
-| UI | Configure Remotes opens directly, F5/listing does not launch it, Dolphin notification, context menu, Properties/free-space query |
-
-Record rclone version, Plasma/KF version and the result of every row in the
-release issue or milestone.
-
-## Performance checks
-
-Measure provider setup time separately from payload throughput. The important
-numbers are:
-
-- time until the first directory entry appears;
-- time until the first transfer byte moves;
-- sustained upload and download rate;
-- delay between the last byte and successful remote confirmation.
-
-Use the same file, network and private OAuth client when comparing versions.
-Do not treat a single Google Drive run under a shared quota as a benchmark.
-
-## CI target
-
-The desired continuous-integration gate is:
-
-1. Configure with the supported minimum Qt/KF versions.
-2. Build with warnings enabled.
-3. Run all CTest tests.
-4. Build the Arch package and run `check()`.
-5. Upload the package and CTest log as CI artifacts.
-
-Cloud credentials must never be stored in CI. Provider testing belongs in a
-separate manually authorized release job with a disposable test account.
+Never include tokens, client secrets, unredacted configuration, or personal
+files in test reports or CI logs.

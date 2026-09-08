@@ -9,6 +9,10 @@ description: How KIO Rclone uploads and downloads through KIO, with pause, cance
 Uploads and downloads both cross every stage of this chain; only the direction
 of the byte stream changes.
 
+> [!WARNING]
+> In-place document editing through `rclone:/` is not yet reliable enough for
+> important files. Copy files locally before editing.
+
 ## Uploads
 
 KIO Rclone starts `rclone rcat` with a temporary remote name and feeds it data
