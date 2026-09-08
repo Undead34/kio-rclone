@@ -90,6 +90,16 @@ SPDX-License-Identifier: CC0-1.0
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4.3" date="2026-09-07">
+      <description>
+        <p>
+          Adds the Greek translation under the standard el locale and fixes
+          user-only source installs: the configuration launcher now uses its
+          absolute installed executable path instead of depending on Plasma's
+          session PATH.
+        </p>
+      </description>
+    </release>
     <release version="0.4.2" date="2026-07-20">
       <description>
         <p>

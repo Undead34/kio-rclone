@@ -4,6 +4,19 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## 0.4.3 — 2026-09-07
+
+### Added
+
+- Greek translation under the standard `el` locale, contributed by Vasilis
+  Koulouris.
+
+### Fixed
+
+- User-only source installs now document the correct Qt plugin directory, and
+  the installed configuration launcher uses its absolute executable path so
+  Plasma does not depend on the session `PATH`.
+
 ## 0.4.2 — 2026-07-20
 
 ### Added
