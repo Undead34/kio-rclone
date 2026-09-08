@@ -7,6 +7,7 @@
 #include "appid.h"
 #include "configwindow.h"
 #include "directorylistingsettingsdialog.h"
+#include "interactiverclonedialog.h"
 #include "rcloneurl.h"
 
 #include <KLocalizedString>
@@ -787,7 +788,7 @@ void ConfigWindow::reconnectSelected()
 
     if (!runInteractiveRclone({QStringLiteral("config"), QStringLiteral("reconnect"), remote + QLatin1Char(':')},
                               i18n("Reconnect %1", remote),
-                              i18n("Complete authorization in the browser window opened by rclone."))) {
+                              i18n("Answer any questions from rclone below, then complete authorization in the browser window it opens."))) {
         refreshRemotes();
         return;
     }
@@ -1050,71 +1051,20 @@ QString ConfigWindow::selectedRemote() const
 
 bool ConfigWindow::runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description)
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle(title);
-    dialog.setWindowIcon(QIcon::fromTheme(QStringLiteral(KIO_RCLONE_CONFIG_APP_ID)));
-    dialog.setMinimumWidth(500);
-
-    auto *layout = new QVBoxLayout(&dialog);
-    auto *label = new QLabel(description, &dialog);
-    label->setWordWrap(true);
-    layout->addWidget(label);
-
-    auto *progress = new QProgressBar(&dialog);
-    progress->setRange(0, 0);
-    layout->addWidget(progress);
-
-    auto *status = new QLabel(i18n("Waiting for rclone…"), &dialog);
-    status->setWordWrap(true);
-    layout->addWidget(status);
-
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, &dialog);
-    layout->addWidget(buttons);
-
-    QProcess process(&dialog);
-    process.setProgram(m_backend.executable());
-    process.setArguments(arguments);
-    process.setProcessChannelMode(QProcess::MergedChannels);
-
-    bool succeeded = false;
-    QString diagnostic;
-    connect(&process, &QProcess::readyRead, &dialog, [&]() {
-        const QString output = QString::fromUtf8(process.readAll()).trimmed();
-        if (output.contains(QStringLiteral("browser"), Qt::CaseInsensitive) || output.contains(QStringLiteral("authorize"), Qt::CaseInsensitive)) {
-            status->setText(i18n("Authorization is waiting in your browser."));
-        }
-        if (output.contains(QStringLiteral("failed"), Qt::CaseInsensitive) || output.contains(QStringLiteral("error"), Qt::CaseInsensitive)) {
-            diagnostic = output.left(2000);
-        }
-    });
-    connect(&process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), &dialog, [&](int exitCode, QProcess::ExitStatus exitStatus) {
-        succeeded = exitStatus == QProcess::NormalExit && exitCode == 0;
-        succeeded ? dialog.accept() : dialog.reject();
-    });
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, [&]() {
-        if (process.state() != QProcess::NotRunning) {
-            process.terminate();
-            if (!process.waitForFinished(1000)) {
-                process.kill();
-            }
-        }
-        dialog.reject();
-    });
-
-    process.start();
-    if (!process.waitForStarted(5000)) {
-        QMessageBox::critical(this, i18n("Rclone Error"), process.errorString());
+    InteractiveRcloneDialog dialog(m_backend.executable(), arguments, title, description, this);
+    if (!dialog.start()) {
+        QMessageBox::critical(this, i18n("Rclone Error"), dialog.startError());
         return false;
     }
 
     dialog.exec();
-    if (!succeeded && isConfigPasswordError(diagnostic)) {
+    if (!dialog.succeeded() && !dialog.cancelled() && isConfigPasswordError(dialog.diagnostic())) {
         return promptConfigPassword() && runInteractiveRclone(arguments, title, description);
     }
-    if (!succeeded && !diagnostic.isEmpty()) {
-        QMessageBox::critical(this, i18n("Rclone Error"), diagnostic);
+    if (!dialog.succeeded() && !dialog.cancelled() && !dialog.diagnostic().isEmpty()) {
+        QMessageBox::critical(this, i18n("Rclone Error"), dialog.diagnostic());
     }
-    return succeeded;
+    return dialog.succeeded();
 }
 
 bool ConfigWindow::validateRemoteName(const QString &name) const

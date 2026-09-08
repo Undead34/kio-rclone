@@ -1,6 +1,7 @@
 add_executable(kio-rclone-config
     configwindow.cpp
     directorylistingsettingsdialog.cpp
+    interactiverclonedialog.cpp
     main.cpp
 )
 
