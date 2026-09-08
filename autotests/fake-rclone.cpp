@@ -22,6 +22,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <optional>
+#include <sys/file.h>
 #include <thread>
 #include <unistd.h>
 
@@ -36,6 +37,7 @@ constexpr auto CopytoBlockFile = ".kio-rclone-test-block-copyto";
 constexpr auto CopytoFailFile = ".kio-rclone-test-fail-copyto";
 constexpr auto CopytoStartedFile = ".kio-rclone-test-copyto-started";
 constexpr auto LogicalItemsEnvironment = "KIO_RCLONE_TEST_LOGICAL_ITEMS";
+constexpr auto ListingCounterEnvironment = "KIO_RCLONE_TEST_LIST_COUNTER";
 
 struct RemotePath {
     QString remote;
@@ -136,6 +138,28 @@ int openCounter()
         return -1;
     }
     return ::open(QFile::encodeName(path).constData(), O_CREAT | O_TRUNC | O_WRONLY | O_CLOEXEC, 0600);
+}
+
+void incrementListingCounter()
+{
+    const QString path = qEnvironmentVariable(ListingCounterEnvironment);
+    if (path.isEmpty()) {
+        return;
+    }
+
+    const int descriptor = ::open(QFile::encodeName(path).constData(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (descriptor < 0) {
+        return;
+    }
+    if (::flock(descriptor, LOCK_EX) == 0) {
+        qint64 count = 0;
+        [[maybe_unused]] const ssize_t read = ::pread(descriptor, &count, sizeof(count), static_cast<off_t>(0));
+        ++count;
+        [[maybe_unused]] const ssize_t written = ::pwrite(descriptor, &count, sizeof(count), static_cast<off_t>(0));
+        ::ftruncate(descriptor, sizeof(count));
+        ::flock(descriptor, LOCK_UN);
+    }
+    ::close(descriptor);
 }
 
 int streamLegacyDownload()
@@ -415,6 +439,7 @@ int writePersistentStat(const QString &root, const QString &remoteSpec, const QL
 
 int writePersistentListing(const QString &root, const QString &remoteSpec, const QList<LogicalItem> &logicalItems)
 {
+    incrementListingCounter();
     const RemotePath directoryPath = resolveRemotePath(root, remoteSpec);
     if (!directoryPath.valid) {
         return writeError(QByteArrayLiteral("invalid remote path"));

@@ -18,6 +18,32 @@ target_link_libraries(rclonebackendtest
 )
 add_test(NAME rclonebackendtest COMMAND rclonebackendtest)
 
+add_executable(directorysnapshotcacheprobe
+    directorysnapshotcacheprobe.cpp
+)
+target_link_libraries(directorysnapshotcacheprobe
+    PRIVATE
+        kio_rclone_common
+        Qt6::Core
+)
+
+add_executable(directorysnapshotcachetest
+    directorysnapshotcachetest.cpp
+)
+target_compile_definitions(directorysnapshotcachetest
+    PRIVATE
+        DIRECTORY_SNAPSHOT_CACHE_PROBE="$<TARGET_FILE:directorysnapshotcacheprobe>"
+)
+target_link_libraries(directorysnapshotcachetest
+    PRIVATE
+        kio_rclone_common
+        Qt6::Test
+)
+add_dependencies(directorysnapshotcachetest
+    directorysnapshotcacheprobe
+)
+add_test(NAME directorysnapshotcachetest COMMAND directorysnapshotcachetest)
+
 add_executable(fake-rclone
     fake-rclone.cpp
 )
@@ -65,6 +91,28 @@ add_dependencies(rclonedownloadtest
 )
 add_test(NAME rclonedownloadtest COMMAND rclonedownloadtest)
 set_tests_properties(rclonedownloadtest PROPERTIES
+    TIMEOUT 30
+)
+
+add_executable(rclonedirectorycachetest
+    rclonedirectorycachetest.cpp
+)
+target_compile_definitions(rclonedirectorycachetest
+    PRIVATE
+        FAKE_RCLONE_PATH="$<TARGET_FILE:fake-rclone>"
+)
+target_link_libraries(rclonedirectorycachetest
+    PRIVATE
+        kio_rclone_common
+        Qt6::Test
+        KF6::KIOCore
+)
+add_dependencies(rclonedirectorycachetest
+    fake-rclone
+    kio_rclone
+)
+add_test(NAME rclonedirectorycachetest COMMAND rclonedirectorycachetest)
+set_tests_properties(rclonedirectorycachetest PROPERTIES
     TIMEOUT 30
 )
 

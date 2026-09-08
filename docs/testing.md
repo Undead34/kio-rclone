@@ -26,6 +26,8 @@ ctest --test-dir build/test --output-on-failure
 | `rclonepausetest` | Upload/download backpressure and resume behavior. |
 | `rcloneuploadtest` | Atomic publication, exact bytes, cancellation, and cleanup. |
 | `rclonedownloadtest` | Unknown-size and duplicate-object materialization. |
+| `directorysnapshotcachetest` | Short-lived persistent snapshots, strict mode, configuration invalidation, and private cache permissions. |
+| `rclonedirectorycachetest` | Worker cache hits for listings/stat/MIME, explicit reload bypass, and mutation invalidation. |
 | `appstreamtest` | Installed AppStream metadata. |
 | `desktopfiletest` | Absolute launcher path plus MIME and URI-handler registration. |
 | `mimefiletest` | Installed shared MIME definition for the launcher. |
@@ -66,15 +68,19 @@ the rclone, Plasma, and KDE Frameworks versions with the result.
 2. Open **Configure Remotes…**. It must open Rclone Remotes directly, without
    a desktop-entry prompt. Press F5 in `rclone:/`; listing the root must not
    open another configuration window.
-3. Browse the test remote; create a directory and refresh it once.
-4. Upload a small file, download it, compare its checksum, and verify pause,
+3. Browse a folder in the test remote, close Dolphin completely, reopen it
+   within the configured fresh-cache window, and confirm the listing appears
+   promptly. Then select **Strict** in Rclone Remotes and confirm a reopening
+   waits for the remote listing.
+4. Create a directory and refresh it once.
+5. Upload a small file, download it, compare its checksum, and verify pause,
    resume, cancellation, and overwrite handling.
-5. Rename and delete the disposable file.
-6. Restart Dolphin and confirm that the remote remains available.
-7. Open a TXT and one ODT/DOCX file, then verify the saved content after
+6. Rename and delete the disposable file.
+7. Restart Dolphin and confirm that the remote remains available.
+8. Open a TXT and one ODT/DOCX file, then verify the saved content after
    reopening it. Treat Google-native exports and duplicate remote names as
    read-only cases.
-8. If the release changes a translation, run its visual locale check before
+9. If the release changes a translation, run its visual locale check before
    accepting the release.
 
 Never include tokens, client secrets, unredacted configuration, or personal
