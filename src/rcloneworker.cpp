@@ -6,6 +6,7 @@
 
 #include "rcloneworker.h"
 #include "kiodirectorynotifier.h"
+#include "kioentryfactory.h"
 #include "rcloneentryformat.h"
 #include "rcloneprocess.h"
 #include "rcloneurl.h"
@@ -30,7 +31,6 @@
 #include <algorithm>
 #include <limits>
 #include <optional>
-#include <sys/stat.h>
 #include <utility>
 
 Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
@@ -754,77 +754,22 @@ KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
 
 KIO::UDSEntry RcloneWorker::rootEntry() const
 {
-    KIO::UDSEntry entry;
-    entry.reserve(6);
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, QStringLiteral("."));
-    entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, i18n("Rclone Remotes"));
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder-kio-rclone"));
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
-    return entry;
+    return KioEntryFactory::root();
 }
 
 KIO::UDSEntry RcloneWorker::configureEntry() const
 {
-    KIO::UDSEntry entry;
-    entry.reserve(8);
-
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, RcloneUrl::ConfigureEntry);
-
-    entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, i18n("Configure Remotes…"));
-
-    // Not a directory: it cannot be entered or listed.
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFREG);
-
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IRGRP | S_IROTH);
-
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("configure"));
-
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, RcloneUrl::ConfigurationLauncherMimeType);
-
-    entry.fastInsert(KIO::UDSEntry::UDS_TARGET_URL, RcloneUrl::configurationLauncherUrl().toString());
-
-    entry.fastInsert(KIO::UDSEntry::UDS_HIDDEN, 0);
-
-    return entry;
+    return KioEntryFactory::configure();
 }
 
 KIO::UDSEntry RcloneWorker::remoteEntry(const QString &name, bool currentDirectory, const QString &type) const
 {
-    KIO::UDSEntry entry;
-    entry.reserve(6);
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, currentDirectory ? QStringLiteral(".") : name);
-    entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, currentDirectory ? name : name);
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, RcloneEntryFormat::iconForRemoteType(type));
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
-    return entry;
+    return KioEntryFactory::remote(name, currentDirectory, type);
 }
 
 KIO::UDSEntry RcloneWorker::itemEntry(const RcloneItem &item) const
 {
-    KIO::UDSEntry entry;
-    entry.reserve(7);
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, item.name);
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, item.isDirectory ? S_IFDIR : S_IFREG);
-    const mode_t fileAccess = item.readOnly ? S_IRUSR | S_IRGRP | S_IROTH : S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, item.isDirectory ? S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH : fileAccess);
-    if (item.size >= 0) {
-        entry.fastInsert(KIO::UDSEntry::UDS_SIZE, item.size);
-    }
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, RcloneEntryFormat::fallbackMimeType(item));
-    if (item.ambiguous) {
-        entry.fastInsert(KIO::UDSEntry::UDS_COMMENT, i18n("Multiple remote objects have this name. KIO Rclone is showing the newest one."));
-    }
-    if (item.isDirectory) {
-        entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder"));
-    }
-    if (item.modificationTime.isValid()) {
-        entry.fastInsert(KIO::UDSEntry::UDS_MODIFICATION_TIME, item.modificationTime.toSecsSinceEpoch());
-    }
-    return entry;
+    return KioEntryFactory::item(item);
 }
 
 KIO::WorkerResult RcloneWorker::ensureBackend() const

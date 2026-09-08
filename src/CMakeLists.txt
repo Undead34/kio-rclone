@@ -31,6 +31,7 @@ target_link_libraries(kio_rclone_common
 kcoreaddons_add_plugin(kio_rclone
     SOURCES
         kiodirectorynotifier.cpp
+        kioentryfactory.cpp
         rcloneworker.cpp
     INSTALL_NAMESPACE kf6/kio
 )
