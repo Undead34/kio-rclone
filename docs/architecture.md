@@ -8,15 +8,35 @@ This page is the maintainer map for KIO Rclone. It describes the boundaries
 that keep a KIO protocol worker small and predictable; it is not a second user
 manual or a replacement for the API documentation linked below.
 
+## Directory map
+
+The folder is part of the architecture: a maintainer should be able to locate
+the responsible layer before opening a file.
+
+```text
+src/
+  cache/     directory-listing policy and persistent snapshots
+  rclone/    CLI client, process setup, URL parsing, item presentation
+  kio/       KIO worker, UDS entry building, KDirNotify boundary
+app/
+  dialogs/   settings and interactive rclone prompts
+  configwindow.cpp  remote-management window and UI orchestration
+```
+
+Do not add catch-all folders such as `helpers`, `common`, or `utils`. A new
+folder needs a dependency boundary that can be stated in one sentence.
+
 ## One sentence per component
 
 | Component | Owns | Must not own |
 | --- | --- | --- |
-| `RcloneWorker` | KIO request/response adaptation, progress, and KIO-visible errors. | rclone protocol parsing or cache policy details. |
+| `RcloneWorker` | KIO request/response adaptation, progress, KIO-visible errors, and applying a listing policy to a request. | rclone protocol parsing, cache serialization, or preference persistence. |
 | `RcloneUrl` | Parsing and constructing `rclone:/` URLs. | Process invocation or KIO entries. |
 | `RcloneClient` | rclone command arguments, process results, and rclone JSON decoding. | `KIO::WorkerResult`, `UDSEntry`, or DBus notification. |
-| `DirectorySnapshotCache` | Short-lived, private directory snapshots. | Deciding whether a request is a reload or safe to serve from cache. |
+| `DirectoryListingPolicyStore` | Persisting and normalizing the user's freshness choice. | Snapshot bytes or KIO request metadata. |
+| `DirectorySnapshotCache` | Short-lived, private directory snapshots. | Deciding whether a request is a reload or reading user preferences. |
 | `RcloneEntryFormat` | Provider icon, MIME fallback, version comparison, and duplicate preference. | Publishing entries to a KIO client. |
+| `KioEntryBuilder` / `KioDirectoryNotifier` | The narrow `UDSEntry` and KDirNotify boundaries. | rclone CLI calls or cache policy. |
 | Configuration application | Widgets and interactive configuration flow. | Worker request handling. |
 
 The intended direction of dependencies is:
@@ -25,11 +45,13 @@ The intended direction of dependencies is:
 KDE / Dolphin
     │
     ▼
-RcloneWorker ──► operation policy ──► RcloneClient ──► rclone
-    │                    │
-    │                    └──────────► DirectorySnapshotCache
+RcloneWorker ──► RcloneClient ──► rclone
+    │
+    ├──► DirectoryListingPolicyStore
+    ├──► DirectorySnapshotCache
+    └──► KioEntryBuilder / KioDirectoryNotifier
     ▼
-UDSEntry / WorkerResult / KDirNotify
+KDE / Dolphin
 ```
 
 `RcloneWorker` is deliberately the only place where a normal remote operation
@@ -42,7 +64,8 @@ boundary rather than adding another cross-cutting helper to the worker.
 
 1. Parse the KIO URL once into a canonical remote and remote path.
 2. Honour an explicit reload request before considering a snapshot.
-3. Load a fresh snapshot only for normal, read-only discovery.
+3. Read the current `DirectoryListingPolicy` and load a snapshot only when it
+   explicitly allows it.
 4. Otherwise request the directory from rclone and make its items safe for
    KIO representation.
 5. Persist a snapshot only after a complete, successful list operation.
@@ -50,6 +73,19 @@ boundary rather than adding another cross-cutting helper to the worker.
 
 An incomplete, cancelled, or failed rclone listing is never a cache entry.
 This is a correctness rule, not merely an optimisation choice.
+
+The worker exposes this sequence as small, use-case-sized methods:
+
+```text
+listDir
+  ├── listRoot
+  ├── cachedDirectory → publishDirectoryEntries
+  └── listRemoteDirectory → publishDirectoryEntries → snapshot store
+```
+
+`F5`/reload enters only through the explicit reload branch. Normal navigation
+continues to be eligible for a fresh snapshot, so cache invalidation cannot
+accidentally change ordinary enter/leave-folder behavior.
 
 ### Mutation
 
@@ -95,34 +131,37 @@ code comment only when the local invariant would otherwise be surprising.
 
 | Change | Preferred home |
 | --- | --- |
-| Another rclone JSON field or command flag | `RcloneClient` and its tests. |
+| Another rclone JSON field or command flag | `src/rclone/` and its tests. |
 | A different KIO error mapping or progress signal | `RcloneWorker` boundary code. |
 | Directory freshness, deduplication, or streaming choice | The directory-listing operation, with a policy-focused test. |
+| Policy persistence or its range | `DirectoryListingPolicyStore`. |
 | Snapshot serialization, size limit, expiry, or migration | `DirectorySnapshotCache`. |
-| Mapping `RcloneItem` to `UDSEntry` | The KIO entry mapper/formatter. |
+| Mapping `RcloneItem` to `UDSEntry` | `KioEntryBuilder`. |
 | A successful create/rename/delete side effect | A mutation coordinator: cache invalidation and notification together. |
-| OAuth dialog or provider-specific configuration UI | The configuration application, outside the worker. |
+| OAuth dialog or provider-specific configuration UI | `app/` or a focused `app/dialogs/` component, outside the worker. |
 
 Do not introduce an abstract interface just to give a class a pattern name.
 Introduce a seam when it separates an external boundary, isolates a stateful
 workflow, or lets a test replace a real dependency.
 
-## Refactoring sequence
+## Deferred KIO capabilities
 
-The project should evolve in small, behaviour-preserving commits:
+The worker header intentionally declares only supported KIO operations. These
+are future capabilities, not near-term TODO comments sprinkled through the
+public class:
 
-1. Keep this document and narrow code comments as the architecture contract.
-2. Move `UDSEntry` construction and KIO notifications out of the worker into
-   focused KIO-boundary helpers.
-3. Extract directory listing, snapshot policy, and duplicate handling into one
-   operation service while preserving existing cache/reload behaviour.
-4. Extract upload/download and mutation workflows only after characterization
-   tests cover the current behaviour.
-5. Refactor the configuration UI separately from the worker.
+- connection lifecycle, only if rclone gains a worker-owned persistent session;
+- permissions and modification time, subject to backend metadata support;
+- Drive shortcuts, gated to the backend that supports them;
+- `KIO::FileJob` random access (`open`, `read`, `write`, `seek`, `truncate`,
+  `close`), after range streaming and local staging have characterization
+  tests;
+- `special()`, only for a command that cannot be represented by standard KIO
+  operations.
 
-Each extraction should retain the same public KIO behaviour and add a focused
-test for the contract it makes explicit. A clean seam with no behavioural
-change is more valuable than a large, mixed cleanup commit.
+Each future capability starts with its observable contract and a focused test,
+then earns a place in the worker. A clean seam with no behavioral change is
+more valuable than a large, mixed cleanup commit.
 
 ## Tests as contracts
 

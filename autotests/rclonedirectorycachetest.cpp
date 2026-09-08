@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "cache/directorylistingpolicy.h"
 #include "cache/directorysnapshotcache.h"
 
 #include <KIO/ListJob>
@@ -41,6 +42,7 @@ private Q_SLOTS:
     void init();
 
     void freshListingSkipsRclone();
+    void remoteOnlyPolicySkipsSnapshot();
     void explicitReloadInvalidatesSnapshot();
     void statAndMimetypeReuseListingSnapshot();
     void successfulPutInvalidatesSnapshot();
@@ -73,7 +75,7 @@ void RcloneDirectoryCacheTest::initTestCase()
 
 void RcloneDirectoryCacheTest::init()
 {
-    DirectorySnapshotCache::setPolicy({DirectoryCacheMode::Fresh, 20});
+    DirectoryListingPolicyStore::save({DirectoryListingMode::RecentSnapshot, 20});
     DirectorySnapshotCache::clearPersistent();
 
     QDir(m_remoteRoot).removeRecursively();
@@ -92,6 +94,17 @@ void RcloneDirectoryCacheTest::freshListingSkipsRclone()
     const KIO::UDSEntryList secondEntries = listDirectory();
     QCOMPARE(secondEntries.size(), firstEntries.size());
     QCOMPARE(listingCount(), afterFirstListing);
+}
+
+void RcloneDirectoryCacheTest::remoteOnlyPolicySkipsSnapshot()
+{
+    static_cast<void>(listDirectory());
+    const qint64 afterInitialListing = listingCount();
+    QVERIFY(afterInitialListing > 0);
+
+    DirectoryListingPolicyStore::save({DirectoryListingMode::RemoteOnly, 20});
+    static_cast<void>(listDirectory());
+    QVERIFY(listingCount() > afterInitialListing);
 }
 
 void RcloneDirectoryCacheTest::explicitReloadInvalidatesSnapshot()

@@ -1,4 +1,5 @@
 add_library(kio_rclone_common STATIC
+    cache/directorylistingpolicy.cpp
     cache/directorysnapshotcache.cpp
     rclone/rcloneclient.cpp
     rclone/entryformat.cpp

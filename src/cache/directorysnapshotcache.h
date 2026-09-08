@@ -15,25 +15,6 @@
 
 class KSharedDataCache;
 
-enum class DirectoryCacheMode {
-    /// Every listing is resolved by rclone; no snapshot is served.
-    Strict,
-    /// A complete snapshot may satisfy a normal read-only directory request.
-    Fresh,
-};
-
-/// User-configurable freshness policy. It deliberately has no "offline" mode:
-/// this cache shortens reopen latency, but is never a remote filesystem index.
-struct DirectoryCachePolicy {
-    DirectoryCacheMode mode = DirectoryCacheMode::Fresh;
-    int freshnessSeconds = 15;
-
-    [[nodiscard]] bool allowsSnapshots() const
-    {
-        return mode == DirectoryCacheMode::Fresh && freshnessSeconds > 0;
-    }
-};
-
 /**
  * A small, shared on-disk cache of complete successful rclone directory
  * listings. Entries are intentionally short-lived: this is a fast reopening
@@ -46,9 +27,6 @@ struct DirectoryCachePolicy {
 class DirectorySnapshotCache
 {
 public:
-    static constexpr int DefaultFreshnessSeconds = 15;
-    static constexpr int MinimumFreshnessSeconds = 1;
-    static constexpr int MaximumFreshnessSeconds = 60;
     static constexpr qsizetype MaximumItemCount = 4096;
 
     DirectorySnapshotCache();
@@ -57,9 +35,12 @@ public:
     DirectorySnapshotCache(const DirectorySnapshotCache &) = delete;
     DirectorySnapshotCache &operator=(const DirectorySnapshotCache &) = delete;
 
-    /// Returns a complete, still-fresh snapshot or no value. A miss and an
-    /// invalid/corrupt/expired entry intentionally have the same result.
-    [[nodiscard]] std::optional<QList<RcloneItem>> load(const QString &remote, const QString &remotePath);
+    /// Returns a complete snapshot inside freshnessSeconds or no value. A miss
+    /// and an invalid, corrupt, or expired entry intentionally look alike.
+    /// The caller decides whether the current request may use a snapshot.
+    [[nodiscard]] std::optional<QList<RcloneItem>> load(const QString &remote,
+                                                        const QString &remotePath,
+                                                        int freshnessSeconds);
 
     /// Stores one complete, successfully listed directory. Callers must not
     /// pass partial output after cancellation or a backend error.
@@ -67,11 +48,6 @@ public:
 
     /// Removes snapshots visible through this cache instance.
     void clear();
-
-    /// Reads or changes the global policy. Setting a policy clears existing
-    /// snapshots so a stricter choice takes effect immediately across workers.
-    [[nodiscard]] static DirectoryCachePolicy policy();
-    static void setPolicy(const DirectoryCachePolicy &policy);
 
     /// Opens the shared cache and removes all persistent snapshots.
     static void clearPersistent();

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "cache/directorylistingpolicy.h"
 #include "cache/directorysnapshotcache.h"
 
 #include <QDialog>
@@ -30,10 +31,10 @@ protected:
     void accept() override;
 
 private:
-    [[nodiscard]] DirectoryCachePolicy selectedPolicy() const;
+    [[nodiscard]] DirectoryListingPolicy selectedPolicy() const;
     void updatePresentation();
 
-    DirectoryCachePolicy m_initialPolicy;
+    DirectoryListingPolicy m_initialPolicy;
     QComboBox *m_mode = nullptr;
     QSpinBox *m_freshness = nullptr;
     QLabel *m_summary = nullptr;

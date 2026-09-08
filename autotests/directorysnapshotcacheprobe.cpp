@@ -20,7 +20,7 @@ int main(int argc, char **argv)
 
     const QStringList arguments = application.arguments();
     DirectorySnapshotCache cache;
-    const auto snapshot = cache.load(arguments.at(1), arguments.at(2));
+    const auto snapshot = cache.load(arguments.at(1), arguments.at(2), 20);
     if (!snapshot) {
         return 1;
     }

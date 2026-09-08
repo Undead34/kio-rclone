@@ -20,7 +20,7 @@
 
 SettingsDialog::SettingsDialog(QWidget *parent)
     : QDialog(parent)
-    , m_initialPolicy(DirectorySnapshotCache::policy())
+    , m_initialPolicy(DirectoryListingPolicyStore::load())
 {
     setWindowTitle(i18n("Settings"));
     setWindowIcon(QIcon::fromTheme(QStringLiteral("configure")));
@@ -43,13 +43,13 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     form->setVerticalSpacing(10);
 
     m_mode = new QComboBox(this);
-    m_mode->addItem(i18n("Use recent listings (recommended)"), static_cast<int>(DirectoryCacheMode::Fresh));
-    m_mode->addItem(i18n("Always check the remote"), static_cast<int>(DirectoryCacheMode::Strict));
-    m_mode->setCurrentIndex(m_initialPolicy.mode == DirectoryCacheMode::Strict ? 1 : 0);
+    m_mode->addItem(i18n("Use recent listings (recommended)"), static_cast<int>(DirectoryListingMode::RecentSnapshot));
+    m_mode->addItem(i18n("Always check the remote"), static_cast<int>(DirectoryListingMode::RemoteOnly));
+    m_mode->setCurrentIndex(m_initialPolicy.mode == DirectoryListingMode::RemoteOnly ? 1 : 0);
     form->addRow(i18n("When opening a folder:"), m_mode);
 
     m_freshness = new QSpinBox(this);
-    m_freshness->setRange(DirectorySnapshotCache::MinimumFreshnessSeconds, DirectorySnapshotCache::MaximumFreshnessSeconds);
+    m_freshness->setRange(DirectoryListingPolicy::MinimumFreshnessSeconds, DirectoryListingPolicy::MaximumFreshnessSeconds);
     m_freshness->setSingleStep(5);
     m_freshness->setValue(m_initialPolicy.freshnessSeconds);
     form->addRow(i18n("Reuse a listing for:"), m_freshness);
@@ -83,17 +83,17 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     updatePresentation();
 }
 
-DirectoryCachePolicy SettingsDialog::selectedPolicy() const
+DirectoryListingPolicy SettingsDialog::selectedPolicy() const
 {
-    DirectoryCachePolicy policy;
-    policy.mode = static_cast<DirectoryCacheMode>(m_mode->currentData().toInt());
+    DirectoryListingPolicy policy;
+    policy.mode = static_cast<DirectoryListingMode>(m_mode->currentData().toInt());
     policy.freshnessSeconds = m_freshness->value();
     return policy;
 }
 
 void SettingsDialog::updatePresentation()
 {
-    const bool usesFreshCache = static_cast<DirectoryCacheMode>(m_mode->currentData().toInt()) == DirectoryCacheMode::Fresh;
+    const bool usesFreshCache = static_cast<DirectoryListingMode>(m_mode->currentData().toInt()) == DirectoryListingMode::RecentSnapshot;
     m_freshness->setEnabled(usesFreshCache);
     m_summary->setText(usesFreshCache
                            ? i18n("Recently visited folders can open faster. File-changing actions still check the remote.")
@@ -102,10 +102,11 @@ void SettingsDialog::updatePresentation()
 
 void SettingsDialog::accept()
 {
-    const DirectoryCachePolicy policy = selectedPolicy();
+    const DirectoryListingPolicy policy = selectedPolicy();
     const bool policyChanged = policy.mode != m_initialPolicy.mode || policy.freshnessSeconds != m_initialPolicy.freshnessSeconds;
     if (policyChanged) {
-        DirectorySnapshotCache::setPolicy(policy);
+        DirectoryListingPolicyStore::save(policy);
+        DirectorySnapshotCache::clearPersistent();
     } else if (m_clearSavedListings->isChecked()) {
         DirectorySnapshotCache::clearPersistent();
     }

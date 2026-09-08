@@ -266,9 +266,9 @@ bool ConfigWindow::promptConfigPassword()
 
 RcloneResult ConfigWindow::runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs)
 {
-    RcloneResult result = m_backend.run(arguments, timeoutMs);
+    RcloneResult result = m_rclone.run(arguments, timeoutMs);
     if (!result.success() && isConfigPasswordError(result.errorMessage()) && promptConfigPassword()) {
-        return m_backend.run(arguments, timeoutMs);
+        return m_rclone.run(arguments, timeoutMs);
     }
     return result;
 }
@@ -277,7 +277,7 @@ void ConfigWindow::refreshRemotes()
 {
     m_remoteList->clear();
     m_remoteInfo.clear();
-    if (!m_backend.isAvailable()) {
+    if (!m_rclone.isAvailable()) {
         m_statusLabel->setText(
             i18n("rclone was not found. Install it or set "
                  "KIO_RCLONE_EXECUTABLE to its full path."));
@@ -286,15 +286,15 @@ void ConfigWindow::refreshRemotes()
     }
 
     QString error;
-    QStringList remotes = m_backend.remotes(&error);
+    QStringList remotes = m_rclone.remotes(&error);
     if (remotes.isEmpty() && isConfigPasswordError(error) && promptConfigPassword()) {
         error.clear();
-        remotes = m_backend.remotes(&error);
+        remotes = m_rclone.remotes(&error);
     }
     int sharedGoogleClients = 0;
     for (const QString &remote : remotes) {
         QString infoError;
-        const auto info = m_backend.remoteInfo(remote, &infoError);
+        const auto info = m_rclone.remoteInfo(remote, &infoError);
         if (info) {
             m_remoteInfo.insert(remote, *info);
         }
@@ -524,7 +524,7 @@ void ConfigWindow::addRemote()
     }
 
     QString error;
-    if (m_backend.remotes(&error).contains(name)) {
+    if (m_rclone.remotes(&error).contains(name)) {
         QMessageBox::warning(this, i18n("Remote Exists"), i18n("A remote named “%1” already exists.", name));
         return;
     }
@@ -649,7 +649,7 @@ bool ConfigWindow::runOneDriveStep(const QStringList &arguments, const QString &
     layout->addWidget(buttons);
 
     QProcess process(&dialog);
-    process.setProgram(m_backend.executable());
+    process.setProgram(m_rclone.executable());
     process.setArguments(arguments);
     process.setProcessChannelMode(QProcess::SeparateChannels);
 
@@ -939,7 +939,7 @@ void ConfigWindow::editSelected()
             return;
         }
         QString error;
-        if (m_backend.remotes(&error).contains(newName)) {
+        if (m_rclone.remotes(&error).contains(newName)) {
             QMessageBox::warning(this, i18n("Remote Exists"), i18n("A remote named “%1” already exists.", newName));
             return;
         }
@@ -1016,13 +1016,13 @@ void ConfigWindow::openAdvancedConfiguration()
 {
     const QString konsole = QStandardPaths::findExecutable(QStringLiteral("konsole"));
     if (!konsole.isEmpty()) {
-        QProcess::startDetached(konsole, {QStringLiteral("-e"), m_backend.executable(), QStringLiteral("config")});
+        QProcess::startDetached(konsole, {QStringLiteral("-e"), m_rclone.executable(), QStringLiteral("config")});
         return;
     }
 
     const QString xterm = QStandardPaths::findExecutable(QStringLiteral("xterm"));
     if (!xterm.isEmpty()) {
-        QProcess::startDetached(xterm, {QStringLiteral("-e"), m_backend.executable(), QStringLiteral("config")});
+        QProcess::startDetached(xterm, {QStringLiteral("-e"), m_rclone.executable(), QStringLiteral("config")});
         return;
     }
 
@@ -1030,7 +1030,7 @@ void ConfigWindow::openAdvancedConfiguration()
                              i18n("Advanced Configuration"),
                              i18n("No supported terminal was found. Run this "
                                   "command manually:\n\n%1 config",
-                                  m_backend.executable()));
+                                  m_rclone.executable()));
 }
 
 void ConfigWindow::updateActions()
@@ -1051,7 +1051,7 @@ QString ConfigWindow::selectedRemote() const
 
 bool ConfigWindow::runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description)
 {
-    RclonePromptDialog dialog(m_backend.executable(), arguments, title, description, this);
+    RclonePromptDialog dialog(m_rclone.executable(), arguments, title, description, this);
     dialog.exec();
     if (!dialog.startError().isEmpty()) {
         QMessageBox::critical(this, i18n("Rclone Error"), dialog.startError());

@@ -6,8 +6,6 @@
 
 #include "directorysnapshotcache.h"
 
-#include <KConfig>
-#include <KConfigGroup>
 #include <KSharedDataCache>
 
 #include <QBuffer>
@@ -30,14 +28,6 @@ constexpr quint32 SnapshotMagic = 0x4b524453; // "KRDS"
 constexpr quint16 SnapshotVersion = 1;
 constexpr qsizetype MaximumSnapshotBytes = 1024 * 1024;
 constexpr qint64 MaximumFutureClockSkewMs = 5 * 60 * 1000;
-
-DirectoryCachePolicy normalizedPolicy(DirectoryCachePolicy value)
-{
-    value.freshnessSeconds = qBound(DirectorySnapshotCache::MinimumFreshnessSeconds,
-                                    value.freshnessSeconds,
-                                    DirectorySnapshotCache::MaximumFreshnessSeconds);
-    return value;
-}
 
 QString cacheDirectoryPath()
 {
@@ -209,10 +199,6 @@ std::optional<QList<RcloneItem>> decodeSnapshot(const QByteArray &encoded,
     return items;
 }
 
-KConfigGroup cachePolicyGroup(KConfig &config)
-{
-    return KConfigGroup(&config, QStringLiteral("DirectoryListingCache"));
-}
 } // namespace
 
 DirectorySnapshotCache::DirectorySnapshotCache()
@@ -227,10 +213,11 @@ DirectorySnapshotCache::DirectorySnapshotCache()
 
 DirectorySnapshotCache::~DirectorySnapshotCache() = default;
 
-std::optional<QList<RcloneItem>> DirectorySnapshotCache::load(const QString &remote, const QString &remotePath)
+std::optional<QList<RcloneItem>> DirectorySnapshotCache::load(const QString &remote,
+                                                               const QString &remotePath,
+                                                               int freshnessSeconds)
 {
-    const DirectoryCachePolicy currentPolicy = policy();
-    if (!currentPolicy.allowsSnapshots() || remote.isEmpty()) {
+    if (freshnessSeconds <= 0 || remote.isEmpty()) {
         return std::nullopt;
     }
 
@@ -244,12 +231,12 @@ std::optional<QList<RcloneItem>> DirectorySnapshotCache::load(const QString &rem
         return std::nullopt;
     }
 
-    return decodeSnapshot(encoded, remote, *canonicalPath, configIdentity, currentPolicy.freshnessSeconds);
+    return decodeSnapshot(encoded, remote, *canonicalPath, configIdentity, freshnessSeconds);
 }
 
 bool DirectorySnapshotCache::store(const QString &remote, const QString &remotePath, const QList<RcloneItem> &items)
 {
-    if (!policy().allowsSnapshots() || remote.isEmpty() || items.size() > MaximumItemCount) {
+    if (remote.isEmpty() || items.size() > MaximumItemCount) {
         return false;
     }
 
@@ -271,32 +258,6 @@ bool DirectorySnapshotCache::store(const QString &remote, const QString &remoteP
 void DirectorySnapshotCache::clear()
 {
     m_cache->clear();
-}
-
-DirectoryCachePolicy DirectorySnapshotCache::policy()
-{
-    KConfig config(QStringLiteral("kiorclonerc"), KConfig::NoGlobals);
-    const KConfigGroup group = cachePolicyGroup(config);
-    DirectoryCachePolicy value;
-    value.mode = group.readEntry(QStringLiteral("Mode"), QStringLiteral("fresh")) == QLatin1String("strict") ? DirectoryCacheMode::Strict
-                                                                                                                   : DirectoryCacheMode::Fresh;
-    value.freshnessSeconds = group.readEntry(QStringLiteral("FreshnessSeconds"), DefaultFreshnessSeconds);
-    return normalizedPolicy(value);
-}
-
-void DirectorySnapshotCache::setPolicy(const DirectoryCachePolicy &value)
-{
-    const DirectoryCachePolicy normalized = normalizedPolicy(value);
-    KConfig config(QStringLiteral("kiorclonerc"), KConfig::NoGlobals);
-    KConfigGroup group = cachePolicyGroup(config);
-    group.writeEntry(QStringLiteral("Mode"), normalized.mode == DirectoryCacheMode::Strict ? QStringLiteral("strict") : QStringLiteral("fresh"));
-    group.writeEntry(QStringLiteral("FreshnessSeconds"), normalized.freshnessSeconds);
-    group.sync();
-
-    // A policy change must take effect across workers immediately. Clearing
-    // is inexpensive and avoids an old fresh window becoming visible after a
-    // user switches through the strict mode.
-    clearPersistent();
 }
 
 void DirectorySnapshotCache::clearPersistent()

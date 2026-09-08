@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#include "cache/directorylistingpolicy.h"
 #include "cache/directorysnapshotcache.h"
 
 #include <QCoreApplication>
@@ -32,7 +33,7 @@ private Q_SLOTS:
 
     void init()
     {
-        DirectorySnapshotCache::setPolicy({DirectoryCacheMode::Fresh, 20});
+        DirectoryListingPolicyStore::save({DirectoryListingMode::RecentSnapshot, 20});
         DirectorySnapshotCache::clearPersistent();
     }
 
@@ -43,7 +44,7 @@ private Q_SLOTS:
         QVERIFY(writer.store(QStringLiteral("work"), QStringLiteral("Documents"), expected));
 
         DirectorySnapshotCache reader;
-        const auto snapshot = reader.load(QStringLiteral("work"), QStringLiteral("Documents"));
+        const auto snapshot = reader.load(QStringLiteral("work"), QStringLiteral("Documents"), 20);
         QVERIFY(snapshot);
         QCOMPARE(snapshot->size(), expected.size());
         QCOMPARE(snapshot->at(0).name, QStringLiteral("notes.txt"));
@@ -66,23 +67,31 @@ private Q_SLOTS:
         QCOMPARE(probe.exitCode(), 0);
     }
 
-    void strictPolicyNeverUsesSnapshot()
+    void policyStoreNormalizesValues()
+    {
+        DirectoryListingPolicyStore::save({DirectoryListingMode::RemoteOnly, 999});
+
+        const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
+        QCOMPARE(policy.mode, DirectoryListingMode::RemoteOnly);
+        QCOMPARE(policy.freshnessSeconds, DirectoryListingPolicy::MaximumFreshnessSeconds);
+    }
+
+    void zeroFreshnessNeverUsesSnapshot()
     {
         DirectorySnapshotCache cache;
         QVERIFY(cache.store(QStringLiteral("work"), QStringLiteral("Documents"), {item(QStringLiteral("old.txt"), 1)}));
 
-        DirectorySnapshotCache::setPolicy({DirectoryCacheMode::Strict, 20});
-        QVERIFY(!cache.load(QStringLiteral("work"), QStringLiteral("Documents")));
+        QVERIFY(!cache.load(QStringLiteral("work"), QStringLiteral("Documents"), 0));
     }
 
     void expiredSnapshotIsIgnored()
     {
-        DirectorySnapshotCache::setPolicy({DirectoryCacheMode::Fresh, 1});
+        DirectoryListingPolicyStore::save({DirectoryListingMode::RecentSnapshot, 1});
         DirectorySnapshotCache cache;
         QVERIFY(cache.store(QStringLiteral("work"), QStringLiteral("Documents"), {item(QStringLiteral("old.txt"), 1)}));
 
         QTest::qWait(1200);
-        QVERIFY(!cache.load(QStringLiteral("work"), QStringLiteral("Documents")));
+        QVERIFY(!cache.load(QStringLiteral("work"), QStringLiteral("Documents"), 1));
     }
 
     void changingRcloneConfigurationInvalidatesSnapshot()
@@ -91,7 +100,7 @@ private Q_SLOTS:
         QVERIFY(cache.store(QStringLiteral("work"), QStringLiteral("Documents"), {item(QStringLiteral("old.txt"), 1)}));
 
         writeRcloneConfig(QByteArrayLiteral("[work]\ntype = local\nchanged = true\n"));
-        QVERIFY(!cache.load(QStringLiteral("work"), QStringLiteral("Documents")));
+        QVERIFY(!cache.load(QStringLiteral("work"), QStringLiteral("Documents"), 20));
     }
 
     void rejectsUnsafeItems()

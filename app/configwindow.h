@@ -62,7 +62,7 @@ private:
     [[nodiscard]] bool runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description);
     [[nodiscard]] bool validateRemoteName(const QString &name) const;
 
-    RcloneClient m_backend;
+    RcloneClient m_rclone;
     QHash<QString, RcloneRemoteInfo> m_remoteInfo;
     std::optional<QJsonArray> m_providersCache;
     QLabel *m_statusLabel = nullptr;

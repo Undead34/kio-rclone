@@ -13,8 +13,10 @@
 #include <QTemporaryFile>
 
 #include <memory>
+#include <optional>
 
 class RcloneUrl;
+struct DirectoryListingPolicy;
 
 class RcloneWorker : public KIO::WorkerBase
 {
@@ -38,80 +40,16 @@ class RcloneWorker : public KIO::WorkerBase
 
       KIO::WorkerResult fileSystemFreeSpace(const QUrl &url) override;
 
-      // TODO: Revisar callbacks de rclone para mostrar autenticación interactiva y mensajes de progreso en KIO.
-      // log_callback? auth_callback?
-
-      // TODO: Implementar solo si se mantiene una sesión o proceso rclone persistente entre operaciones.
-      // KIO::WorkerResult openConnection() override;
-      // KIO::WorkerResult closeConnection() override;
-
-      // TODO: Revisar si la URL necesita separar explícitamente host, remote y ruta en el estado del worker.
-      // KIO::WorkerResult setHost(const QString &host,
-      //                           quint16 port,
-      //                           const QString &user,
-      //                           const QString &password) override;
-
-      // TODO: Simular chmod vía la metadata genérica de rclone (mode/uid/gid); no todos los backends la exponen.
-      // Confirmado con rclone v1.74.4: local expone "mode" (octal, escribible) en `lsjson --metadata`;
-      // backends cloud (drive/s3/dropbox/etc.) no tienen ese concepto, ahí debe fallar directo.
-      // Plan: (1) agregar --metadata a list()/stat() en RcloneClient y parsear "mode" en RcloneItem;
-      // (2) si el item no trae "mode" -> fail(ERR_UNSUPPORTED_ACTION) sin intentar nada más;
-      // (3) si lo trae -> moveto remoteSpec a un nombre temporal y moveto de vuelta con
-      //     --metadata --metadata-set mode=<octal, preservando bits de tipo S_IFREG/S_IFDIR>.
-      //     copyto/moveto sobre el mismo path es no-op en rclone (probado), por eso el salto por nombre
-      //     temporal; moveto es barato porque casi todos los backends lo resuelven server-side.
-      // KIO::WorkerResult chmod(const QUrl &url, int permissions) override;
-
-      // TODO: Implementar para conservar la fecha de modificación al subir o actualizar archivos.
-      // put() debe leer metaData("modified") (ISO date) y aplicarlo al QTemporaryFile local con
-      // QFile::setFileTime() ANTES de runUpload(), ya que copyto preserva el mtime de origen por defecto.
-      // Patrón de referencia: kio-extras/sftp/kio_sftp.cpp:1639-1659 (mismo enfoque al final de su put()).
-      // Además implementar el override standalone con `rclone touch -t <ISO> remoteSpec` para cuando
-      // KIO lo invoque fuera de un put() (p.ej. CopyJob fijando el mtime de directorios).
-      // KIO::WorkerResult setModificationTime(const QUrl &url,
-      //                                       const QDateTime &mtime) override;
-
-      // TODO: Implementar symlink únicamente para remotos backend "drive" (Google Drive), vía
-      // `rclone backend shortcut`. Confirmado con `rclone backend help <tipo>`: solo "drive" tiene ese
-      // comando entre los backends probados (onedrive/dropbox/box/s3/mega/pcloud/gcs no lo tienen).
-      // Plan: comprobar RcloneClient::remoteInfo(dest.remote())->type == "drive" antes de intentar;
-      // si no -> fail(ERR_UNSUPPORTED_ACTION). "target" puede llegar como URL rclone: o como ruta
-      // relativa; resolverlo contra el mismo remote que "dest" (shortcuts cross-remote no aplican
-      // salvo pasando -o target=otroRemote:, que no vamos a soportar por ahora).
-      // KIO::WorkerResult symlink(const QString &target,
-      //                           const QUrl &dest,
-      //                           KIO::JobFlags flags) override;
-
-      /// KIO::FileJob interface
-
-      // TODO: Implementar FileJob para streaming con seek, reproducción de videos y acceso aleatorio.
-      // KIO::WorkerResult open(const QUrl &url, QIODevice::OpenMode mode) override;
-
-      // TODO: En ReadOnly, leer rangos remotos sin descargar previamente el archivo completo.
-      // KIO::WorkerResult read(KIO::filesize_t size) override;
-
-      // TODO: En escritura, usar staging local porque los remotos no suelen aceptar modificaciones aleatorias.
-      // KIO::WorkerResult write(const QByteArray &data) override;
-
-      // TODO: En lectura remota, cambiar la posición lógica usada por la siguiente petición por rango.
-      // KIO::WorkerResult seek(KIO::filesize_t offset) override;
-
-      // TODO: En escritura, redimensionar el archivo temporal y subir la nueva versión al cerrar.
-      // KIO::WorkerResult truncate(KIO::filesize_t length) override;
-
-      // TODO: Al cerrar, cancelar la lectura o subir el archivo temporal únicamente si fue modificado.
-      // KIO::WorkerResult close() override;
-
-      // TODO: Reservar special para comandos propios que no encajen en las operaciones estándar de KIO.
-      // KIO::WorkerResult special(const QByteArray &data) override;
-
   private:
-      [[nodiscard]] KIO::UDSEntry rootEntry() const;
-      [[nodiscard]] KIO::UDSEntry configureEntry() const;
-      [[nodiscard]] KIO::UDSEntry remoteEntry(const QString &name, bool currentDirectory = false, const QString &type = {}) const;
-      [[nodiscard]] KIO::UDSEntry itemEntry(const RcloneItem &item) const;
+      [[nodiscard]] KIO::WorkerResult listRoot(const QUrl &requestUrl);
+      [[nodiscard]] KIO::WorkerResult listRemoteDirectory(const QUrl &requestUrl,
+                                                           const RcloneUrl &directory,
+                                                           const DirectoryListingPolicy &policy);
+      [[nodiscard]] std::optional<QList<RcloneItem>> cachedDirectory(const RcloneUrl &directory,
+                                                                       const DirectoryListingPolicy &policy);
+      void publishDirectoryEntries(const RcloneUrl &directory, const QList<RcloneItem> &items);
 
-      [[nodiscard]] KIO::WorkerResult ensureBackend() const;
+      [[nodiscard]] KIO::WorkerResult ensureRcloneClient() const;
 
       [[nodiscard]] bool remoteExists(const QString &remote, QString *error = nullptr) const;
       [[nodiscard]] bool destinationExists(const QString &remoteSpec,
@@ -140,7 +78,7 @@ class RcloneWorker : public KIO::WorkerBase
                                                   int fallbackError,
                                                   const QUrl &url) const;
 
-      RcloneClient m_backend;
+      RcloneClient m_rclone;
       DirectorySnapshotCache m_directorySnapshots;
 
       // Caché usada por get(); no debe reutilizarse como estado de FileJob sin controlar posición y modo de apertura.
