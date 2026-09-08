@@ -9,6 +9,13 @@
 #include <QString>
 #include <QUrl>
 
+/**
+ * Canonical parser for the public rclone:/ URL space.
+ *
+ * This class is the transport boundary between QUrl/KIO and rclone path
+ * strings. Code outside that boundary should not rebuild remote specs by
+ * slicing QUrl paths independently.
+ */
 class RcloneUrl
 {
 public:
@@ -18,12 +25,16 @@ public:
 
     explicit RcloneUrl(const QUrl &url);
 
+    /// A valid URL is a safe, canonical representation of an rclone root,
+    /// remote root, remote path, or the virtual configuration launcher.
     [[nodiscard]] bool isValid() const;
     [[nodiscard]] bool isRoot() const;
     [[nodiscard]] bool isConfigureEntry() const;
     [[nodiscard]] bool isRemoteRoot() const;
     [[nodiscard]] QString remote() const;
     [[nodiscard]] QString remotePath() const;
+    /// rclone's `remote:path` form for backend commands. It is not a display
+    /// URL and must not be shown to users as a substitute for url().
     [[nodiscard]] QString remoteSpec() const;
     [[nodiscard]] QUrl url() const;
 

@@ -60,7 +60,9 @@ std::unique_ptr<KSharedDataCache> createSharedCache()
 {
     // Restrict the parent before KSharedDataCache creates its mapped file. A
     // conservative umask normally does this too, but this cache must never
-    // rely on the caller's process-wide umask for privacy.
+    // rely on the caller's process-wide umask for privacy. KSharedDataCache is
+    // an evictable shared cache, not a credentials store; see
+    // https://api.kde.org/kcoreaddons-module.html
     ensurePrivateCacheDirectory();
     auto cache = std::make_unique<KSharedDataCache>(QString::fromLatin1(CacheName), CacheSizeBytes, ExpectedSnapshotSize);
     QFile::setPermissions(cacheFilePath(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
