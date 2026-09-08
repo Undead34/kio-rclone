@@ -14,6 +14,12 @@ target_include_directories(kio_rclone_common
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+target_compile_definitions(kio_rclone_common
+    PRIVATE
+        KIO_RCLONE_CONFIG_LAUNCH_SCHEME="${KIO_RCLONE_CONFIG_LAUNCH_SCHEME}"
+        KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE="${KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE}"
+)
+
 target_link_libraries(kio_rclone_common
     PUBLIC
         Qt6::Core

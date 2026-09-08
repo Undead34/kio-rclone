@@ -36,7 +36,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed \
             base-devel git cmake extra-cmake-modules ninja pkgconf \
-            qt6-base kcoreaddons ki18n kio rclone appstream github-cli \
+            qt6-base kcoreaddons ki18n kio rclone shared-mime-info appstream github-cli \
             pacman-contrib
 
       - name: Verify tag matches the project version

@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kio-rclone\n"
 "Report-Msgid-Bugs-To: https://github.com/Undead34/kio-rclone/issues\n"
-"POT-Creation-Date: 2026-07-19 08:55-0400\n"
+"POT-Creation-Date: 2026-09-07 22:32-0400\n"
 "PO-Revision-Date: 2026-07-18 09:00-0400\n"
 "Last-Translator: Gabriel Maizo González <maizogabriel@gmail.com>\n"
 "Language-Team: Spanish\n"
@@ -16,22 +16,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/rcloneworker.cpp:53
+#: src/rcloneworker.cpp:42
 #, kde-format
 msgid "“Configure Remotes…” is a virtual launcher and cannot be modified."
 msgstr "«Configurar remotos…» es un lanzador virtual y no se puede modificar."
 
-#: src/rcloneworker.cpp:328
-#, kde-format
-msgid "The KIO Rclone configuration launcher is not installed."
-msgstr "El lanzador de configuración de KIO Rclone no está instalado."
-
-#: src/rcloneworker.cpp:430
+#: src/rcloneworker.cpp:359
 #, kde-format
 msgid "The remote file changed while it was being read."
 msgstr "El archivo remoto cambió mientras se estaba leyendo."
 
-#: src/rcloneworker.cpp:476
+#: src/rcloneworker.cpp:405
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. Rename or remove the duplicates "
@@ -40,7 +35,7 @@ msgstr ""
 "Varios objetos remotos tienen este nombre. Renombre o elimine los duplicados "
 "antes de editar este archivo."
 
-#: src/rcloneworker.cpp:481
+#: src/rcloneworker.cpp:410
 #, kde-format
 msgid ""
 "This is an exported cloud document with no stable remote size. It is "
@@ -49,27 +44,27 @@ msgstr ""
 "Este es un documento en la nube exportado sin un tamaño remoto estable. Está "
 "disponible solo en lectura para evitar reemplazar el original."
 
-#: src/rcloneworker.cpp:502
+#: src/rcloneworker.cpp:431
 #, kde-format
 msgid "Preparing upload…"
 msgstr "Preparando la subida…"
 
-#: src/rcloneworker.cpp:518 src/rcloneworker.cpp:527
+#: src/rcloneworker.cpp:447 src/rcloneworker.cpp:456
 #, kde-format
 msgid "The upload source changed size while it was being read."
 msgstr "El origen de la subida cambió de tamaño mientras se estaba leyendo."
 
-#: src/rcloneworker.cpp:552
+#: src/rcloneworker.cpp:481
 #, kde-format
 msgid "The remote file changed while the local edit was being prepared."
 msgstr "El archivo remoto cambió mientras se preparaba la edición local."
 
-#: src/rcloneworker.cpp:620
+#: src/rcloneworker.cpp:549
 #, kde-format
 msgid "Moving between different rclone remotes is streamed by KIO."
 msgstr "Mover entre remotos de rclone distintos se transmite a través de KIO."
 
-#: src/rcloneworker.cpp:636
+#: src/rcloneworker.cpp:565
 #, kde-format
 msgid ""
 "Multiple remote objects have the source name. Resolve the duplicates before "
@@ -78,7 +73,7 @@ msgstr ""
 "Varios objetos remotos tienen el nombre de origen. Resuelva los duplicados "
 "antes de renombrar esta ruta."
 
-#: src/rcloneworker.cpp:649
+#: src/rcloneworker.cpp:578
 #, kde-format
 msgid ""
 "The destination is ambiguous or read-only and cannot be replaced safely."
@@ -86,12 +81,12 @@ msgstr ""
 "El destino es ambiguo o de solo lectura y no se puede reemplazar de forma "
 "segura."
 
-#: src/rcloneworker.cpp:675
+#: src/rcloneworker.cpp:604
 #, kde-format
 msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
 msgstr "«Configurar remotos…» es un lanzador virtual y no se puede copiar."
 
-#: src/rcloneworker.cpp:717
+#: src/rcloneworker.cpp:646
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. Resolve the duplicates before "
@@ -100,17 +95,17 @@ msgstr ""
 "Varios objetos remotos tienen este nombre. Resuelva los duplicados antes de "
 "borrar esta ruta."
 
-#: src/rcloneworker.cpp:760 app/main.cpp:24 app/configwindow.cpp:146
+#: src/rcloneworker.cpp:689 app/configwindow.cpp:146 app/main.cpp:24
 #, kde-format
 msgid "Rclone Remotes"
 msgstr "Remotos de Rclone"
 
-#: src/rcloneworker.cpp:775
+#: src/rcloneworker.cpp:704
 #, kde-format
 msgid "Configure Remotes…"
 msgstr "Configurar remotos…"
 
-#: src/rcloneworker.cpp:821
+#: src/rcloneworker.cpp:748
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. KIO Rclone is showing the newest one."
@@ -118,7 +113,7 @@ msgstr ""
 "Varios objetos remotos tienen este nombre. KIO Rclone está mostrando el más "
 "reciente."
 
-#: src/rcloneworker.cpp:838 app/configwindow.cpp:269
+#: src/rcloneworker.cpp:765 app/configwindow.cpp:269
 #, kde-format
 msgid ""
 "rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
@@ -127,22 +122,22 @@ msgstr ""
 "No se encontró rclone. Instálelo o establezca KIO_RCLONE_EXECUTABLE con su "
 "ruta completa."
 
-#: src/rcloneworker.cpp:958
+#: src/rcloneworker.cpp:885
 #, kde-format
 msgid "Uploading… %1% · %2/s · %3 s remaining"
 msgstr "Subiendo… %1% · %2/s · %3 s restantes"
 
-#: src/rcloneworker.cpp:960
+#: src/rcloneworker.cpp:887
 #, kde-format
 msgid "Uploading… %1% · %2/s"
 msgstr "Subiendo… %1% · %2/s"
 
-#: src/rcloneworker.cpp:987
+#: src/rcloneworker.cpp:914
 #, kde-format
 msgid "Uploading…"
 msgstr "Subiendo…"
 
-#: src/rcloneworker.cpp:1074
+#: src/rcloneworker.cpp:1001
 #, kde-format
 msgid ""
 "Multiple remote objects have this name, and this backend cannot identify "
@@ -283,8 +278,8 @@ msgstr ""
 #, kde-format
 msgid "No remotes yet. Use “Add Remote…” to connect your first cloud provider."
 msgstr ""
-"Aún no hay remotos. Use «Añadir remoto…» para conectar su primer proveedor de "
-"nube."
+"Aún no hay remotos. Use «Añadir remoto…» para conectar su primer proveedor "
+"de nube."
 
 #: app/configwindow.cpp:308
 #, kde-format
@@ -595,6 +590,10 @@ msgstr "Esperando a rclone…"
 #, kde-format
 msgid "Authorization is waiting in your browser."
 msgstr "La autorización está esperando en su navegador."
+
+#, kde-format
+#~ msgid "The KIO Rclone configuration launcher is not installed."
+#~ msgstr "El lanzador de configuración de KIO Rclone no está instalado."
 
 #, kde-format
 #~ msgid ""

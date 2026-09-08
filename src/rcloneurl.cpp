@@ -7,6 +7,8 @@
 #include "rcloneurl.h"
 
 const QString RcloneUrl::ConfigureEntry = QStringLiteral(".kio-rclone-config");
+const QString RcloneUrl::ConfigurationLauncherScheme = QStringLiteral(KIO_RCLONE_CONFIG_LAUNCH_SCHEME);
+const QString RcloneUrl::ConfigurationLauncherMimeType = QStringLiteral(KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE);
 
 RcloneUrl::RcloneUrl(const QUrl &url)
 {
@@ -87,5 +89,13 @@ QUrl RcloneUrl::remoteUrl(const QString &remote)
 {
     QUrl url = rootUrl();
     url.setPath(QLatin1Char('/') + remote + QLatin1Char('/'));
+    return url;
+}
+
+QUrl RcloneUrl::configurationLauncherUrl()
+{
+    QUrl url;
+    url.setScheme(ConfigurationLauncherScheme);
+    url.setPath(QStringLiteral("/"));
     return url;
 }

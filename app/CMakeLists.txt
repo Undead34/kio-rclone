@@ -9,6 +9,12 @@ configure_file(
     @ONLY
 )
 
+configure_file(
+    org.kde.kio-rclone-config.xml.in
+    org.kde.kio-rclone-config.xml
+    @ONLY
+)
+
 target_link_libraries(kio-rclone-config
     PRIVATE
         kio_rclone_common
@@ -25,6 +31,11 @@ install(TARGETS kio-rclone-config
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/org.kde.kio-rclone-config.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.kde.kio-rclone-config.xml
+    DESTINATION ${KDE_INSTALL_MIMEDIR}
+)
+update_xdg_mimetypes(${KDE_INSTALL_MIMEDIR})
 
 install(FILES org.kde.kio-rclone-config.metainfo.xml
     DESTINATION ${KDE_INSTALL_METAINFODIR}

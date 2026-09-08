@@ -4,6 +4,16 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## 0.4.4 — 2026-09-07
+
+### Fixed
+
+- **Configure Remotes…** now launches through a registered `rclone-config:/`
+  URI handler instead of exposing the application's `.desktop` launcher as a
+  file. Dolphin opens the configuration window directly, without its desktop
+  entry open/launch prompt, while the virtual entry remains a regular file so
+  recursive scans cannot launch the UI.
+
 ## 0.4.3 — 2026-09-07
 
 ### Added

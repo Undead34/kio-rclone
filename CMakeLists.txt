@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(kio-rclone VERSION 0.4.3 LANGUAGES CXX)
+project(kio-rclone VERSION 0.4.4 LANGUAGES CXX)
 
 set(QT_MIN_VERSION 6.5.0)
 set(KF_MIN_VERSION 6.3.0)
+set(KIO_RCLONE_CONFIG_LAUNCH_SCHEME "rclone-config")
+set(KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE "application/x-kio-rclone-config")
 
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
@@ -26,6 +28,7 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     KIO
     WindowSystem
 )
+find_package(SharedMimeInfo REQUIRED)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

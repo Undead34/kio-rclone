@@ -17,6 +17,7 @@ private Q_SLOTS:
     void parsesRemotePath();
     void supportsHostForm();
     void buildsRemoteUrl();
+    void buildsConfigurationLauncherUrl();
     void recognizesConfigureEntry();
     void treatsConfigureEntryDescendantsAsConfigureEntry();
 };
@@ -49,6 +50,14 @@ void RcloneUrlTest::buildsRemoteUrl()
     const QUrl url = RcloneUrl::remoteUrl(QStringLiteral("Google Drive"));
     QCOMPARE(url.scheme(), QStringLiteral("rclone"));
     QCOMPARE(url.path(QUrl::FullyDecoded), QStringLiteral("/Google Drive/"));
+}
+
+void RcloneUrlTest::buildsConfigurationLauncherUrl()
+{
+    const QUrl url = RcloneUrl::configurationLauncherUrl();
+    QCOMPARE(url.scheme(), QStringLiteral("rclone-config"));
+    QCOMPARE(url.path(), QStringLiteral("/"));
+    QCOMPARE(RcloneUrl::ConfigurationLauncherMimeType, QStringLiteral("application/x-kio-rclone-config"));
 }
 
 void RcloneUrlTest::recognizesConfigureEntry()

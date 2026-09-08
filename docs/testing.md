@@ -30,7 +30,8 @@ Current tests:
 | `rcloneuploadtest` | Verifies staged publication, exact bytes, cancellation/failure cleanup and preservation of the previous remote file. |
 | `rclonedownloadtest` | Verifies unknown-size materialization and exact selection of duplicate remote objects. |
 | `appstreamtest` | Validates installed desktop metadata. |
-| `desktopfiletest` | Ensures the application launcher uses the absolute installed executable path. |
+| `desktopfiletest` | Ensures the application launcher uses its absolute executable path and registers the launcher MIME type and URI scheme. |
+| `mimefiletest` | Ensures the custom launcher MIME type is installed as valid shared MIME metadata. |
 
 `rclonepausetest` is especially important. It suspends a KIO copy, waits for
 the pipeline to settle, verifies that transfer growth stays bounded, then
@@ -60,19 +61,22 @@ Use a dedicated test remote and a disposable cloud folder. Do not test a
 release candidate by deleting or renaming files in a personal root directory.
 
 1. Open `rclone:/` in a new Dolphin window.
-2. Enter the test remote and list a folder.
-3. Create a directory, press F5, then verify that it appears once.
-4. Upload a small file and confirm that the notification shows upload status.
-5. Download it, pause mid-transfer, confirm network activity settles, then
+2. Open **Configure Remotes…**. It must launch Rclone Remotes directly, with
+   no desktop-entry open/launch prompt; press F5 in `rclone:/` and confirm the
+   listing alone does not open another configuration window.
+3. Enter the test remote and list a folder.
+4. Create a directory, press F5, then verify that it appears once.
+5. Upload a small file and confirm that the notification shows upload status.
+6. Download it, pause mid-transfer, confirm network activity settles, then
    resume and compare its checksum.
-6. Rename the file within the remote, then remove it.
-7. Test an overwrite prompt and a cancel action.
-8. Restart Dolphin and verify the remote still opens.
-9. Open, edit and save a TXT plus one ODT/DOCX file through `rclone:/`; close
+7. Rename the file within the remote, then remove it.
+8. Test an overwrite prompt and a cancel action.
+9. Restart Dolphin and verify the remote still opens.
+10. Open, edit and save a TXT plus one ODT/DOCX file through `rclone:/`; close
    the application, reopen the file and verify the edited bytes/content.
-10. Open a native Google document exported by rclone and verify it has real
+11. Open a native Google document exported by rclone and verify it has real
     content, a nonzero size and is presented read-only.
-11. Create two disposable Drive objects with the same exported name. Verify
+12. Create two disposable Drive objects with the same exported name. Verify
     that Dolphin shows one read-only entry and LibreOffice opens one valid
     document rather than concatenated/corrupt bytes.
 
@@ -94,7 +98,7 @@ Run this matrix before a public release:
 | Document editing | TXT and one ZIP-based office format saved and reopened |
 | Drive edge cases | Native export with unknown size and duplicate object names |
 | Failure path | Cancel, network interruption and denied/expired OAuth |
-| UI | Dolphin notification, F5, context menu, Properties/free-space query |
+| UI | Configure Remotes opens directly, F5/listing does not launch it, Dolphin notification, context menu, Properties/free-space query |
 
 Record rclone version, Plasma/KF version and the result of every row in the
 release issue or milestone.

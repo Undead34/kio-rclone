@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
+SPDX-License-Identifier: CC0-1.0
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="@KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE@">
+    <comment>Rclone configuration launcher</comment>
+    <comment xml:lang="es">Lanzador de configuración de Rclone</comment>
+  </mime-type>
+</mime-info>

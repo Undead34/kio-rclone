@@ -1,0 +1,5 @@
+file(STRINGS "${MIME_FILE}" mimeTypeLines REGEX "^[ \\t]*<mime-type type=\"${EXPECTED_LAUNCH_MIME_TYPE}\">")
+list(LENGTH mimeTypeLines mimeTypeLineCount)
+if(NOT mimeTypeLineCount EQUAL 1)
+    message(FATAL_ERROR "Expected ${MIME_FILE} to define ${EXPECTED_LAUNCH_MIME_TYPE} exactly once, found ${mimeTypeLineCount}")
+endif()

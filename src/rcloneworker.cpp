@@ -24,7 +24,6 @@
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QProcessEnvironment>
-#include <QStandardPaths>
 #include <QUuid>
 
 #include <limits>
@@ -37,17 +36,6 @@ Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 namespace
 {
 constexpr qsizetype DownloadChunkSize = 64 * 1024;
-
-std::optional<QUrl> configurationLauncherUrl()
-{
-    const QString desktopFile = QStandardPaths::locate(QStandardPaths::ApplicationsLocation, QStringLiteral("org.kde.kio-rclone-config.desktop"));
-
-    if (desktopFile.isEmpty()) {
-        return std::nullopt;
-    }
-
-    return QUrl::fromLocalFile(desktopFile);
-}
 
 KIO::WorkerResult configurationEntryMutationError(int error)
 {
@@ -232,7 +220,7 @@ KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
     }
 
     if (rcloneUrl.isConfigureEntry()) {
-        mimeType(QStringLiteral("application/x-desktop"));
+        mimeType(RcloneUrl::ConfigurationLauncherMimeType);
         return KIO::WorkerResult::pass();
     }
 
@@ -269,13 +257,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     }
 
     if (rcloneUrl.isConfigureEntry()) {
-        const auto launcher = configurationLauncherUrl();
-
-        if (!launcher) {
-            return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, i18n("The KIO Rclone configuration launcher is not installed."));
-        }
-
-        redirection(*launcher);
+        redirection(RcloneUrl::configurationLauncherUrl());
         return KIO::WorkerResult::pass();
     }
 
@@ -728,11 +710,9 @@ KIO::UDSEntry RcloneWorker::configureEntry() const
 
     entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("configure"));
 
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("application/x-desktop"));
+    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, RcloneUrl::ConfigurationLauncherMimeType);
 
-    if (const auto launcher = configurationLauncherUrl()) {
-        entry.fastInsert(KIO::UDSEntry::UDS_TARGET_URL, launcher->toString());
-    }
+    entry.fastInsert(KIO::UDSEntry::UDS_TARGET_URL, RcloneUrl::configurationLauncherUrl().toString());
 
     entry.fastInsert(KIO::UDSEntry::UDS_HIDDEN, 0);
 

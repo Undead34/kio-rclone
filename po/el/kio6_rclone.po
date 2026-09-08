@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kio-rclone\n"
 "Report-Msgid-Bugs-To: https://github.com/Undead34/kio-rclone/issues\n"
-"POT-Creation-Date: 2026-09-01 19:21+0300\n"
+"POT-Creation-Date: 2026-09-07 22:32-0400\n"
 "PO-Revision-Date: 2026-09-01 19:05+0300\n"
 "Last-Translator: Vasilis Koulouris <vasileskoulouris@gmail.com>\n"
 "Language-Team: Greek\n"
@@ -17,24 +17,19 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/rcloneworker.cpp:54
+#: src/rcloneworker.cpp:42
 #, kde-format
 msgid "“Configure Remotes…” is a virtual launcher and cannot be modified."
 msgstr ""
 "Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
 "να τροποποιηθεί."
 
-#: src/rcloneworker.cpp:275
-#, kde-format
-msgid "The KIO Rclone configuration launcher is not installed."
-msgstr "Ο εκκινητής διαμόρφωσης KIO Rclone δεν είναι εγκατεστημένος."
-
-#: src/rcloneworker.cpp:377
+#: src/rcloneworker.cpp:359
 #, kde-format
 msgid "The remote file changed while it was being read."
 msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ διαβαζόταν."
 
-#: src/rcloneworker.cpp:423
+#: src/rcloneworker.cpp:405
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. Rename or remove the duplicates "
@@ -43,7 +38,7 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Μετονομάστε ή "
 "αφαιρέστε τα διπλότυπα πριν επεξεργαστείτε αυτό το αρχείο."
 
-#: src/rcloneworker.cpp:428
+#: src/rcloneworker.cpp:410
 #, kde-format
 msgid ""
 "This is an exported cloud document with no stable remote size. It is "
@@ -52,29 +47,29 @@ msgstr ""
 "Αυτό είναι ένα εξαγμένο αρχείο νέφους χωρίς σταθερό απομακρυσμένο μέγεθος. "
 "Είναι διαθέσιμο μόνο για ανάγνωση για αποφυγή αντικατάστασης του αρχικού."
 
-#: src/rcloneworker.cpp:449
+#: src/rcloneworker.cpp:431
 #, kde-format
 msgid "Preparing upload…"
 msgstr "Προετοιμάζεται μεταφόρτωση…"
 
-#: src/rcloneworker.cpp:465 src/rcloneworker.cpp:474
+#: src/rcloneworker.cpp:447 src/rcloneworker.cpp:456
 #, kde-format
 msgid "The upload source changed size while it was being read."
 msgstr "Η πηγή μεταφόρτωσης άλλαξε μέγεθος ενώ διαβαζόταν."
 
-#: src/rcloneworker.cpp:499
+#: src/rcloneworker.cpp:481
 #, kde-format
 msgid "The remote file changed while the local edit was being prepared."
 msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ η τοπική επεξεργασία ετοιμαζόταν."
 
-#: src/rcloneworker.cpp:567
+#: src/rcloneworker.cpp:549
 #, kde-format
 msgid "Moving between different rclone remotes is streamed by KIO."
 msgstr ""
 "Η μετακίνηση μεταξύ διαφορετικών απομακρυσμένων χώρων αποθήκευσης rclone "
 "γίνεται με απευθείας ροή από το KIO."
 
-#: src/rcloneworker.cpp:583
+#: src/rcloneworker.cpp:565
 #, kde-format
 msgid ""
 "Multiple remote objects have the source name. Resolve the duplicates before "
@@ -83,7 +78,7 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν το όνομα προέλευσης. Διαχειριστείτε "
 "τα διπλότυπα πριν μετονομάσετε αυτή τη διαδρομή."
 
-#: src/rcloneworker.cpp:596
+#: src/rcloneworker.cpp:578
 #, kde-format
 msgid ""
 "The destination is ambiguous or read-only and cannot be replaced safely."
@@ -91,14 +86,14 @@ msgstr ""
 "Ο προορισμός είναι ασαφής ή μόνο για ανάγνωση και δεν μπορεί να "
 "αντικατασταθεί με ασφάλεια."
 
-#: src/rcloneworker.cpp:622
+#: src/rcloneworker.cpp:604
 #, kde-format
 msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
 msgstr ""
 "Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
 "να αντιγραφεί."
 
-#: src/rcloneworker.cpp:664
+#: src/rcloneworker.cpp:646
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. Resolve the duplicates before "
@@ -107,17 +102,17 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Διαχειριστείτε τα "
 "διπλότυπα πριν διαγράψετε αυτή τη διαδρομή."
 
-#: src/rcloneworker.cpp:707 app/configwindow.cpp:146 app/main.cpp:24
+#: src/rcloneworker.cpp:689 app/configwindow.cpp:146 app/main.cpp:24
 #, kde-format
 msgid "Rclone Remotes"
 msgstr "Απομακρυσμένοι χώροι αποθήκευσης Rclone"
 
-#: src/rcloneworker.cpp:722
+#: src/rcloneworker.cpp:704
 #, kde-format
 msgid "Configure Remotes…"
 msgstr "Διαμόρφωση απομακρυσμένων…"
 
-#: src/rcloneworker.cpp:768
+#: src/rcloneworker.cpp:748
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. KIO Rclone is showing the newest one."
@@ -125,7 +120,7 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Το KIO Rclone "
 "δείχνει το νεότερο."
 
-#: src/rcloneworker.cpp:785 app/configwindow.cpp:269
+#: src/rcloneworker.cpp:765 app/configwindow.cpp:269
 #, kde-format
 msgid ""
 "rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
@@ -134,22 +129,22 @@ msgstr ""
 "Δεν βρέθηκε το rclone. Εγκαταστήστε το ή ορίστε τη KIO_RCLONE_EXECUTABLE στη "
 "πλήρη διαδρομή του."
 
-#: src/rcloneworker.cpp:905
+#: src/rcloneworker.cpp:885
 #, kde-format
 msgid "Uploading… %1% · %2/s · %3 s remaining"
 msgstr "Μεταφόρτωση… %1% · %2/s · %3 s απομένουν"
 
-#: src/rcloneworker.cpp:907
+#: src/rcloneworker.cpp:887
 #, kde-format
 msgid "Uploading… %1% · %2/s"
 msgstr "Μεταφόρτωση… %1% · %2/s"
 
-#: src/rcloneworker.cpp:934
+#: src/rcloneworker.cpp:914
 #, kde-format
 msgid "Uploading…"
 msgstr "Μεταφόρτωση…"
 
-#: src/rcloneworker.cpp:1021
+#: src/rcloneworker.cpp:1001
 #, kde-format
 msgid ""
 "Multiple remote objects have this name, and this backend cannot identify "
@@ -613,3 +608,7 @@ msgstr "Αναμονή για το rclone…"
 #, kde-format
 msgid "Authorization is waiting in your browser."
 msgstr "Αναμένεται εξουσιοδότηση στο πρόγραμμα περιήγησής σας."
+
+#, kde-format
+#~ msgid "The KIO Rclone configuration launcher is not installed."
+#~ msgstr "Ο εκκινητής διαμόρφωσης KIO Rclone δεν είναι εγκατεστημένος."

@@ -13,6 +13,8 @@ class RcloneUrl
 {
 public:
     static const QString ConfigureEntry;
+    static const QString ConfigurationLauncherScheme;
+    static const QString ConfigurationLauncherMimeType;
 
     explicit RcloneUrl(const QUrl &url);
 
@@ -27,6 +29,7 @@ public:
 
     [[nodiscard]] static QUrl rootUrl();
     [[nodiscard]] static QUrl remoteUrl(const QString &remote);
+    [[nodiscard]] static QUrl configurationLauncherUrl();
 
 private:
     bool m_valid = false;

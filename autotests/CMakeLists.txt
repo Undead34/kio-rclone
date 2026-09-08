@@ -94,5 +94,15 @@ add_test(
     COMMAND ${CMAKE_COMMAND}
         "-DDESKTOP_FILE=${CMAKE_BINARY_DIR}/app/org.kde.kio-rclone-config.desktop"
         "-DEXPECTED_EXECUTABLE=${KDE_INSTALL_FULL_BINDIR}/kio-rclone-config"
+        "-DEXPECTED_LAUNCH_SCHEME=${KIO_RCLONE_CONFIG_LAUNCH_SCHEME}"
+        "-DEXPECTED_LAUNCH_MIME_TYPE=${KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE}"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/desktopfiletest.cmake
+)
+
+add_test(
+    NAME mimefiletest
+    COMMAND ${CMAKE_COMMAND}
+        "-DMIME_FILE=${CMAKE_BINARY_DIR}/app/org.kde.kio-rclone-config.xml"
+        "-DEXPECTED_LAUNCH_MIME_TYPE=${KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE}"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/mimefiletest.cmake
 )
