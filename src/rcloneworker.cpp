@@ -5,11 +5,11 @@
  */
 
 #include "rcloneworker.h"
+#include "kiodirectorynotifier.h"
 #include "rcloneentryformat.h"
 #include "rcloneprocess.h"
 #include "rcloneurl.h"
 
-#include <KDirNotify>
 #include <KLocalizedString>
 
 #include <QCoreApplication>
@@ -534,9 +534,9 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
 
     invalidateDirectorySnapshots();
     if (expectedDestination) {
-        OrgKdeKDirNotifyInterface::emitFilesChanged({url});
+        KioDirectoryNotifier::filesChanged({url});
     } else {
-        OrgKdeKDirNotifyInterface::emitFilesAdded(parentDirectoryUrl(url));
+        KioDirectoryNotifier::filesAdded(parentDirectoryUrl(url));
     }
     processedSize(sizeOk && sourceSize >= 0 ? sourceSize : processed);
     return KIO::WorkerResult::pass();
@@ -580,7 +580,7 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
     }
 
     invalidateDirectorySnapshots();
-    OrgKdeKDirNotifyInterface::emitFilesAdded(parentDirectoryUrl(url));
+    KioDirectoryNotifier::filesAdded(parentDirectoryUrl(url));
     return KIO::WorkerResult::pass();
 }
 
@@ -647,7 +647,7 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     }
 
     invalidateDirectorySnapshots();
-    OrgKdeKDirNotifyInterface::emitFileRenamed(src, dest);
+    KioDirectoryNotifier::fileRenamed(src, dest);
     return KIO::WorkerResult::pass();
 }
 
@@ -725,7 +725,7 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
     }
 
     invalidateDirectorySnapshots();
-    OrgKdeKDirNotifyInterface::emitFilesRemoved({url});
+    KioDirectoryNotifier::filesRemoved({url});
     return KIO::WorkerResult::pass();
 }
 
