@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kio-rclone\n"
 "Report-Msgid-Bugs-To: https://github.com/Undead34/kio-rclone/issues\n"
-"POT-Creation-Date: 2026-09-08 07:27-0400\n"
+"POT-Creation-Date: 2026-09-08 17:46-0400\n"
 "PO-Revision-Date: 2026-09-01 19:05+0300\n"
 "Last-Translator: Vasilis Koulouris <vasileskoulouris@gmail.com>\n"
 "Language-Team: Greek\n"
@@ -24,12 +24,12 @@ msgstr ""
 "Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
 "να τροποποιηθεί."
 
-#: src/rcloneworker.cpp:395
+#: src/rcloneworker.cpp:405
 #, kde-format
 msgid "The remote file changed while it was being read."
 msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ διαβαζόταν."
 
-#: src/rcloneworker.cpp:441
+#: src/rcloneworker.cpp:451
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. Rename or remove the duplicates "
@@ -38,7 +38,7 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Μετονομάστε ή "
 "αφαιρέστε τα διπλότυπα πριν επεξεργαστείτε αυτό το αρχείο."
 
-#: src/rcloneworker.cpp:446
+#: src/rcloneworker.cpp:456
 #, kde-format
 msgid ""
 "This is an exported cloud document with no stable remote size. It is "
@@ -47,29 +47,29 @@ msgstr ""
 "Αυτό είναι ένα εξαγμένο αρχείο νέφους χωρίς σταθερό απομακρυσμένο μέγεθος. "
 "Είναι διαθέσιμο μόνο για ανάγνωση για αποφυγή αντικατάστασης του αρχικού."
 
-#: src/rcloneworker.cpp:467
+#: src/rcloneworker.cpp:477
 #, kde-format
 msgid "Preparing upload…"
 msgstr "Προετοιμάζεται μεταφόρτωση…"
 
-#: src/rcloneworker.cpp:483 src/rcloneworker.cpp:492
+#: src/rcloneworker.cpp:493 src/rcloneworker.cpp:502
 #, kde-format
 msgid "The upload source changed size while it was being read."
 msgstr "Η πηγή μεταφόρτωσης άλλαξε μέγεθος ενώ διαβαζόταν."
 
-#: src/rcloneworker.cpp:517
+#: src/rcloneworker.cpp:527
 #, kde-format
 msgid "The remote file changed while the local edit was being prepared."
 msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ η τοπική επεξεργασία ετοιμαζόταν."
 
-#: src/rcloneworker.cpp:598
+#: src/rcloneworker.cpp:608
 #, kde-format
 msgid "Moving between different rclone remotes is streamed by KIO."
 msgstr ""
 "Η μετακίνηση μεταξύ διαφορετικών απομακρυσμένων χώρων αποθήκευσης rclone "
 "γίνεται με απευθείας ροή από το KIO."
 
-#: src/rcloneworker.cpp:614
+#: src/rcloneworker.cpp:624
 #, kde-format
 msgid ""
 "Multiple remote objects have the source name. Resolve the duplicates before "
@@ -78,7 +78,7 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν το όνομα προέλευσης. Διαχειριστείτε "
 "τα διπλότυπα πριν μετονομάσετε αυτή τη διαδρομή."
 
-#: src/rcloneworker.cpp:627
+#: src/rcloneworker.cpp:637
 #, kde-format
 msgid ""
 "The destination is ambiguous or read-only and cannot be replaced safely."
@@ -86,14 +86,14 @@ msgstr ""
 "Ο προορισμός είναι ασαφής ή μόνο για ανάγνωση και δεν μπορεί να "
 "αντικατασταθεί με ασφάλεια."
 
-#: src/rcloneworker.cpp:658
+#: src/rcloneworker.cpp:668
 #, kde-format
 msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
 msgstr ""
 "Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
 "να αντιγραφεί."
 
-#: src/rcloneworker.cpp:700
+#: src/rcloneworker.cpp:710
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. Resolve the duplicates before "
@@ -102,25 +102,7 @@ msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Διαχειριστείτε τα "
 "διπλότυπα πριν διαγράψετε αυτή τη διαδρομή."
 
-#: src/rcloneworker.cpp:750 app/configwindow.cpp:149 app/main.cpp:24
-#, kde-format
-msgid "Rclone Remotes"
-msgstr "Απομακρυσμένοι χώροι αποθήκευσης Rclone"
-
-#: src/rcloneworker.cpp:765
-#, kde-format
-msgid "Configure Remotes…"
-msgstr "Διαμόρφωση απομακρυσμένων…"
-
-#: src/rcloneworker.cpp:809
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. KIO Rclone is showing the newest one."
-msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Το KIO Rclone "
-"δείχνει το νεότερο."
-
-#: src/rcloneworker.cpp:826 app/configwindow.cpp:319
+#: src/rcloneworker.cpp:781 app/configwindow.cpp:282
 #, kde-format
 msgid ""
 "rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
@@ -129,22 +111,22 @@ msgstr ""
 "Δεν βρέθηκε το rclone. Εγκαταστήστε το ή ορίστε τη KIO_RCLONE_EXECUTABLE στη "
 "πλήρη διαδρομή του."
 
-#: src/rcloneworker.cpp:946
+#: src/rcloneworker.cpp:901
 #, kde-format
 msgid "Uploading… %1% · %2/s · %3 s remaining"
 msgstr "Μεταφόρτωση… %1% · %2/s · %3 s απομένουν"
 
-#: src/rcloneworker.cpp:948
+#: src/rcloneworker.cpp:903
 #, kde-format
 msgid "Uploading… %1% · %2/s"
 msgstr "Μεταφόρτωση… %1% · %2/s"
 
-#: src/rcloneworker.cpp:975
+#: src/rcloneworker.cpp:930
 #, kde-format
 msgid "Uploading…"
 msgstr "Μεταφόρτωση…"
 
-#: src/rcloneworker.cpp:1089
+#: src/rcloneworker.cpp:1044
 #, kde-format
 msgid ""
 "Multiple remote objects have this name, and this backend cannot identify "
@@ -152,6 +134,121 @@ msgid ""
 msgstr ""
 "Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα, και αυτό το backend "
 "δεν μπορεί να αναγνωρίσει ποιο να ανοίξει με ασφάλεια."
+
+#: src/kioentryfactory.cpp:23 app/main.cpp:24 app/configwindow.cpp:149
+#, kde-format
+msgid "Rclone Remotes"
+msgstr "Απομακρυσμένοι χώροι αποθήκευσης Rclone"
+
+#: src/kioentryfactory.cpp:38
+#, kde-format
+msgid "Configure Remotes…"
+msgstr "Διαμόρφωση απομακρυσμένων…"
+
+#: src/kioentryfactory.cpp:82
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. KIO Rclone is showing the newest one."
+msgstr ""
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Το KIO Rclone "
+"δείχνει το νεότερο."
+
+#: app/interactiverclonedialog.cpp:45
+#, kde-format
+msgid "rclone output:"
+msgstr "Έξοδος rclone:"
+
+#: app/interactiverclonedialog.cpp:51
+#, kde-format
+msgid "rclone output"
+msgstr "Έξοδος rclone"
+
+#: app/interactiverclonedialog.cpp:57
+#, kde-format
+msgid "Type a response and press Enter"
+msgstr "Πληκτρολογήστε μια απάντηση και πατήστε Enter"
+
+#: app/interactiverclonedialog.cpp:58
+#, kde-format
+msgid "Sends your response to the question shown by rclone."
+msgstr "Στέλνει την απάντησή σας στην ερώτηση που εμφανίζει το rclone."
+
+#: app/interactiverclonedialog.cpp:59
+#, kde-format
+msgid "Response:"
+msgstr "Απάντηση:"
+
+#: app/directorylistingsettingsdialog.cpp:25
+#, kde-format
+msgid "Settings"
+msgstr "Ρυθμίσεις"
+
+#: app/directorylistingsettingsdialog.cpp:33
+#, kde-format
+msgid "<h2>Directory listing cache</h2>"
+msgstr "<h2>Προσωρινή μνήμη λιστών καταλόγων</h2>"
+
+#: app/directorylistingsettingsdialog.cpp:36
+#, kde-format
+msgid "Choose how folders you have already visited are opened in Dolphin."
+msgstr "Επιλέξτε πώς ανοίγουν στο Dolphin οι φάκελοι που έχετε ήδη επισκεφθεί."
+
+#: app/directorylistingsettingsdialog.cpp:46
+#, kde-format
+msgid "Use recent listings (recommended)"
+msgstr "Χρήση πρόσφατων λιστών (συνιστάται)"
+
+#: app/directorylistingsettingsdialog.cpp:47
+#, kde-format
+msgid "Always check the remote"
+msgstr "Πάντα έλεγχος του απομακρυσμένου χώρου"
+
+#: app/directorylistingsettingsdialog.cpp:49
+#, kde-format
+msgid "When opening a folder:"
+msgstr "Κατά το άνοιγμα φακέλου:"
+
+#: app/directorylistingsettingsdialog.cpp:55
+#, kde-format
+msgid "Reuse a listing for:"
+msgstr "Επαναχρησιμοποίηση λίστας για:"
+
+#: app/directorylistingsettingsdialog.cpp:62
+#, kde-format
+msgid "Clear saved listings when saving"
+msgstr "Εκκαθάριση αποθηκευμένων λιστών κατά την αποθήκευση"
+
+#: app/directorylistingsettingsdialog.cpp:66
+#, kde-format
+msgid "Save"
+msgstr "Αποθήκευση"
+
+#: app/directorylistingsettingsdialog.cpp:69
+#, kde-format
+msgid "Cancel"
+msgstr "Ακύρωση"
+
+#: app/directorylistingsettingsdialog.cpp:77
+#: app/directorylistingsettingsdialog.cpp:82
+#, kde-format
+msgid " second"
+msgid_plural " seconds"
+msgstr[0] " δευτερόλεπτο"
+msgstr[1] " δευτερόλεπτα"
+
+#: app/directorylistingsettingsdialog.cpp:99
+#, kde-format
+msgid ""
+"Recently visited folders can open faster. File-changing actions still check "
+"the remote."
+msgstr ""
+"Οι φάκελοι που επισκεφθήκατε πρόσφατα μπορούν να ανοίγουν γρηγορότερα. Οι "
+"ενέργειες που αλλάζουν αρχεία εξακολουθούν να ελέγχουν τον απομακρυσμένο χώρο."
+
+#: app/directorylistingsettingsdialog.cpp:100
+#, kde-format
+msgid "Every directory opening checks rclone and the remote provider."
+msgstr "Κάθε άνοιγμα καταλόγου ελέγχει το rclone και τον απομακρυσμένο πάροχο."
 
 #: app/configwindow.cpp:105
 #, kde-format
@@ -229,87 +326,52 @@ msgstr ""
 "μέσω του Dolphin κάτω από το <b>rclone:/</b>. Οι ρυθμισμένοι απομακρυσμένοι "
 "διακομιστές σας εμφανίζονται στην παρακάτω λίστα."
 
-#: app/configwindow.cpp:167
-#, kde-format
-msgid "Directory listing cache"
-msgstr ""
-
-#: app/configwindow.cpp:172
-#, kde-format
-msgid "Fresh cache (recommended)"
-msgstr ""
-
-#: app/configwindow.cpp:173
-#, kde-format
-msgid "Strict: always check the remote"
-msgstr ""
-
-#: app/configwindow.cpp:175
-#, kde-format
-msgid "For directory listings:"
-msgstr ""
-
-#: app/configwindow.cpp:180 app/configwindow.cpp:206
-#, kde-format
-msgid " second"
-msgid_plural " seconds"
-msgstr[0] ""
-msgstr[1] ""
-
-#: app/configwindow.cpp:182
-#, kde-format
-msgid "Keep a successful listing for:"
-msgstr ""
-
-#: app/configwindow.cpp:185
-#, kde-format
-msgid ""
-"A fresh snapshot makes recently visited folders open quickly after Dolphin "
-"restarts. Choose strict mode to always check the remote; file changes always "
-"check it before they run."
-msgstr ""
-
-#: app/configwindow.cpp:191
-#, kde-format
-msgid "Clear cached listings"
-msgstr ""
-
-#: app/configwindow.cpp:227
+#: app/configwindow.cpp:178
 #, kde-format
 msgid "Add Remote…"
 msgstr "Προσθήκη απομακρυσμένου χώρου…"
 
-#: app/configwindow.cpp:228
+#: app/configwindow.cpp:179
 #, kde-format
 msgid "Refresh"
 msgstr "Ανανέωση"
 
-#: app/configwindow.cpp:239
+#: app/configwindow.cpp:180
+#, kde-format
+msgid "Settings…"
+msgstr "Ρυθμίσεις…"
+
+#: app/configwindow.cpp:181
+#, kde-format
+msgid "Directory listing settings"
+msgstr "Ρυθμίσεις λιστών καταλόγων"
+
+#: app/configwindow.cpp:193
 #, kde-format
 msgid "Open in Dolphin"
 msgstr "Άνοιγμα στο Dolphin"
 
-#: app/configwindow.cpp:240
+#: app/configwindow.cpp:194
 #, kde-format
 msgid "Edit…"
 msgstr "Επεξεργασία…"
 
-#: app/configwindow.cpp:241
+#: app/configwindow.cpp:195
 #, kde-format
 msgid "Reconnect…"
 msgstr "Επανασύνδεση…"
 
-#: app/configwindow.cpp:242
+#: app/configwindow.cpp:196
 #, kde-format
 msgid "Remove"
 msgstr "Αφαίρεση"
 
-#: app/configwindow.cpp:288
+#: app/configwindow.cpp:251
 #, kde-format
 msgid "Unlock Configuration"
 msgstr "Ξεκλείδωμα Διαμόρφωσης"
 
-#: app/configwindow.cpp:289
+#: app/configwindow.cpp:252
 #, kde-format
 msgid ""
 "Your rclone configuration is encrypted. Enter its existing password to "
@@ -319,7 +381,7 @@ msgstr ""
 "κωδικό πρόσβασης για να την ξεκλειδώσετε για αυτή τη συνεδρία — αυτό δεν "
 "αλλάζει τον κωδικό."
 
-#: app/configwindow.cpp:345
+#: app/configwindow.cpp:308
 #, kde-format
 msgid ""
 "This Google Drive remote uses rclone's shared OAuth client. It is quota-"
@@ -329,14 +391,14 @@ msgstr ""
 "rclone. Είναι περιορισμένου ορίου χρήσης και πρόκειται να καταργηθεί εντός "
 "του 2026."
 
-#: app/configwindow.cpp:355
+#: app/configwindow.cpp:318
 #, kde-format
 msgid "No remotes yet. Use “Add Remote…” to connect your first cloud provider."
 msgstr ""
 "Δεν υπάρχουν απομακρυσμένα ακόμα. Χρησιμοποιήστε “Προσθήκη απομακρυσμένου "
 "χώρου…” για να συνδέσετε τον πρώτο πάροχο νέφους σας."
 
-#: app/configwindow.cpp:358
+#: app/configwindow.cpp:321
 #, kde-format
 msgid ""
 "One Google Drive remote uses rclone's shared OAuth client. Configure your "
@@ -353,121 +415,121 @@ msgstr[1] ""
 "πρόγραμμα-πελάτη OAuth του rclone. Ρυθμίστε το δικό σας πρόγραμμα-πελάτη για "
 "να αποφύγετε καθυστερήσεις λόγω ορίων χρήσης και διακοπή της υπηρεσίας."
 
-#: app/configwindow.cpp:362
+#: app/configwindow.cpp:325
 #, kde-format
 msgid "One remote configured."
 msgid_plural "%1 remotes configured."
 msgstr[0] "Ένας απομακρυσμένος φάκελος ρυθμίστηκε."
 msgstr[1] "%1 απομακρυσμένοι φάκελοι ρυθμίστηκαν."
 
-#: app/configwindow.cpp:371
+#: app/configwindow.cpp:334
 #, kde-format
 msgid "Add Remote"
 msgstr "Προσθήκη απομακρυσμένου φακέλου"
 
-#: app/configwindow.cpp:389
+#: app/configwindow.cpp:352
 #, kde-format
 msgid "Use"
 msgstr "Χρήση"
 
-#: app/configwindow.cpp:402
+#: app/configwindow.cpp:365
 #, kde-format
 msgid "Provider:"
 msgstr "Πάροχος:"
 
-#: app/configwindow.cpp:403
+#: app/configwindow.cpp:366
 #, kde-format
 msgid "Name:"
 msgstr "Όνομα:"
 
-#: app/configwindow.cpp:406
+#: app/configwindow.cpp:369
 #, kde-format
 msgid "rclone defaults"
 msgstr "Προκαθορισμένα από το rclone"
 
-#: app/configwindow.cpp:407
+#: app/configwindow.cpp:370
 #, kde-format
 msgid "Custom"
 msgstr "Προσαρμοσμένο"
 
-#: app/configwindow.cpp:409
+#: app/configwindow.cpp:372
 #, kde-format
 msgid "Authorize with rclone's shared OAuth client."
 msgstr "Εξουσιοδότηση με το κοινόχρηστο πρόγραμμα-πελάτη OAuth του rclone."
 
-#: app/configwindow.cpp:410
+#: app/configwindow.cpp:373
 #, kde-format
 msgid "Provide your own connection values before authorizing."
 msgstr "Καταχωρίστε τις δικές σας τιμές σύνδεσης πριν από την εξουσιοδότηση."
 
-#: app/configwindow.cpp:414
+#: app/configwindow.cpp:377
 #, kde-format
 msgid "Configuration:"
 msgstr "Διαμόρφωση:"
 
-#: app/configwindow.cpp:426
+#: app/configwindow.cpp:389
 #, kde-format
 msgid "Opens rclone's terminal wizard for every other backend."
 msgstr ""
 "Ανοίγει ένα τερματικό που τρέχει τον οδηγό διαμόρφωσης του rclone για κάθε "
 "άλλον πάροχο."
 
-#: app/configwindow.cpp:476
+#: app/configwindow.cpp:439
 #, kde-format
 msgid "%1 *"
 msgstr "%1 *"
 
-#: app/configwindow.cpp:516
+#: app/configwindow.cpp:479
 #, kde-format
 msgid "An OAuth client for %1 was found in KDE System Settings."
 msgstr ""
 "Ένα πρόγραμμα-πελάτης OAuth για το %1 βρέθηκε στις Ρυθμίσεις Συστήματος του "
 "KDE."
 
-#: app/configwindow.cpp:559 app/configwindow.cpp:975
+#: app/configwindow.cpp:522 app/configwindow.cpp:938
 #, kde-format
 msgid "Invalid Name"
 msgstr "Μη έγκυρο όνομα"
 
-#: app/configwindow.cpp:559 app/configwindow.cpp:975
+#: app/configwindow.cpp:522 app/configwindow.cpp:938
 #, kde-format
 msgid "Remote names cannot contain ':', '/', or '\\'."
 msgstr "Τα ονόματα απομακρυσμένων δεν μπορούν να περιέχουν «:», «/» ή «\\»."
 
-#: app/configwindow.cpp:565 app/configwindow.cpp:980
+#: app/configwindow.cpp:528 app/configwindow.cpp:943
 #, kde-format
 msgid "Remote Exists"
 msgstr "Ο απομακρυσμένος φάκελος υπάρχει."
 
-#: app/configwindow.cpp:565 app/configwindow.cpp:980
+#: app/configwindow.cpp:528 app/configwindow.cpp:943
 #, kde-format
 msgid "A remote named “%1” already exists."
 msgstr "Ένας απομακρυσμένος φάκελος με όνομα “%1” υπάρχει ήδη."
 
-#: app/configwindow.cpp:569 app/configwindow.cpp:718 app/configwindow.cpp:724
-#: app/configwindow.cpp:732 app/configwindow.cpp:797 app/configwindow.cpp:841
-#: app/configwindow.cpp:849 app/configwindow.cpp:869 app/configwindow.cpp:1039
-#: app/configwindow.cpp:1144 app/configwindow.cpp:1153
+#: app/configwindow.cpp:532 app/configwindow.cpp:681 app/configwindow.cpp:687
+#: app/configwindow.cpp:695 app/configwindow.cpp:760 app/configwindow.cpp:804
+#: app/configwindow.cpp:812 app/configwindow.cpp:832 app/configwindow.cpp:1002
+#: app/configwindow.cpp:1056 app/configwindow.cpp:1065
 #, kde-format
 msgid "Rclone Error"
 msgstr "Σφάλμα rclone"
 
-#: app/configwindow.cpp:578
+#: app/configwindow.cpp:541
 #, kde-format
 msgid "Missing Value"
 msgstr "Λείπει Τιμή"
 
-#: app/configwindow.cpp:578
+#: app/configwindow.cpp:541
 #, kde-format
 msgid "“%1” is required for this provider."
 msgstr "“%1” απαιτείται για αυτόν τον πάροχο."
 
-#: app/configwindow.cpp:664
+#: app/configwindow.cpp:627
 #, kde-format
 msgid "Connect %1"
 msgstr "Σύνδεση %1"
 
-#: app/configwindow.cpp:665
+#: app/configwindow.cpp:628
 #, kde-format
 msgid ""
 "Complete authorization in the browser window opened by rclone. This "
@@ -477,28 +539,28 @@ msgstr ""
 "θα ανοίξει το rclone. Αυτή η εφαρμογή ποτέ δεν λαμβάνει ή δείχνει το OAuth "
 "token σας."
 
-#: app/configwindow.cpp:672
+#: app/configwindow.cpp:635
 #, kde-format
 msgid "Connect OneDrive"
 msgstr "Σύνδεση του OneDrive"
 
-#: app/configwindow.cpp:732
+#: app/configwindow.cpp:695
 #, kde-format
 msgid "Could not parse rclone's response."
 msgstr "Αδυναμία ανάλυσης της απόκρισης του rclone."
 
-#: app/configwindow.cpp:753
+#: app/configwindow.cpp:716
 #, kde-format
 msgid "Select OneDrive Drive"
 msgstr "Επιλέξτε τη μονάδα δίσκου για το OneDrive"
 
-#: app/configwindow.cpp:753
+#: app/configwindow.cpp:716
 #, kde-format
 msgid "Choose which drive this remote should use:"
 msgstr ""
 "Επιλέξτε ποια μονάδα δίσκου θα χρησιμοποιεί αυτός ο απομακρυσμένος φάκελος:"
 
-#: app/configwindow.cpp:764
+#: app/configwindow.cpp:727
 #, kde-format
 msgid ""
 "Complete authorization in the browser window opened by rclone, if one "
@@ -508,30 +570,33 @@ msgstr ""
 "θα ανοίξει το rclone, αν εμφανιστεί. Αυτή η εφαρμογή ποτέ δεν λαμβάνει ή "
 "δείχνει το OAuth token σας."
 
-#: app/configwindow.cpp:827
+#: app/configwindow.cpp:790
 #, kde-format
 msgid "Reconnect %1"
 msgstr "Επανασύνδεση του %1"
 
-#: app/configwindow.cpp:828
+#: app/configwindow.cpp:791
 #, kde-format
-msgid "Complete authorization in the browser window opened by rclone."
+msgid ""
+"Answer any questions from rclone below, then complete authorization in the "
+"browser window it opens."
 msgstr ""
-"Ολοκληρώστε την εξουσιοδότηση στο παράθυρο του προγράμματος περιήγησης που "
-"θα ανοίξει το rclone."
+"Απαντήστε σε τυχόν ερωτήσεις του rclone παρακάτω και, στη συνέχεια, "
+"ολοκληρώστε την εξουσιοδότηση στο παράθυρο του προγράμματος περιήγησης που "
+"ανοίγει."
 
-#: app/configwindow.cpp:849
+#: app/configwindow.cpp:812
 #, kde-format
 msgid "Could not read the current remote configuration."
 msgstr ""
 "Αδυναμία ανάγνωσης της τρέχουσας διαμόρφωσης του απομακρυσμένου φακέλου."
 
-#: app/configwindow.cpp:878
+#: app/configwindow.cpp:841
 #, kde-format
 msgid "Rename Incomplete"
 msgstr "Ατελής μετονομασία"
 
-#: app/configwindow.cpp:879
+#: app/configwindow.cpp:842
 #, kde-format
 msgid ""
 "“%1” was created as a copy of “%2”, but the old entry could not be removed "
@@ -542,17 +607,17 @@ msgstr ""
 "μπορούσε να διαγραφεί αυτόματα: %3\n"
 "Διαγράψτε το χειροκίνητα για να ολοκληρωθεί η μετονομασία."
 
-#: app/configwindow.cpp:897
+#: app/configwindow.cpp:860
 #, kde-format
 msgid "Edit %1"
 msgstr "Επεξεργασία του %1"
 
-#: app/configwindow.cpp:905
+#: app/configwindow.cpp:868
 #, kde-format
 msgid "Name shown in Dolphin:"
 msgstr "Προβαλλόμενο όνομα στο Dolphin:"
 
-#: app/configwindow.cpp:922
+#: app/configwindow.cpp:885
 #, kde-format
 msgid ""
 "Use your own OAuth desktop client to avoid rclone's shared quota. <a "
@@ -561,17 +626,17 @@ msgstr ""
 "Χρησιμοποιήστε το δικό σας πρόγραμμα-πελάτη OAuth για αποφυγή του "
 "κοινόχρηστου ορίου χρήσης του rclone. <a href=\"%1\">%2</a>"
 
-#: app/configwindow.cpp:935
+#: app/configwindow.cpp:898
 #, kde-format
 msgid "Client ID:"
 msgstr "Αναγνωριστικό προγράμματος-πελάτη:"
 
-#: app/configwindow.cpp:936
+#: app/configwindow.cpp:899
 #, kde-format
 msgid "Client secret:"
 msgstr "Μυστικό προγράμματος-πελάτη:"
 
-#: app/configwindow.cpp:942
+#: app/configwindow.cpp:905
 #, kde-format
 msgid ""
 "A custom OAuth client for %1 is already configured in KDE System Settings."
@@ -579,17 +644,17 @@ msgstr ""
 "Ένα προσαρμοσμένο πρόγραμμα-πελάτης OAuth για το %1 έχει ήδη ρυθμιστεί στις "
 "Ρυθμίσεις Συστήματος του KDE."
 
-#: app/configwindow.cpp:946
+#: app/configwindow.cpp:909
 #, kde-format
 msgid "Use it for this remote"
 msgstr "Χρησιμοποιήστε το για αυτόν τον απομακρυσμένο φάκελο."
 
-#: app/configwindow.cpp:1003
+#: app/configwindow.cpp:966
 #, kde-format
 msgid "Authorize %1"
 msgstr "Εξουσιοδότηση του %1"
 
-#: app/configwindow.cpp:1004
+#: app/configwindow.cpp:967
 #, kde-format
 msgid ""
 "Complete authorization in the browser. rclone will store the new token "
@@ -598,12 +663,12 @@ msgstr ""
 "Ολοκληρώστε την εξουσιοδότηση στο πρόγραμμα περιήγησης. Το rclone θα "
 "αποθηκεύσει το νέο token άμεσα στη διαμόρφωσή του."
 
-#: app/configwindow.cpp:1007
+#: app/configwindow.cpp:970
 #, kde-format
 msgid "Authorization Incomplete"
 msgstr "Ατελής εξουσιοδότηση"
 
-#: app/configwindow.cpp:1008
+#: app/configwindow.cpp:971
 #, kde-format
 msgid ""
 "The OAuth credentials were not activated. Open Edit again and complete the "
@@ -612,12 +677,12 @@ msgstr ""
 "Τα διαπιστευτήρια OAuth δεν ενεργοποιήθηκαν. Ανοίξτε το “Επεξεργασία” ξανά "
 "και ολοκληρώστε την εξουσιοδότηση από το πρόγραμμα περιήγησης."
 
-#: app/configwindow.cpp:1027
+#: app/configwindow.cpp:990
 #, kde-format
 msgid "Remove Remote"
 msgstr "Αφαίρεση απομακρυσμένου φακέλου"
 
-#: app/configwindow.cpp:1028
+#: app/configwindow.cpp:991
 #, kde-format
 msgid ""
 "Remove “%1” from the rclone configuration?\n"
@@ -628,12 +693,12 @@ msgstr ""
 "\n"
 "Δεν θα διαγραφούν αρχεία νέφους."
 
-#: app/configwindow.cpp:1067
+#: app/configwindow.cpp:1030
 #, kde-format
 msgid "Advanced Configuration"
 msgstr "Προχωρημένη Διαμόρφωση"
 
-#: app/configwindow.cpp:1068
+#: app/configwindow.cpp:1031
 #, kde-format
 msgid ""
 "No supported terminal was found. Run this command manually:\n"
@@ -644,15 +709,13 @@ msgstr ""
 "\n"
 "%1 config"
 
-#: app/configwindow.cpp:1105
 #, kde-format
-msgid "Waiting for rclone…"
-msgstr "Αναμονή για το rclone…"
+#~ msgid "Waiting for rclone…"
+#~ msgstr "Αναμονή για το rclone…"
 
-#: app/configwindow.cpp:1122
 #, kde-format
-msgid "Authorization is waiting in your browser."
-msgstr "Αναμένεται εξουσιοδότηση στο πρόγραμμα περιήγησής σας."
+#~ msgid "Authorization is waiting in your browser."
+#~ msgstr "Αναμένεται εξουσιοδότηση στο πρόγραμμα περιήγησής σας."
 
 #, kde-format
 #~ msgid "The KIO Rclone configuration launcher is not installed."
