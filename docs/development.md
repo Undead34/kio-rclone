@@ -7,6 +7,10 @@ description: Build, install, remove, test, document, translate, and troubleshoot
 This is the contributor guide. Use separate build directories for each build
 type and install target. Do not build in the source tree.
 
+Before changing worker code, read the [architecture guide](/architecture). It
+defines the KIO/rclone boundaries, cache and mutation invariants, and links to
+the KDE APIs whose contracts are easy to overlook.
+
 ## Prerequisites
 
 On Arch Linux, install the build and validation tools:
