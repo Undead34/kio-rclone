@@ -80,7 +80,9 @@ The worker exposes this sequence as small, use-case-sized methods:
 listDir
   ├── listRoot
   ├── cachedDirectory → publishDirectoryEntries
-  └── listRemoteDirectory → publishDirectoryEntries → snapshot store
+  └── listRemoteDirectory
+       ├── listUniqueDirectory → stream entries → snapshot store
+       └── listDuplicateSafeDirectory → publishDirectoryEntries → snapshot store
 ```
 
 `F5`/reload enters only through the explicit reload branch. Normal navigation
@@ -106,8 +108,9 @@ validate the relevant target first.
 
 KIO represents a listed item through one `UDS_NAME`, which becomes a URL path
 component. Empty names, `.`/`..`, slash-containing names, and NUL-containing
-names cannot be published as ordinary children. Keep that validation next to
-the KIO entry mapping, not spread across list, stat, and mutation code.
+names cannot be published as ordinary children. `KioEntryBuilder::isRepresentable`
+keeps that validation at the KIO mapping boundary; listing paths call it before
+they stream or accumulate an entry.
 
 If a remote can expose two items with the same visible name, select one
 read-only representative before publishing it. Never silently perform a

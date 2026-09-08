@@ -5,9 +5,9 @@
  */
 
 #include "worker.h"
+#include "cache/directorylistingpolicy.h"
 #include "directorynotifier.h"
 #include "entrybuilder.h"
-#include "cache/directorylistingpolicy.h"
 #include "rclone/entryformat.h"
 #include "rclone/process.h"
 #include "rclone/url.h"
@@ -105,9 +105,9 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 
     const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
     if (bypassesDirectorySnapshot(metaData(QStringLiteral("cache")))) {
-        // An explicit reload must discard the snapshot before listing. If the
-        // remote request then fails, a later normal request must not revive
-        // data the caller deliberately asked to refresh.
+        // F5/reload deliberately has stronger freshness semantics. Clear the
+        // shared snapshots before listing so an unsuccessful refresh cannot
+        // make a later normal request revive data the user rejected.
         invalidateDirectorySnapshots();
     } else if (const auto cachedItems = cachedDirectory(directory, policy)) {
         publishDirectoryEntries(directory, *cachedItems);
@@ -120,7 +120,7 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
 {
     QString error;
-    const QStringList remotes = m_rclone.remotes(&error, [this]() {
+    const QList<RcloneRemote> remotes = m_rclone.remoteList(&error, [this]() {
         return wasKilled();
     });
     if (wasKilled()) {
@@ -130,23 +130,15 @@ KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
     }
 
-    // Provider type is cosmetic. A failed lookup falls back to the generic
-    // cloud icon without making the root listing fail.
-    const QHash<QString, QString> types = m_rclone.remoteTypes(nullptr, [this]() {
-        return wasKilled();
-    });
-    if (wasKilled()) {
-        return KIO::WorkerResult::pass();
+    // listremotes --json carries the type on current rclone versions. Older
+    // versions simply fall back to the generic cloud icon; no config dump is
+    // needed for a cosmetic detail.
+    m_remoteDuplicateNameSupport.clear();
+    listEntry(KioEntryBuilder::root());
+    for (const RcloneRemote &remote : remotes) {
+        listEntry(KioEntryBuilder::remote(remote.name, false, remote.type));
     }
-
-    KIO::UDSEntryList entries;
-    entries.reserve(remotes.size() + 2);
-    entries.append(KioEntryBuilder::root());
-    for (const QString &remote : remotes) {
-        entries.append(KioEntryBuilder::remote(remote, false, types.value(remote)));
-    }
-    entries.append(KioEntryBuilder::configure());
-    listEntries(entries);
+    listEntry(KioEntryBuilder::configure());
     return KIO::WorkerResult::pass();
 }
 
@@ -154,38 +146,112 @@ KIO::WorkerResult RcloneWorker::listRemoteDirectory(const QUrl &requestUrl,
                                                      const RcloneUrl &directory,
                                                      const DirectoryListingPolicy &policy)
 {
-    QString error;
-    const QList<RcloneItem> items = m_rclone.list(directory.remoteSpec(), &error, [this]() {
-        return wasKilled();
-    });
+    const std::optional<bool> duplicateNames = remoteMayHaveDuplicateNames(directory.remote());
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
-    if (!error.isEmpty()) {
+
+    if (duplicateNames && !*duplicateNames) {
+        return listUniqueDirectory(requestUrl, directory, policy);
+    }
+
+    return listDuplicateSafeDirectory(requestUrl, directory, policy);
+}
+
+KIO::WorkerResult RcloneWorker::listUniqueDirectory(const QUrl &requestUrl,
+                                                     const RcloneUrl &directory,
+                                                     const DirectoryListingPolicy &policy)
+{
+    // rclone guarantees this remote has no duplicate names. Send each entry to
+    // KIO as it arrives; WorkerBase batches IPC internally, avoiding a JSON
+    // array and UDSEntryList peak for ordinary remotes.
+    listEntry(KioEntryBuilder::remote(directory.remote(), true));
+
+    QList<RcloneItem> cacheItems;
+    bool cacheableSnapshot = policy.allowsSnapshots();
+    QString error;
+    const bool listed = m_rclone.listStreaming(
+        directory.remoteSpec(),
+        [this, &cacheItems, &cacheableSnapshot](const RcloneItem &item) {
+            if (wasKilled()) {
+                return false;
+            }
+            if (!KioEntryBuilder::isRepresentable(item)) {
+                return true;
+            }
+
+            listEntry(KioEntryBuilder::item(item));
+            if (cacheableSnapshot) {
+                if (cacheItems.size() >= DirectorySnapshotCache::MaximumItemCount) {
+                    cacheItems.clear();
+                    cacheableSnapshot = false;
+                } else {
+                    cacheItems.append(item);
+                }
+            }
+            return true;
+        },
+        &error,
+        [this]() {
+            return wasKilled();
+        });
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!listed) {
         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
     }
+    if (cacheableSnapshot) {
+        static_cast<void>(m_directorySnapshots.store(directory.remote(), directory.remotePath(), cacheItems));
+    }
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult RcloneWorker::listDuplicateSafeDirectory(const QUrl &requestUrl,
+                                                            const RcloneUrl &directory,
+                                                            const DirectoryListingPolicy &policy)
+{
+    // The capability probe is deliberately fail-safe. If an older rclone or a
+    // backend cannot describe itself, retain one read-only representative per
+    // name rather than exposing ambiguous URLs to KIO.
+    QString error;
 
     QList<RcloneItem> visibleItems;
     QHash<QString, qsizetype> itemIndexes;
-    visibleItems.reserve(items.size());
-    for (const RcloneItem &item : items) {
-        if (item.name.isEmpty() || item.name.contains(QLatin1Char('/'))) {
-            continue;
-        }
+    const bool listed = m_rclone.listStreaming(
+        directory.remoteSpec(),
+        [this, &visibleItems, &itemIndexes](const RcloneItem &item) {
+            if (wasKilled()) {
+                return false;
+            }
+            if (!KioEntryBuilder::isRepresentable(item)) {
+                return true;
+            }
 
-        const auto existing = itemIndexes.constFind(item.name);
-        if (existing == itemIndexes.cend()) {
-            itemIndexes.insert(item.name, visibleItems.size());
-            visibleItems.append(item);
-            continue;
-        }
+            const auto existing = itemIndexes.constFind(item.name);
+            if (existing == itemIndexes.cend()) {
+                itemIndexes.insert(item.name, visibleItems.size());
+                visibleItems.append(item);
+                return true;
+            }
 
-        RcloneItem &selected = visibleItems[*existing];
-        if (RcloneEntryFormat::preferItem(item, selected)) {
-            selected = item;
-        }
-        selected.ambiguous = true;
-        selected.readOnly = true;
+            RcloneItem &selected = visibleItems[*existing];
+            if (RcloneEntryFormat::preferItem(item, selected)) {
+                selected = item;
+            }
+            selected.ambiguous = true;
+            selected.readOnly = true;
+            return true;
+        },
+        &error,
+        [this]() {
+            return wasKilled();
+        });
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!listed) {
+        return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
     }
 
     publishDirectoryEntries(directory, visibleItems);
@@ -233,19 +299,25 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
         return result;
     }
     if (rcloneUrl.isRemoteRoot()) {
-        // A single config dump both confirms the remote exists and yields its
-        // provider type, so the stat entry can carry the matching icon.
+        // listremotes is sufficient to confirm the remote and obtain its type;
+        // do not start a config dump just to stat a virtual root.
         QString error;
-        const QHash<QString, QString> types = m_rclone.remoteTypes(&error, [this]() {
+        const QList<RcloneRemote> remotes = m_rclone.remoteList(&error, [this]() {
             return wasKilled();
         });
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
         if (!error.isEmpty()) {
             return errorResult(error, KIO::ERR_CANNOT_STAT, url);
         }
-        if (!types.contains(rcloneUrl.remote())) {
+        const auto remote = std::find_if(remotes.cbegin(), remotes.cend(), [&rcloneUrl](const RcloneRemote &candidate) {
+            return candidate.name == rcloneUrl.remote();
+        });
+        if (remote == remotes.cend()) {
             return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, url.toDisplayString());
         }
-        statEntry(KioEntryBuilder::remote(rcloneUrl.remote(), false, types.value(rcloneUrl.remote())));
+        statEntry(KioEntryBuilder::remote(remote->name, false, remote->type));
         return KIO::WorkerResult::pass();
     }
 
@@ -454,6 +526,12 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
+    if (const auto result = ensureUnambiguousParentDirectories(rcloneUrl, KIO::ERR_CANNOT_WRITE); !result.success()) {
+        return result;
+    }
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
     if (m_cachedDownloadSpec == rcloneUrl.remoteSpec()) {
         clearCachedDownload();
     }
@@ -587,11 +665,24 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
+    if (const auto result = ensureUnambiguousParentDirectories(rcloneUrl, KIO::ERR_CANNOT_MKDIR); !result.success()) {
+        return result;
+    }
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
 
-    std::optional<RcloneItem> existingItem;
     QString error;
-    if (destinationExists(rcloneUrl.remoteSpec(), &existingItem, &error)) {
-        return KIO::WorkerResult::fail(existingItem && existingItem->isDirectory ? KIO::ERR_DIR_ALREADY_EXIST : KIO::ERR_FILE_ALREADY_EXIST,
+    const std::optional<RcloneItem> existingItem = sourceItem(rcloneUrl, &error);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (existingItem) {
+        if (existingItem->ambiguous) {
+            return KIO::WorkerResult::fail(KIO::ERR_CANNOT_MKDIR,
+                                           i18n("Multiple remote objects have this name. Resolve the duplicates before creating this path."));
+        }
+        return KIO::WorkerResult::fail(existingItem->isDirectory ? KIO::ERR_DIR_ALREADY_EXIST : KIO::ERR_FILE_ALREADY_EXIST,
                                        url.toDisplayString());
     }
     if (!error.isEmpty() && !RcloneClient::isNotFoundError(error)) {
@@ -633,6 +724,15 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     }
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(source, KIO::ERR_CANNOT_RENAME); !result.success()) {
+        return result;
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(destination, KIO::ERR_CANNOT_RENAME); !result.success()) {
+        return result;
+    }
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
     }
 
     QString sourceError;
@@ -719,6 +819,12 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
 
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(rcloneUrl, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR); !result.success()) {
+        return result;
+    }
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
     }
 
     QString sourceError;
@@ -946,65 +1052,56 @@ RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &re
     return result;
 }
 
-bool RcloneWorker::remoteExists(const QString &remote, QString *error) const
+std::optional<bool> RcloneWorker::remoteMayHaveDuplicateNames(const QString &remote)
 {
-    return m_rclone
-        .remotes(error,
-                 [this]() {
-                     return wasKilled();
-                 })
-        .contains(remote);
+    const auto cached = m_remoteDuplicateNameSupport.constFind(remote);
+    if (cached != m_remoteDuplicateNameSupport.cend()) {
+        return *cached;
+    }
+
+    QString ignoredError;
+    const std::optional<bool> support = m_rclone.mayHaveDuplicateNames(
+        remote + QLatin1Char(':'),
+        &ignoredError,
+        [this]() {
+            return wasKilled();
+        });
+    if (support && !wasKilled()) {
+        m_remoteDuplicateNameSupport.insert(remote, *support);
+    }
+    return support;
 }
 
-bool RcloneWorker::destinationExists(const QString &remoteSpec, std::optional<RcloneItem> *item, QString *error) const
+KIO::WorkerResult RcloneWorker::ensureUnambiguousParentDirectories(const RcloneUrl &url, int fallbackError) const
 {
-    const auto result = m_rclone.stat(remoteSpec, error, [this]() {
-        return wasKilled();
-    });
-    if (item) {
-        *item = result;
+    const QStringList parts = url.remotePath().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    QString parentPath;
+    for (qsizetype index = 0; index + 1 < parts.size(); ++index) {
+        parentPath += (parentPath.isEmpty() ? QString() : QStringLiteral("/")) + parts.at(index);
+
+        QString error;
+        const std::optional<RcloneItem> parent = sourceItem(url.remote(), parentPath, &error);
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+        if (!parent) {
+            return errorResult(error.isEmpty() ? i18n("The parent directory could not be resolved safely.") : error, fallbackError, url.url());
+        }
+        if (!parent->isDirectory) {
+            return KIO::WorkerResult::fail(fallbackError, i18n("A parent path component is not a directory."));
+        }
+        if (parent->ambiguous) {
+            return KIO::WorkerResult::fail(fallbackError,
+                                           i18n("A parent directory has multiple remote objects with the same name. "
+                                                "Resolve the duplicates before changing this path."));
+        }
     }
-    return result.has_value();
+    return KIO::WorkerResult::pass();
 }
 
 std::optional<RcloneItem> RcloneWorker::sourceItem(const RcloneUrl &url, QString *error) const
 {
-    const QString fileName = url.remotePath().section(QLatin1Char('/'), -1);
-    const QString parentPath = url.remotePath().section(QLatin1Char('/'), 0, -2);
-    const QString parentSpec = url.remote() + QLatin1Char(':') + parentPath;
-
-    QString listError;
-    const QList<RcloneItem> items = m_rclone.list(parentSpec, &listError, [this]() {
-        return wasKilled();
-    });
-    if (!listError.isEmpty()) {
-        if (error) {
-            *error = listError;
-        }
-        return std::nullopt;
-    }
-
-    std::optional<RcloneItem> selected;
-    int matches = 0;
-    for (const RcloneItem &item : items) {
-        if (item.name != fileName) {
-            continue;
-        }
-        ++matches;
-        if (!selected || RcloneEntryFormat::preferItem(item, *selected)) {
-            selected = item;
-        }
-    }
-
-    if (!selected) {
-        if (error) {
-            *error = QStringLiteral("object not found");
-        }
-        return std::nullopt;
-    }
-    selected->ambiguous = matches > 1;
-    selected->readOnly = selected->readOnly || selected->ambiguous;
-    return selected;
+    return sourceItem(url.remote(), url.remotePath(), error);
 }
 
 std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const RcloneUrl &url)
@@ -1037,6 +1134,53 @@ std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const Rclon
 void RcloneWorker::invalidateDirectorySnapshots()
 {
     m_directorySnapshots.clear();
+}
+
+std::optional<RcloneItem> RcloneWorker::sourceItem(const QString &remote, const QString &remotePath, QString *error) const
+{
+    const QString fileName = remotePath.section(QLatin1Char('/'), -1);
+    const QString parentPath = remotePath.section(QLatin1Char('/'), 0, -2);
+    const QString parentSpec = remote + QLatin1Char(':') + parentPath;
+
+    QString listError;
+    std::optional<RcloneItem> selected;
+    bool ambiguous = false;
+    const bool listed = m_rclone.listStreaming(
+        parentSpec,
+        [&fileName, &selected, &ambiguous](const RcloneItem &item) {
+            if (item.name != fileName) {
+                return true;
+            }
+            if (selected) {
+                ambiguous = true;
+                if (RcloneEntryFormat::preferItem(item, *selected)) {
+                    selected = item;
+                }
+                return true;
+            }
+            selected = item;
+            return true;
+        },
+        &listError,
+        [this]() {
+            return wasKilled();
+        });
+    if (!listed) {
+        if (error) {
+            *error = listError;
+        }
+        return std::nullopt;
+    }
+
+    if (!selected) {
+        if (error) {
+            *error = QStringLiteral("object not found");
+        }
+        return std::nullopt;
+    }
+    selected->ambiguous = ambiguous;
+    selected->readOnly = selected->readOnly || selected->ambiguous;
+    return selected;
 }
 
 KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem &item)

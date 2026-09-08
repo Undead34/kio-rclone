@@ -37,6 +37,8 @@ constexpr auto CopytoBlockFile = ".kio-rclone-test-block-copyto";
 constexpr auto CopytoFailFile = ".kio-rclone-test-fail-copyto";
 constexpr auto CopytoStartedFile = ".kio-rclone-test-copyto-started";
 constexpr auto LogicalItemsEnvironment = "KIO_RCLONE_TEST_LOGICAL_ITEMS";
+constexpr auto ListingChunkSizeEnvironment = "KIO_RCLONE_TEST_LIST_CHUNK_SIZE";
+constexpr auto ListingChunkDelayEnvironment = "KIO_RCLONE_TEST_LIST_CHUNK_DELAY_MS";
 constexpr auto ListingCounterEnvironment = "KIO_RCLONE_TEST_LIST_COUNTER";
 constexpr auto ListingFailureFile = ".kio-rclone-test-fail-listing";
 
@@ -469,7 +471,24 @@ int writePersistentListing(const QString &root, const QString &remoteSpec, const
     }
 
     const QByteArray json = QJsonDocument(items).toJson(QJsonDocument::Compact);
-    return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
+    bool chunkSizeOk = false;
+    const int chunkSize = qEnvironmentVariableIntValue(ListingChunkSizeEnvironment, &chunkSizeOk);
+    if (!chunkSizeOk || chunkSize <= 0) {
+        return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
+    }
+
+    bool delayOk = false;
+    const int delayMilliseconds = qEnvironmentVariableIntValue(ListingChunkDelayEnvironment, &delayOk);
+    for (qsizetype offset = 0; offset < json.size(); offset += chunkSize) {
+        const qsizetype size = qMin<qsizetype>(chunkSize, json.size() - offset);
+        if (!writeAll(STDOUT_FILENO, json.constData() + offset, size)) {
+            return 1;
+        }
+        if (delayOk && delayMilliseconds > 0 && offset + size < json.size()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMilliseconds));
+        }
+    }
+    return 0;
 }
 
 QByteArray readStandardInput()
@@ -779,6 +798,19 @@ int writePersistentRemotes(const QString &root)
     return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
 }
 
+int writePersistentFeatures(const QList<LogicalItem> &logicalItems)
+{
+    // Logical manifests model duplicate-capable remote objects. Tests without
+    // one exercise the worker's immediate, unique-name listing path.
+    const bool duplicateNames = !logicalItems.isEmpty();
+    const QJsonObject features{
+        {QStringLiteral("DuplicateFiles"), duplicateNames},
+        {QStringLiteral("MergeDirs"), duplicateNames},
+    };
+    const QByteArray json = QJsonDocument(QJsonObject{{QStringLiteral("Features"), features}}).toJson(QJsonDocument::Compact);
+    return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
+}
+
 int runPersistent(const QString &root, const QStringList &arguments)
 {
     QString logicalItemsError;
@@ -798,6 +830,9 @@ int runPersistent(const QString &root, const QStringList &arguments)
     }
     if (command == QLatin1String("copyto")) {
         return copyPersistentFile(root, arguments, logicalItems);
+    }
+    if (command == QLatin1String("backend") && arguments.size() >= 3 && arguments.at(2) == QLatin1String("features")) {
+        return writePersistentFeatures(logicalItems);
     }
     if (command == QLatin1String("backend")) {
         return copyPersistentFileById(arguments, logicalItems);
@@ -852,6 +887,10 @@ int main(int argc, char **argv)
     if (command == QLatin1String("listremotes")) {
         const QByteArray remotes(R"([{"name":"test","type":"drive","source":"file"}])");
         return writeAll(STDOUT_FILENO, remotes.constData(), remotes.size()) ? 0 : 1;
+    }
+    if (command == QLatin1String("backend") && arguments.size() >= 3 && arguments.at(2) == QLatin1String("features")) {
+        const QByteArray features(R"({"Features":{"DuplicateFiles":false,"MergeDirs":false}})");
+        return writeAll(STDOUT_FILENO, features.constData(), features.size()) ? 0 : 1;
     }
 
     return writeError(QByteArrayLiteral("unsupported fake command: ") + command.toUtf8());

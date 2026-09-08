@@ -20,6 +20,9 @@ private Q_SLOTS:
     void buildsConfigurationLauncherUrl();
     void recognizesConfigureEntry();
     void treatsConfigureEntryDescendantsAsConfigureEntry();
+    void doesNotShadowRealRemoteNamedLikeOldConfigureEntry();
+    void rejectsDotSegments();
+    void rejectsNonRemoteNames();
 };
 
 void RcloneUrlTest::parsesRoot()
@@ -83,6 +86,27 @@ void RcloneUrlTest::treatsConfigureEntryDescendantsAsConfigureEntry()
     QVERIFY(url.isValid());
     QVERIFY(url.isConfigureEntry());
     QVERIFY(url.remoteSpec().isEmpty());
+}
+
+void RcloneUrlTest::doesNotShadowRealRemoteNamedLikeOldConfigureEntry()
+{
+    const RcloneUrl url(QUrl(QStringLiteral("rclone:/.kio-rclone-config")));
+    QVERIFY(url.isValid());
+    QVERIFY(!url.isConfigureEntry());
+    QCOMPARE(url.remote(), QStringLiteral(".kio-rclone-config"));
+    QCOMPARE(url.remoteSpec(), QStringLiteral(".kio-rclone-config:"));
+}
+
+void RcloneUrlTest::rejectsDotSegments()
+{
+    QVERIFY(!RcloneUrl(QUrl(QStringLiteral("rclone:/Photos/./report.pdf"))).isValid());
+    QVERIFY(!RcloneUrl(QUrl(QStringLiteral("rclone:/Photos/%2E%2E/report.pdf"))).isValid());
+}
+
+void RcloneUrlTest::rejectsNonRemoteNames()
+{
+    QVERIFY(!RcloneUrl(QUrl(QStringLiteral("rclone:/%3Alocal%3A/tmp"))).isValid());
+    QVERIFY(!RcloneUrl(QUrl(QStringLiteral("rclone:/-not-a-remote/file"))).isValid());
 }
 
 QTEST_GUILESS_MAIN(RcloneUrlTest)

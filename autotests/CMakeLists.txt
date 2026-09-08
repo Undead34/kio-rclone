@@ -52,6 +52,14 @@ target_link_libraries(fake-rclone
         Qt6::Core
 )
 
+target_compile_definitions(rcloneclienttest
+    PRIVATE
+        FAKE_RCLONE_PATH="$<TARGET_FILE:fake-rclone>"
+)
+add_dependencies(rcloneclienttest
+    fake-rclone
+)
+
 add_executable(rclonepausetest
     rclonepausetest.cpp
 )

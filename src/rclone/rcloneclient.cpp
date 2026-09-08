@@ -5,6 +5,7 @@
  */
 
 #include "rcloneclient.h"
+#include "process.h"
 
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -12,11 +13,15 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
-#include <QProcessEnvironment>
 #include <QStandardPaths>
+
+#include <algorithm>
+#include <utility>
 
 namespace
 {
+constexpr qsizetype MaximumListingItemSize = 4 * 1024 * 1024;
+
 std::optional<RcloneItem> itemFromObject(const QJsonObject &object)
 {
     if (object.isEmpty()) {
@@ -48,6 +53,175 @@ void setError(QString *error, const QString &message)
         *error = message;
     }
 }
+
+bool isJsonWhitespace(char value)
+{
+    return value == ' ' || value == '\n' || value == '\r' || value == '\t';
+}
+
+// lsjson writes one JSON object at a time, but its output is still a valid JSON
+// array.  Parse the array incrementally instead of assuming a line layout: a
+// filename may legally contain escaped newlines or braces.
+class JsonArrayItemReader
+{
+  public:
+    explicit JsonArrayItemReader(RcloneClient::ItemCallback onItem)
+        : m_onItem(std::move(onItem))
+    {
+    }
+
+    bool feed(const QByteArray &data, QString *error)
+    {
+        for (const char character : data) {
+            if (!consume(character, error)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool finish(QString *error) const
+    {
+        if (m_state == State::Finished) {
+            return true;
+        }
+        setError(error, QStringLiteral("rclone returned an incomplete JSON listing"));
+        return false;
+    }
+
+  private:
+    enum class State {
+        BeforeArray,
+        BeforeItem,
+        InItem,
+        AfterItem,
+        Finished,
+    };
+
+    bool fail(QString *error, const QString &message) const
+    {
+        setError(error, message);
+        return false;
+    }
+
+    bool completeItem(QString *error)
+    {
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(m_item, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            return fail(error, QStringLiteral("Invalid item in rclone listing: %1").arg(parseError.errorString()));
+        }
+
+        const std::optional<RcloneItem> item = itemFromObject(document.object());
+        if (!item) {
+            return fail(error, QStringLiteral("rclone returned an empty listing item"));
+        }
+        if (!m_onItem(*item)) {
+            return fail(error, QStringLiteral("Listing was stopped by the caller"));
+        }
+
+        m_item.clear();
+        m_state = State::AfterItem;
+        return true;
+    }
+
+    bool consume(char character, QString *error)
+    {
+        switch (m_state) {
+        case State::BeforeArray:
+            if (isJsonWhitespace(character)) {
+                return true;
+            }
+            if (character != '[') {
+                return fail(error, QStringLiteral("rclone listing is not a JSON array"));
+            }
+            m_state = State::BeforeItem;
+            m_allowArrayEnd = true;
+            return true;
+
+        case State::BeforeItem:
+            if (isJsonWhitespace(character)) {
+                return true;
+            }
+            if (character == ']') {
+                return m_allowArrayEnd ? finishArray() : fail(error, QStringLiteral("Unexpected end of rclone listing"));
+            }
+            if (character != '{') {
+                return fail(error, QStringLiteral("rclone listing contains a non-object item"));
+            }
+            m_item = QByteArray(1, character);
+            m_objectDepth = 1;
+            m_inString = false;
+            m_escaped = false;
+            m_state = State::InItem;
+            return true;
+
+        case State::InItem:
+            if (m_item.size() >= MaximumListingItemSize) {
+                return fail(error, QStringLiteral("A single rclone listing item is too large to process safely"));
+            }
+            m_item.append(character);
+            if (m_inString) {
+                if (m_escaped) {
+                    m_escaped = false;
+                } else if (character == '\\') {
+                    m_escaped = true;
+                } else if (character == '"') {
+                    m_inString = false;
+                }
+                return true;
+            }
+
+            if (character == '"') {
+                m_inString = true;
+            } else if (character == '{') {
+                ++m_objectDepth;
+            } else if (character == '}') {
+                --m_objectDepth;
+                if (m_objectDepth < 0) {
+                    return fail(error, QStringLiteral("Invalid object nesting in rclone listing"));
+                }
+                if (m_objectDepth == 0) {
+                    return completeItem(error);
+                }
+            }
+            return true;
+
+        case State::AfterItem:
+            if (isJsonWhitespace(character)) {
+                return true;
+            }
+            if (character == ',') {
+                m_state = State::BeforeItem;
+                m_allowArrayEnd = false;
+                return true;
+            }
+            if (character == ']') {
+                return finishArray();
+            }
+            return fail(error, QStringLiteral("Missing separator in rclone listing"));
+
+        case State::Finished:
+            return isJsonWhitespace(character) ? true : fail(error, QStringLiteral("Unexpected data after rclone listing"));
+        }
+
+        return fail(error, QStringLiteral("Invalid rclone listing parser state"));
+    }
+
+    bool finishArray()
+    {
+        m_state = State::Finished;
+        return true;
+    }
+
+    RcloneClient::ItemCallback m_onItem;
+    State m_state = State::BeforeArray;
+    QByteArray m_item;
+    int m_objectDepth = 0;
+    bool m_inString = false;
+    bool m_escaped = false;
+    bool m_allowArrayEnd = false;
+};
 } // namespace
 
 bool RcloneResult::success() const
@@ -98,11 +272,7 @@ RcloneResult RcloneClient::run(const QStringList &arguments, int timeoutMs, cons
     }
 
     QProcess process;
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
-    process.setProcessEnvironment(environment);
-    process.setProgram(m_executable);
-    process.setArguments(arguments);
+    RcloneProcess::configureProcess(process, m_executable, arguments);
     process.start();
     result.started = process.waitForStarted(5000);
     if (!result.started) {
@@ -115,17 +285,12 @@ RcloneResult RcloneClient::run(const QStringList &arguments, int timeoutMs, cons
     while (process.state() != QProcess::NotRunning) {
         if (isCancelled && isCancelled()) {
             result.cancelled = true;
-            process.terminate();
-            if (!process.waitForFinished(1000)) {
-                process.kill();
-                process.waitForFinished(1000);
-            }
+            RcloneProcess::stopProcess(process);
             break;
         }
         if (timeoutMs >= 0 && timer.elapsed() >= timeoutMs) {
             result.timedOut = true;
-            process.kill();
-            process.waitForFinished(1000);
+            RcloneProcess::stopProcess(process);
             break;
         }
         process.waitForFinished(100);
@@ -137,7 +302,7 @@ RcloneResult RcloneClient::run(const QStringList &arguments, int timeoutMs, cons
     return result;
 }
 
-QStringList RcloneClient::remotes(QString *error, const CancellationCallback &isCancelled) const
+QList<RcloneRemote> RcloneClient::remoteList(QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("listremotes"), QStringLiteral("--json")}, 30000, isCancelled);
     if (!result.success()) {
@@ -145,17 +310,19 @@ QStringList RcloneClient::remotes(QString *error, const CancellationCallback &is
         return {};
     }
 
-    return parseRemoteList(result.standardOutput, error);
+    return parseRemoteListWithTypes(result.standardOutput, error);
 }
 
-QHash<QString, QString> RcloneClient::remoteTypes(QString *error, const CancellationCallback &isCancelled) const
+QStringList RcloneClient::remotes(QString *error, const CancellationCallback &isCancelled) const
 {
-    const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("dump")}, 30000, isCancelled);
-    if (!result.success()) {
-        setError(error, result.errorMessage());
-        return {};
+    const QList<RcloneRemote> remoteListResult = remoteList(error, isCancelled);
+
+    QStringList result;
+    result.reserve(remoteListResult.size());
+    for (const RcloneRemote &remote : remoteListResult) {
+        result.append(remote.name);
     }
-    return parseRemoteTypes(result.standardOutput, error);
+    return result;
 }
 
 std::optional<RcloneRemoteInfo> RcloneClient::remoteInfo(const QString &remote, QString *error, const CancellationCallback &isCancelled) const
@@ -168,7 +335,98 @@ std::optional<RcloneRemoteInfo> RcloneClient::remoteInfo(const QString &remote, 
     return parseRemoteInfo(result.standardOutput, error);
 }
 
-QStringList RcloneClient::parseRemoteList(const QByteArray &json, QString *error)
+std::optional<bool>
+RcloneClient::mayHaveDuplicateNames(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
+{
+    const RcloneResult result = run({QStringLiteral("backend"), QStringLiteral("features"), remoteSpec, QStringLiteral("--json")}, 30000, isCancelled);
+    if (!result.success()) {
+        setError(error, result.errorMessage());
+        return std::nullopt;
+    }
+    return parseDuplicateNameSupport(result.standardOutput, error);
+}
+
+bool RcloneClient::listStreaming(const QString &remoteSpec,
+                                  const ItemCallback &onItem,
+                                  QString *error,
+                                  const CancellationCallback &isCancelled) const
+{
+    if (!isAvailable()) {
+        setError(error, QStringLiteral("rclone could not be started"));
+        return false;
+    }
+    if (!onItem) {
+        setError(error, QStringLiteral("No callback was provided for the rclone listing"));
+        return false;
+    }
+
+    RcloneResult result;
+    QProcess process;
+    RcloneProcess::configureProcess(process, m_executable, {QStringLiteral("lsjson"), remoteSpec});
+    process.start();
+    result.started = process.waitForStarted(5000);
+    if (!result.started) {
+        result.standardError = process.errorString().toUtf8();
+        setError(error, result.errorMessage());
+        return false;
+    }
+
+    QString parsingError;
+    JsonArrayItemReader reader(onItem);
+    const auto consumeOutput = [&process, &result, &reader, &parsingError]() {
+        const QByteArray output = process.readAllStandardOutput();
+        RcloneProcess::appendLimited(result.standardError, process.readAllStandardError());
+        return output.isEmpty() || reader.feed(output, &parsingError);
+    };
+
+    QElapsedTimer timer;
+    timer.start();
+    bool parsingStopped = false;
+    while (process.state() != QProcess::NotRunning) {
+        if (isCancelled && isCancelled()) {
+            result.cancelled = true;
+            RcloneProcess::stopProcess(process);
+            break;
+        }
+        if (timer.elapsed() >= 120000) {
+            result.timedOut = true;
+            RcloneProcess::stopProcess(process);
+            break;
+        }
+
+        process.waitForReadyRead(100);
+        if (!consumeOutput()) {
+            parsingStopped = true;
+            RcloneProcess::stopProcess(process);
+            break;
+        }
+    }
+
+    if (!parsingStopped && !result.cancelled && !result.timedOut && !consumeOutput()) {
+        parsingStopped = true;
+    }
+    RcloneProcess::appendLimited(result.standardError, process.readAllStandardError());
+    result.exitCode = process.exitCode();
+
+    if (result.cancelled) {
+        return false;
+    }
+    if (result.timedOut) {
+        setError(error, result.errorMessage());
+        return false;
+    }
+    if (parsingStopped) {
+        setError(error, parsingError);
+        return false;
+    }
+    if (!result.success()) {
+        setError(error, result.errorMessage());
+        return false;
+    }
+    return reader.finish(error);
+}
+
+QList<RcloneRemote> RcloneClient::parseRemoteListWithTypes(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
@@ -177,43 +435,61 @@ QStringList RcloneClient::parseRemoteList(const QByteArray &json, QString *error
         return {};
     }
 
-    QStringList remotes;
+    QList<RcloneRemote> remotes;
     for (const QJsonValue &value : document.array()) {
-        QString name;
+        RcloneRemote remote;
         if (value.isString()) {
-            name = value.toString();
+            remote.name = value.toString();
         } else if (value.isObject()) {
-            name = value.toObject().value(QStringLiteral("name")).toString();
+            const QJsonObject object = value.toObject();
+            remote.name = object.value(QStringLiteral("name")).toString();
+            remote.type = object.value(QStringLiteral("type")).toString();
         }
-        if (name.endsWith(QLatin1Char(':'))) {
-            name.chop(1);
+        if (remote.name.endsWith(QLatin1Char(':'))) {
+            remote.name.chop(1);
         }
-        if (!name.isEmpty()) {
-            remotes.append(name);
+        if (!remote.name.isEmpty()) {
+            remotes.append(std::move(remote));
         }
     }
-    remotes.sort(Qt::CaseInsensitive);
+    std::sort(remotes.begin(), remotes.end(), [](const RcloneRemote &left, const RcloneRemote &right) {
+        return QString::compare(left.name, right.name, Qt::CaseInsensitive) < 0;
+    });
     return remotes;
 }
 
-QHash<QString, QString> RcloneClient::parseRemoteTypes(const QByteArray &json, QString *error)
+QStringList RcloneClient::parseRemoteList(const QByteArray &json, QString *error)
+{
+    const QList<RcloneRemote> parsedRemotes = parseRemoteListWithTypes(json, error);
+    QStringList remotes;
+    remotes.reserve(parsedRemotes.size());
+    for (const RcloneRemote &remote : parsedRemotes) {
+        remotes.append(remote.name);
+    }
+    return remotes;
+}
+
+std::optional<bool> RcloneClient::parseDuplicateNameSupport(const QByteArray &json, QString *error)
 {
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
         setError(error, parseError.errorString());
-        return {};
+        return std::nullopt;
     }
 
-    QHash<QString, QString> types;
-    const QJsonObject remotes = document.object();
-    for (auto it = remotes.constBegin(); it != remotes.constEnd(); ++it) {
-        const QString type = it.value().toObject().value(QStringLiteral("type")).toString();
-        if (!type.isEmpty()) {
-            types.insert(it.key(), type);
-        }
+    const QJsonObject features = document.object().value(QStringLiteral("Features")).toObject();
+    const QJsonValue duplicateFiles = features.value(QStringLiteral("DuplicateFiles"));
+    const QJsonValue mergeDirectories = features.value(QStringLiteral("MergeDirs"));
+    if ((!duplicateFiles.isBool() && !mergeDirectories.isBool()) || features.isEmpty()) {
+        setError(error, QStringLiteral("rclone did not report duplicate-name support for this remote"));
+        return std::nullopt;
     }
-    return types;
+
+    // MergeDirs is a second signal for duplicate directories.  Treat either
+    // capability as requiring the conservative path, including wrapped
+    // remotes such as crypt over Google Drive.
+    return duplicateFiles.toBool() || mergeDirectories.toBool();
 }
 
 std::optional<RcloneRemoteInfo> RcloneClient::parseRemoteInfo(const QByteArray &config, QString *error)
@@ -257,12 +533,17 @@ std::optional<RcloneRemoteInfo> RcloneClient::parseRemoteInfo(const QByteArray &
 
 QList<RcloneItem> RcloneClient::list(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
 {
-    const RcloneResult result = run({QStringLiteral("lsjson"), remoteSpec}, 120000, isCancelled);
-    if (!result.success()) {
-        setError(error, result.errorMessage());
+    QList<RcloneItem> items;
+    if (!listStreaming(remoteSpec,
+                       [&items](const RcloneItem &item) {
+                           items.append(item);
+                           return true;
+                       },
+                       error,
+                       isCancelled)) {
         return {};
     }
-    return parseItemList(result.standardOutput, error);
+    return items;
 }
 
 std::optional<RcloneItem> RcloneClient::stat(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const

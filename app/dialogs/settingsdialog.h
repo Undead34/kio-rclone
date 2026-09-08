@@ -17,7 +17,7 @@ class QLabel;
 class QSpinBox;
 
 /**
- * Small, transactional editor for the directory-listing cache policy.
+ * Transactional editor for Rclone's general settings.
  *
  * Controls only update local dialog state. The persistent policy changes when
  * the user explicitly accepts the dialog; Cancel leaves it untouched.

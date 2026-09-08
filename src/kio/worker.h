@@ -10,6 +10,7 @@
 #include "rclone/rcloneclient.h"
 
 #include <KIO/WorkerBase>
+#include <QHash>
 #include <QTemporaryFile>
 
 #include <memory>
@@ -45,17 +46,25 @@ class RcloneWorker : public KIO::WorkerBase
       [[nodiscard]] KIO::WorkerResult listRemoteDirectory(const QUrl &requestUrl,
                                                            const RcloneUrl &directory,
                                                            const DirectoryListingPolicy &policy);
+      [[nodiscard]] KIO::WorkerResult listUniqueDirectory(const QUrl &requestUrl,
+                                                           const RcloneUrl &directory,
+                                                           const DirectoryListingPolicy &policy);
+      [[nodiscard]] KIO::WorkerResult listDuplicateSafeDirectory(const QUrl &requestUrl,
+                                                                  const RcloneUrl &directory,
+                                                                  const DirectoryListingPolicy &policy);
       [[nodiscard]] std::optional<QList<RcloneItem>> cachedDirectory(const RcloneUrl &directory,
                                                                        const DirectoryListingPolicy &policy);
       void publishDirectoryEntries(const RcloneUrl &directory, const QList<RcloneItem> &items);
 
       [[nodiscard]] KIO::WorkerResult ensureRcloneClient() const;
 
-      [[nodiscard]] bool remoteExists(const QString &remote, QString *error = nullptr) const;
-      [[nodiscard]] bool destinationExists(const QString &remoteSpec,
-                                           std::optional<RcloneItem> *item,
-                                           QString *error = nullptr) const;
+      [[nodiscard]] std::optional<bool> remoteMayHaveDuplicateNames(const QString &remote);
+      [[nodiscard]] KIO::WorkerResult ensureUnambiguousParentDirectories(const RcloneUrl &url,
+                                                                          int fallbackError) const;
       [[nodiscard]] std::optional<RcloneItem> sourceItem(const RcloneUrl &url,
+                                                         QString *error = nullptr) const;
+      [[nodiscard]] std::optional<RcloneItem> sourceItem(const QString &remote,
+                                                         const QString &remotePath,
                                                          QString *error = nullptr) const;
       [[nodiscard]] std::optional<RcloneItem> cachedItemForReadOnlyRequest(const RcloneUrl &url);
       void invalidateDirectorySnapshots();
@@ -80,6 +89,10 @@ class RcloneWorker : public KIO::WorkerBase
 
       RcloneClient m_rclone;
       DirectorySnapshotCache m_directorySnapshots;
+
+      // Capability lookup is slow and remote-specific. A worker process can
+      // safely reuse it until its root listing is refreshed.
+      QHash<QString, bool> m_remoteDuplicateNameSupport;
 
       // Caché usada por get(); no debe reutilizarse como estado de FileJob sin controlar posición y modo de apertura.
       std::unique_ptr<QTemporaryFile> m_cachedDownload;
