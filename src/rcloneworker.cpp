@@ -53,6 +53,12 @@ QUrl parentDirectoryUrl(const QUrl &url)
     return parent;
 }
 
+bool bypassesDirectorySnapshot(const QString &cacheControl)
+{
+    return cacheControl.compare(QLatin1String("reload"), Qt::CaseInsensitive) == 0
+        || cacheControl.compare(QLatin1String("refresh"), Qt::CaseInsensitive) == 0;
+}
+
 class KIOPluginForMetaData : public QObject
 {
     Q_OBJECT
@@ -122,8 +128,12 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
         return KIO::WorkerResult::pass();
     }
 
-    const QString cacheControl = metaData(QStringLiteral("cache"));
-    if (cacheControl != QLatin1String("reload") && cacheControl != QLatin1String("refresh")) {
+    if (bypassesDirectorySnapshot(metaData(QStringLiteral("cache")))) {
+        // An explicit reload must discard the snapshot before listing. If the
+        // remote request then fails, a later normal request must not revive
+        // data the caller deliberately asked to refresh.
+        invalidateDirectorySnapshots();
+    } else {
         if (const auto cachedItems = m_directorySnapshots.load(rcloneUrl.remote(), rcloneUrl.remotePath())) {
             KIO::UDSEntryList entries;
             entries.reserve(cachedItems->size() + 1);

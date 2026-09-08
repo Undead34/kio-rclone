@@ -41,10 +41,10 @@ select **Strict** to always ask rclone and the provider instead.
 - Downloads and every mutable operation still resolve their target remotely.
   A successful upload, create, rename, or delete clears snapshots and sends a
   KIO directory-change notification to open views.
-- A KIO caller may request `cache=reload` or `cache=refresh` to bypass the
-  snapshot. With a normal fresh listing there can still be up to the selected
-  freshness window of externally changed data; use **Strict** when that is not
-  acceptable.
+- A KIO caller may request `cache=reload` or `cache=refresh` to discard
+  snapshots and force a remote listing. With a normal fresh listing there can
+  still be up to the selected freshness window of externally changed data; use
+  **Strict** when that is not acceptable.
 
 There is deliberately no background tree walk, `ListR`, or cache-first
 correction pass in this path. Those would add network activity and surprising

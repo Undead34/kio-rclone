@@ -44,10 +44,10 @@ proveedor.
 - Las descargas y toda operación que modifica datos siguen resolviendo el
   objetivo contra el remoto. Una subida, creación, renombre o eliminación
   exitosa limpia los snapshots y notifica el cambio a las vistas KIO abiertas.
-- Un cliente KIO puede pedir `cache=reload` o `cache=refresh` para saltarse el
-  snapshot. En un listado fresco normal puede haber datos modificados por otro
-  cliente durante la ventana seleccionada; usa **Estricto** cuando eso no sea
-  aceptable.
+- Un cliente KIO puede pedir `cache=reload` o `cache=refresh` para descartar
+  snapshots y forzar un listado remoto. En un listado fresco normal puede haber
+  datos modificados por otro cliente durante la ventana seleccionada; usa
+  **Estricto** cuando eso no sea aceptable.
 
 No hay recorrido de árbol en segundo plano, `ListR` ni una corrección visual
 cache-first en esta ruta. Añadirlos introduciría actividad de red y cambios

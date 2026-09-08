@@ -41,12 +41,13 @@ private Q_SLOTS:
     void init();
 
     void freshListingSkipsRclone();
-    void explicitReloadBypassesSnapshot();
+    void explicitReloadInvalidatesSnapshot();
     void statAndMimetypeReuseListingSnapshot();
     void successfulPutInvalidatesSnapshot();
 
 private:
     [[nodiscard]] KIO::UDSEntryList listDirectory(bool reload = false);
+    [[nodiscard]] bool reloadDirectory();
     [[nodiscard]] qint64 listingCount() const;
     [[nodiscard]] QUrl remoteUrl(const QString &name = {}) const;
 
@@ -93,14 +94,25 @@ void RcloneDirectoryCacheTest::freshListingSkipsRclone()
     QCOMPARE(listingCount(), afterFirstListing);
 }
 
-void RcloneDirectoryCacheTest::explicitReloadBypassesSnapshot()
+void RcloneDirectoryCacheTest::explicitReloadInvalidatesSnapshot()
 {
     static_cast<void>(listDirectory());
     const qint64 afterInitialListing = listingCount();
     QVERIFY(afterInitialListing > 0);
 
-    static_cast<void>(listDirectory(true));
-    QVERIFY(listingCount() > afterInitialListing);
+    const QString failureMarker = QDir(m_remoteRoot).filePath(QStringLiteral(".kio-rclone-test-fail-listing"));
+    QVERIFY(writeFile(failureMarker, {}));
+    const bool reloadSucceeded = reloadDirectory();
+    QVERIFY(QFile::remove(failureMarker));
+    QVERIFY(!reloadSucceeded);
+    const qint64 afterFailedReload = listingCount();
+    QVERIFY(afterFailedReload > afterInitialListing);
+
+    // The failed reload must have removed the old snapshot, so the following
+    // regular listing needs another real rclone invocation rather than
+    // reviving the successful listing from before the reload.
+    static_cast<void>(listDirectory());
+    QVERIFY(listingCount() > afterFailedReload);
 }
 
 void RcloneDirectoryCacheTest::statAndMimetypeReuseListingSnapshot()
@@ -170,6 +182,17 @@ KIO::UDSEntryList RcloneDirectoryCacheTest::listDirectory(bool reload)
     }
     delete job;
     return entries;
+}
+
+bool RcloneDirectoryCacheTest::reloadDirectory()
+{
+    auto *job = KIO::listDir(remoteUrl(), KIO::HideProgressInfo);
+    job->setUiDelegate(nullptr);
+    job->setAutoDelete(false);
+    job->addMetaData(QStringLiteral("cache"), QStringLiteral("reload"));
+    const bool success = job->exec();
+    delete job;
+    return success;
 }
 
 qint64 RcloneDirectoryCacheTest::listingCount() const

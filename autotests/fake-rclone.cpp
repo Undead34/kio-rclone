@@ -38,6 +38,7 @@ constexpr auto CopytoFailFile = ".kio-rclone-test-fail-copyto";
 constexpr auto CopytoStartedFile = ".kio-rclone-test-copyto-started";
 constexpr auto LogicalItemsEnvironment = "KIO_RCLONE_TEST_LOGICAL_ITEMS";
 constexpr auto ListingCounterEnvironment = "KIO_RCLONE_TEST_LIST_COUNTER";
+constexpr auto ListingFailureFile = ".kio-rclone-test-fail-listing";
 
 struct RemotePath {
     QString remote;
@@ -440,6 +441,9 @@ int writePersistentStat(const QString &root, const QString &remoteSpec, const QL
 int writePersistentListing(const QString &root, const QString &remoteSpec, const QList<LogicalItem> &logicalItems)
 {
     incrementListingCounter();
+    if (QFileInfo::exists(QDir(root).filePath(QString::fromLatin1(ListingFailureFile)))) {
+        return writeError(QByteArrayLiteral("listing intentionally failed"));
+    }
     const RemotePath directoryPath = resolveRemotePath(root, remoteSpec);
     if (!directoryPath.valid) {
         return writeError(QByteArrayLiteral("invalid remote path"));
