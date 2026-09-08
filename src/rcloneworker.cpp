@@ -9,6 +9,7 @@
 #include "rcloneprocess.h"
 #include "rcloneurl.h"
 
+#include <KDirNotify>
 #include <KLocalizedString>
 
 #include <QCoreApplication>
@@ -26,6 +27,7 @@
 #include <QProcessEnvironment>
 #include <QUuid>
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <sys/stat.h>
@@ -40,6 +42,15 @@ constexpr qsizetype DownloadChunkSize = 64 * 1024;
 KIO::WorkerResult configurationEntryMutationError(int error)
 {
     return KIO::WorkerResult::fail(error, i18n("“Configure Remotes…” is a virtual launcher and cannot be modified."));
+}
+
+QUrl parentDirectoryUrl(const QUrl &url)
+{
+    QUrl parent = url;
+    const QString path = parent.path(QUrl::FullyDecoded);
+    const qsizetype separator = path.lastIndexOf(QLatin1Char('/'));
+    parent.setPath(separator <= 0 ? QStringLiteral("/") : path.left(separator + 1));
+    return parent;
 }
 
 class KIOPluginForMetaData : public QObject
@@ -111,6 +122,20 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
         return KIO::WorkerResult::pass();
     }
 
+    const QString cacheControl = metaData(QStringLiteral("cache"));
+    if (cacheControl != QLatin1String("reload") && cacheControl != QLatin1String("refresh")) {
+        if (const auto cachedItems = m_directorySnapshots.load(rcloneUrl.remote(), rcloneUrl.remotePath())) {
+            KIO::UDSEntryList entries;
+            entries.reserve(cachedItems->size() + 1);
+            entries.append(remoteEntry(rcloneUrl.remote(), true));
+            for (const RcloneItem &item : *cachedItems) {
+                entries.append(itemEntry(item));
+            }
+            listEntries(entries);
+            return KIO::WorkerResult::pass();
+        }
+    }
+
     QString error;
     const QList<RcloneItem> items = m_backend.list(rcloneUrl.remoteSpec(), &error, [this]() {
         return wasKilled();
@@ -152,6 +177,7 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
         entries.append(itemEntry(item));
     }
     listEntries(entries);
+    static_cast<void>(m_directorySnapshots.store(rcloneUrl.remote(), rcloneUrl.remotePath(), visibleItems));
     return KIO::WorkerResult::pass();
 }
 
@@ -186,6 +212,11 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
             return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, url.toDisplayString());
         }
         statEntry(remoteEntry(rcloneUrl.remote(), false, types.value(rcloneUrl.remote())));
+        return KIO::WorkerResult::pass();
+    }
+
+    if (const auto cachedItem = cachedItemForReadOnlyRequest(rcloneUrl)) {
+        statEntry(itemEntry(*cachedItem));
         return KIO::WorkerResult::pass();
     }
 
@@ -231,6 +262,11 @@ KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
 
     if (const auto result = ensureBackend(); !result.success()) {
         return result;
+    }
+
+    if (const auto cachedItem = cachedItemForReadOnlyRequest(rcloneUrl)) {
+        mimeType(RcloneEntryFormat::fallbackMimeType(*cachedItem));
+        return KIO::WorkerResult::pass();
     }
 
     QString error;
@@ -486,6 +522,12 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         return commandResult(upload, KIO::ERR_CANNOT_WRITE, url);
     }
 
+    invalidateDirectorySnapshots();
+    if (expectedDestination) {
+        OrgKdeKDirNotifyInterface::emitFilesChanged({url});
+    } else {
+        OrgKdeKDirNotifyInterface::emitFilesAdded(parentDirectoryUrl(url));
+    }
     processedSize(sizeOk && sourceSize >= 0 ? sourceSize : processed);
     return KIO::WorkerResult::pass();
 }
@@ -522,7 +564,14 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
         return errorResult(error, KIO::ERR_CANNOT_STAT, url);
     }
 
-    return commandResult(runCommand({QStringLiteral("mkdir"), rcloneUrl.remoteSpec()}), KIO::ERR_CANNOT_MKDIR, url);
+    const RcloneResult result = runCommand({QStringLiteral("mkdir"), rcloneUrl.remoteSpec()});
+    if (!result.success()) {
+        return commandResult(result, KIO::ERR_CANNOT_MKDIR, url);
+    }
+
+    invalidateDirectorySnapshots();
+    OrgKdeKDirNotifyInterface::emitFilesAdded(parentDirectoryUrl(url));
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::JobFlags flags)
@@ -582,9 +631,14 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
         }
     }
 
-    return commandResult(runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec(), QStringLiteral("--ignore-times")}),
-                         KIO::ERR_CANNOT_RENAME,
-                         src);
+    const RcloneResult result = runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec(), QStringLiteral("--ignore-times")});
+    if (!result.success()) {
+        return commandResult(result, KIO::ERR_CANNOT_RENAME, src);
+    }
+
+    invalidateDirectorySnapshots();
+    OrgKdeKDirNotifyInterface::emitFileRenamed(src, dest);
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::copy(const QUrl &src, const QUrl &dest, int permissions, KIO::JobFlags flags)
@@ -655,7 +709,14 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
         command = QStringLiteral("rmdir");
     }
 
-    return commandResult(runCommand({command, rcloneUrl.remoteSpec()}), isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR, url);
+    const RcloneResult result = runCommand({command, rcloneUrl.remoteSpec()});
+    if (!result.success()) {
+        return commandResult(result, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR, url);
+    }
+
+    invalidateDirectorySnapshots();
+    OrgKdeKDirNotifyInterface::emitFilesRemoved({url});
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
@@ -985,6 +1046,33 @@ std::optional<RcloneItem> RcloneWorker::sourceItem(const RcloneUrl &url, QString
     selected->ambiguous = matches > 1;
     selected->readOnly = selected->readOnly || selected->ambiguous;
     return selected;
+}
+
+std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const RcloneUrl &url)
+{
+    if (url.remotePath().isEmpty()) {
+        return std::nullopt;
+    }
+
+    const QString fileName = url.remotePath().section(QLatin1Char('/'), -1);
+    const QString parentPath = url.remotePath().section(QLatin1Char('/'), 0, -2);
+    const auto items = m_directorySnapshots.load(url.remote(), parentPath);
+    if (!items) {
+        return std::nullopt;
+    }
+
+    const auto item = std::find_if(items->cbegin(), items->cend(), [&fileName](const RcloneItem &candidate) {
+        return candidate.name == fileName;
+    });
+    if (item == items->cend()) {
+        return std::nullopt;
+    }
+    return *item;
+}
+
+void RcloneWorker::invalidateDirectorySnapshots()
+{
+    m_directorySnapshots.clear();
 }
 
 KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem &item)

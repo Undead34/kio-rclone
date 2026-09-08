@@ -20,6 +20,36 @@ specific decisions to rclone.
 | View free space | Uses `rclone about` when supported by the backend. |
 | Configure | Opens KIO Rclone's small configurator. |
 
+## Fast folder reopening, with bounded freshness
+
+KIO Rclone keeps a small, private cache of complete successful directory
+listings in KDE's cache location (normally `~/.cache/kio-rclone/`). It uses
+KDE's shared cache facility, so a listing can still be reused after Dolphin and
+its worker process have exited. It is a short-lived navigation optimization,
+not an offline filesystem.
+
+The default **Fresh cache** policy reuses a listing for 15 seconds. This makes
+folders visited just before closing Dolphin open without another provider
+round-trip. The configurator can change that window from 1 to 60 seconds, or
+select **Strict** to always ask rclone and the provider instead.
+
+- Only complete, successful listings are stored. Errors and cancelled listings
+  are never cached.
+- The cache is bounded (8 MiB), evicts least-recently-used snapshots, contains
+  no rclone credentials, and is invalidated automatically when the rclone
+  configuration changes.
+- Downloads and every mutable operation still resolve their target remotely.
+  A successful upload, create, rename, or delete clears snapshots and sends a
+  KIO directory-change notification to open views.
+- A KIO caller may request `cache=reload` or `cache=refresh` to bypass the
+  snapshot. With a normal fresh listing there can still be up to the selected
+  freshness window of externally changed data; use **Strict** when that is not
+  acceptable.
+
+There is deliberately no background tree walk, `ListR`, or cache-first
+correction pass in this path. Those would add network activity and surprising
+view changes without solving the common close-and-reopen delay as directly.
+
 ## What makes transfers special
 
 Transfers between locations pass through KIO, preserving Dolphin's controls:

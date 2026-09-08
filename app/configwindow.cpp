@@ -6,6 +6,7 @@
 
 #include "appid.h"
 #include "configwindow.h"
+#include "directorysnapshotcache.h"
 #include "rcloneurl.h"
 
 #include <KLocalizedString>
@@ -20,6 +21,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QJsonArray>
@@ -35,6 +37,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QStandardPaths>
+#include <QSpinBox>
 #include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -145,7 +148,7 @@ ConfigWindow::ConfigWindow(QWidget *parent)
 {
     setWindowTitle(i18n("Rclone Remotes"));
     setWindowIcon(QIcon::fromTheme(QStringLiteral(KIO_RCLONE_CONFIG_APP_ID)));
-    resize(620, 430);
+    resize(620, 500);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(16, 16, 16, 16);
@@ -159,6 +162,53 @@ ConfigWindow::ConfigWindow(QWidget *parent)
                                    this);
     description->setWordWrap(true);
     layout->addWidget(description);
+
+    const DirectoryCachePolicy initialCachePolicy = DirectorySnapshotCache::policy();
+    auto *cacheBox = new QGroupBox(i18n("Directory listing cache"), this);
+    auto *cacheLayout = new QVBoxLayout(cacheBox);
+    cacheLayout->setContentsMargins(10, 8, 10, 8);
+    auto *cacheForm = new QFormLayout;
+    auto *cacheMode = new QComboBox(cacheBox);
+    cacheMode->addItem(i18n("Fresh cache (recommended)"), static_cast<int>(DirectoryCacheMode::Fresh));
+    cacheMode->addItem(i18n("Strict: always check the remote"), static_cast<int>(DirectoryCacheMode::Strict));
+    cacheMode->setCurrentIndex(initialCachePolicy.mode == DirectoryCacheMode::Strict ? 1 : 0);
+    cacheForm->addRow(i18n("For directory listings:"), cacheMode);
+
+    auto *freshness = new QSpinBox(cacheBox);
+    freshness->setRange(DirectorySnapshotCache::MinimumFreshnessSeconds, DirectorySnapshotCache::MaximumFreshnessSeconds);
+    freshness->setValue(initialCachePolicy.freshnessSeconds);
+    freshness->setSuffix(i18np(" second", " seconds", freshness->value()));
+    freshness->setEnabled(initialCachePolicy.mode == DirectoryCacheMode::Fresh);
+    cacheForm->addRow(i18n("Keep a successful listing for:"), freshness);
+    cacheLayout->addLayout(cacheForm);
+
+    auto *cacheHint = new QLabel(i18n("A fresh snapshot makes recently visited folders open quickly after Dolphin restarts. "
+                                      "Choose strict mode to always check the remote; file changes always check it before they run."),
+                                 cacheBox);
+    cacheHint->setWordWrap(true);
+    cacheLayout->addWidget(cacheHint);
+
+    auto *clearCacheButton = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")), i18n("Clear cached listings"), cacheBox);
+    cacheLayout->addWidget(clearCacheButton, 0, Qt::AlignRight);
+    layout->addWidget(cacheBox);
+
+    const auto saveCachePolicy = [cacheMode, freshness]() {
+        DirectoryCachePolicy policy;
+        policy.mode = static_cast<DirectoryCacheMode>(cacheMode->currentData().toInt());
+        policy.freshnessSeconds = freshness->value();
+        freshness->setEnabled(policy.mode == DirectoryCacheMode::Fresh);
+        DirectorySnapshotCache::setPolicy(policy);
+    };
+    connect(cacheMode, qOverload<int>(&QComboBox::currentIndexChanged), this, [saveCachePolicy](int) {
+        saveCachePolicy();
+    });
+    connect(freshness, qOverload<int>(&QSpinBox::valueChanged), this, [saveCachePolicy, freshness](int seconds) {
+        freshness->setSuffix(i18np(" second", " seconds", seconds));
+        saveCachePolicy();
+    });
+    connect(clearCacheButton, &QPushButton::clicked, this, []() {
+        DirectorySnapshotCache::clearPersistent();
+    });
 
     layout->addSpacing(4);
 

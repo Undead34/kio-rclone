@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "directorysnapshotcache.h"
 #include "rclonebackend.h"
 
 #include <KIO/WorkerBase>
@@ -118,6 +119,8 @@ class RcloneWorker : public KIO::WorkerBase
                                            QString *error = nullptr) const;
       [[nodiscard]] std::optional<RcloneItem> sourceItem(const RcloneUrl &url,
                                                          QString *error = nullptr) const;
+      [[nodiscard]] std::optional<RcloneItem> cachedItemForReadOnlyRequest(const RcloneUrl &url);
+      void invalidateDirectorySnapshots();
 
       [[nodiscard]] KIO::WorkerResult cacheRemoteFile(const RcloneUrl &url, RcloneItem &item);
       [[nodiscard]] KIO::WorkerResult resolveUnknownSize(const RcloneUrl &url, RcloneItem &item);
@@ -138,6 +141,7 @@ class RcloneWorker : public KIO::WorkerBase
                                                   const QUrl &url) const;
 
       RcloneBackend m_backend;
+      DirectorySnapshotCache m_directorySnapshots;
 
       // Caché usada por get(); no debe reutilizarse como estado de FileJob sin controlar posición y modo de apertura.
       std::unique_ptr<QTemporaryFile> m_cachedDownload;

@@ -22,6 +22,38 @@ las decisiones específicas del proveedor a rclone.
 | Ver espacio libre | Usa `rclone about` si el backend lo soporta. |
 | Configurar | Abre el configurador pequeño de KIO Rclone. |
 
+## Reapertura rápida, con frescura acotada
+
+KIO Rclone guarda una caché privada y pequeña de listados completos que
+terminaron correctamente en la ubicación de caché de KDE (normalmente
+`~/.cache/kio-rclone/`). Usa la caché compartida de KDE, así que puede
+reutilizarse incluso después de cerrar Dolphin y su proceso worker. Es una
+optimización breve de navegación, no un sistema de archivos sin conexión.
+
+La política predeterminada **Caché fresca** reutiliza un listado durante 15
+segundos. Así una carpeta visitada justo antes de cerrar Dolphin puede abrirse
+sin otra ida y vuelta al proveedor. El configurador permite elegir de 1 a 60
+segundos, o seleccionar **Estricto** para preguntar siempre a rclone y al
+proveedor.
+
+- Sólo se guardan listados completos y correctos; un error o una cancelación
+  nunca se persiste.
+- La caché está limitada a 8 MiB, expulsa los snapshots menos usados, no
+  contiene credenciales de rclone y se invalida automáticamente cuando cambia
+  la configuración de rclone.
+- Las descargas y toda operación que modifica datos siguen resolviendo el
+  objetivo contra el remoto. Una subida, creación, renombre o eliminación
+  exitosa limpia los snapshots y notifica el cambio a las vistas KIO abiertas.
+- Un cliente KIO puede pedir `cache=reload` o `cache=refresh` para saltarse el
+  snapshot. En un listado fresco normal puede haber datos modificados por otro
+  cliente durante la ventana seleccionada; usa **Estricto** cuando eso no sea
+  aceptable.
+
+No hay recorrido de árbol en segundo plano, `ListR` ni una corrección visual
+cache-first en esta ruta. Añadirlos introduciría actividad de red y cambios
+sorpresivos en la vista sin resolver tan directamente la demora habitual de
+cerrar y reabrir Dolphin.
+
 ## Lo que hace especial a las transferencias
 
 Las operaciones entre ubicaciones se transmiten por KIO en vez de delegarse en

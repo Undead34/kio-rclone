@@ -1,4 +1,5 @@
 add_library(kio_rclone_common STATIC
+    directorysnapshotcache.cpp
     rclonebackend.cpp
     rcloneentryformat.cpp
     rcloneprocess.cpp
@@ -23,6 +24,8 @@ target_compile_definitions(kio_rclone_common
 target_link_libraries(kio_rclone_common
     PUBLIC
         Qt6::Core
+        KF6::ConfigCore
+        KF6::CoreAddons
 )
 
 kcoreaddons_add_plugin(kio_rclone
@@ -35,6 +38,7 @@ target_link_libraries(kio_rclone
     PRIVATE
         kio_rclone_common
         Qt6::Core
+        Qt6::DBus
         KF6::I18n
         KF6::KIOCore
 )
