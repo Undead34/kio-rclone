@@ -137,6 +137,26 @@ set_tests_properties(rcloneuploadtest PROPERTIES
     TIMEOUT 45
 )
 
+add_executable(interactiverclonedialogtest
+    interactiverclonedialogtest.cpp
+    ${CMAKE_SOURCE_DIR}/app/interactiverclonedialog.cpp
+)
+target_include_directories(interactiverclonedialogtest
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/app
+)
+target_link_libraries(interactiverclonedialogtest
+    PRIVATE
+        kio_rclone_common
+        Qt6::Test
+        Qt6::Widgets
+        KF6::I18n
+)
+add_test(NAME interactiverclonedialogtest COMMAND interactiverclonedialogtest)
+set_tests_properties(interactiverclonedialogtest PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 add_test(
     NAME desktopfiletest
     COMMAND ${CMAKE_COMMAND}
