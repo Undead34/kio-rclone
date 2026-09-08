@@ -1052,12 +1052,11 @@ QString ConfigWindow::selectedRemote() const
 bool ConfigWindow::runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description)
 {
     InteractiveRcloneDialog dialog(m_backend.executable(), arguments, title, description, this);
-    if (!dialog.start()) {
+    dialog.exec();
+    if (!dialog.startError().isEmpty()) {
         QMessageBox::critical(this, i18n("Rclone Error"), dialog.startError());
         return false;
     }
-
-    dialog.exec();
     if (!dialog.succeeded() && !dialog.cancelled() && isConfigPasswordError(dialog.diagnostic())) {
         return promptConfigPassword() && runInteractiveRclone(arguments, title, description);
     }

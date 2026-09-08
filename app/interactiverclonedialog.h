@@ -31,8 +31,8 @@ public:
                             const QString &description,
                             QWidget *parent = nullptr);
 
-    /// Starts rclone. Returns false only when its process could not start.
-    [[nodiscard]] bool start();
+    /// Starts rclone after the modal event loop is active and runs the dialog.
+    int exec() override;
 
     [[nodiscard]] bool succeeded() const;
     [[nodiscard]] bool cancelled() const;
@@ -43,6 +43,7 @@ protected:
     void reject() override;
 
 private:
+    void startProcess();
     void appendOutput(const QByteArray &output);
     void sendResponse();
     void processFinished(int exitCode, QProcess::ExitStatus exitStatus);
@@ -52,6 +53,7 @@ private:
     QLineEdit *m_response = nullptr;
     QByteArray m_diagnostic;
     QString m_startError;
+    bool m_started = false;
     bool m_succeeded = false;
     bool m_cancelled = false;
 };

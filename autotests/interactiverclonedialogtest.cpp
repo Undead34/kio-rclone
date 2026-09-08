@@ -18,8 +18,28 @@ class InteractiveRcloneDialogTest final : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void handlesImmediateCompletion();
     void forwardsResponseToChildProcess();
 };
+
+void InteractiveRcloneDialogTest::handlesImmediateCompletion()
+{
+    InteractiveRcloneDialog dialog(QStringLiteral("/bin/sh"),
+                                   {QStringLiteral("-c"), QStringLiteral("exit 0")},
+                                   QStringLiteral("Test"),
+                                   QStringLiteral("Test"));
+
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    connect(&timeout, &QTimer::timeout, &dialog, [&dialog]() {
+        static_cast<QDialog &>(dialog).reject();
+    });
+    timeout.start(5000);
+
+    QCOMPARE(dialog.exec(), int(QDialog::Accepted));
+    timeout.stop();
+    QVERIFY(dialog.succeeded());
+}
 
 void InteractiveRcloneDialogTest::forwardsResponseToChildProcess()
 {
@@ -29,7 +49,6 @@ void InteractiveRcloneDialogTest::forwardsResponseToChildProcess()
                                    {QStringLiteral("-c"), script},
                                    QStringLiteral("Test"),
                                    QStringLiteral("Test"));
-    QVERIFY(dialog.start());
 
     QTimer timeout;
     timeout.setSingleShot(true);
@@ -39,7 +58,7 @@ void InteractiveRcloneDialogTest::forwardsResponseToChildProcess()
     timeout.start(5000);
 
     bool sentResponse = false;
-    QTimer::singleShot(0, &dialog, [&dialog, &sentResponse]() {
+    QTimer::singleShot(100, &dialog, [&dialog, &sentResponse]() {
         auto *response = dialog.findChild<QLineEdit *>();
         if (!response) {
             static_cast<QDialog &>(dialog).reject();

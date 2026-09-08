@@ -21,6 +21,7 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QTextCursor>
+#include <QTimer>
 #include <QVBoxLayout>
 
 InteractiveRcloneDialog::InteractiveRcloneDialog(const QString &program,
@@ -68,21 +69,34 @@ InteractiveRcloneDialog::InteractiveRcloneDialog(const QString &program,
     connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
         appendOutput(m_process->readAllStandardOutput());
     });
+    connect(m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) {
+            return;
+        }
+
+        m_startError = m_process->errorString();
+        QDialog::reject();
+    });
     connect(m_process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &InteractiveRcloneDialog::processFinished);
     connect(m_response, &QLineEdit::returnPressed, this, &InteractiveRcloneDialog::sendResponse);
     connect(buttons, &QDialogButtonBox::rejected, this, &InteractiveRcloneDialog::reject);
 }
 
-bool InteractiveRcloneDialog::start()
+int InteractiveRcloneDialog::exec()
 {
-    m_process->start();
-    if (!m_process->waitForStarted(5000)) {
-        m_startError = m_process->errorString();
-        return false;
+    QTimer::singleShot(0, this, &InteractiveRcloneDialog::startProcess);
+    return QDialog::exec();
+}
+
+void InteractiveRcloneDialog::startProcess()
+{
+    if (m_started) {
+        return;
     }
 
+    m_started = true;
+    m_process->start();
     m_response->setFocus();
-    return true;
 }
 
 bool InteractiveRcloneDialog::succeeded() const
