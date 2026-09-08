@@ -41,6 +41,7 @@ public:
 
 private:
     void refreshRemotes();
+    void showSettings();
     void addRemote();
     [[nodiscard]] QList<ProviderFieldOption> providerOptions(const QString &type);
     bool submitDriveLikeRemote(const QString &name, const QString &type, const QList<QPair<QString, QString>> &options = {});
