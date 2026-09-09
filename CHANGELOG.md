@@ -4,6 +4,24 @@ KIO Rclone follows semantic versioning. Patch releases contain compatible bug
 fixes, minor releases add compatible behavior, and a major release may change
 user-visible protocol or packaging behavior.
 
+## Unreleased
+
+### Added
+
+- Direct `KIO::FileJob` random access now stages ordinary files locally:
+  files up to 128 MiB use one complete download, while larger read-only files
+  use an 8 MiB sparse block cache with read-ahead.
+
+### Fixed
+
+- `read()` and `seek()` no longer start one rclone process and one provider
+  request for every small application read.
+- Writable FileJobs keep every `write()`, `seek()`, `truncate()`, and flush
+  local, then perform a single commit from `close()`.
+- Uploads retain the old remote object until a complete sibling upload has
+  finished, validate the destination version immediately before publication,
+  and avoid repeating a destination `stat` already performed by the caller.
+
 ## 0.4.4 — 2026-09-07
 
 ### Fixed

@@ -177,6 +177,23 @@ Do not introduce an abstract interface just to give a class a pattern name.
 Introduce a seam when it separates an external boundary, isolates a stateful
 workflow, or lets a test replace a real dependency.
 
+## Random-access files
+
+`RcloneRemoteFile` gives each FileJob a private local staging file. Read-only
+files up to 128 MiB (and every file whose size is initially unknown) are
+downloaded once and all subsequent `read`/`seek` operations use that local
+descriptor. Larger read-only files use a sparse local file populated in
+8 MiB blocks, so nearby reads share one rclone range request without forcing a
+large object to be downloaded in full.
+
+Every writable mode uses a complete local copy. `write`, `seek`, `truncate`,
+and flush never publish intermediate state. On `close`, the client uploads a
+complete sibling object, checks the destination ID/time/size against the
+snapshot taken by `open`, and then moves the sibling to the final name. This
+is intentionally the only publication point; providers without a conditional
+move still have a small check-to-move race, but a failed or cancelled transfer
+cannot expose partial file contents.
+
 ## Deferred KIO capabilities
 
 The worker header intentionally declares only supported KIO operations. These
@@ -186,9 +203,6 @@ public class:
 - connection lifecycle, only if rclone gains a worker-owned persistent session;
 - permissions and modification time, subject to backend metadata support;
 - Drive shortcuts, gated to the backend that supports them;
-- `KIO::FileJob` random access (`open`, `read`, `write`, `seek`, `truncate`,
-  `close`), after range streaming and local staging have characterization
-  tests;
 - `special()`, only for a command that cannot be represented by standard KIO
   operations.
 

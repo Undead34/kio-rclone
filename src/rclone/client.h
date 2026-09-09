@@ -98,12 +98,46 @@ enum class RcloneRemovalMode {
 };
 
 /**
+ * @brief Version of a destination observed before a local upload starts.
+ *
+ * A missing target is represented by exists == false. The remaining fields
+ * are deliberately optional-by-value because not every rclone backend exposes
+ * an object ID or a modification time.
+ */
+struct RcloneTargetSnapshot {
+    bool exists = false;
+    bool isDirectory = false;
+    QString id;
+    QDateTime modificationTime;
+    qint64 size = -1;
+
+    [[nodiscard]] static RcloneTargetSnapshot
+    fromItem(const RcloneItem &item)
+    {
+        return {
+            true,
+            item.isDirectory,
+            item.id,
+            item.modificationTime,
+            item.size,
+        };
+    }
+};
+
+/**
  * @brief Política de destino para operaciones que crean o reemplazan archivos.
  *
  * Por defecto no se permite reemplazar un destino existente.
  */
 struct RcloneWriteOptions {
     bool replaceExisting = false;
+
+    /**
+     * Destination state already observed by the caller. Supplying it avoids a
+     * duplicate stat and lets upload() reject changes made while local data was
+     * being prepared.
+     */
+    std::optional<RcloneTargetSnapshot> expectedTarget;
 };
 
 struct RcloneListOptions {
@@ -290,8 +324,11 @@ public:
     /**
      * @brief Sube un archivo local a un destino remoto.
      *
-     * La implementación procesa la telemetría de rclone y notifica el
-     * progreso mediante onProgress. No recibe datos directamente de KIO.
+     * Uploads to a unique sibling first, verifies that the destination still
+     * matches options.expectedTarget, and only then publishes it. The previous
+     * destination therefore remains intact on transfer failure or cancellation.
+     * If expectedTarget is omitted, this method obtains its own snapshot before
+     * starting the transfer.
      */
     [[nodiscard]] RcloneStatus
     upload(const QString &localSrc,

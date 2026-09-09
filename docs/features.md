@@ -12,7 +12,7 @@ specific decisions to rclone.
 | Open `rclone:/` | Shows remotes configured in rclone. |
 | Enter folders | Lists the provider through rclone. |
 | Download | Streams normal files and materializes unknown-size or duplicate-name objects first. |
-| Open in LibreOffice or an editor | Uses KIOFuse's full-file cache for local, seekable access. |
+| Open in LibreOffice or an editor | Uses local, seekable FileJob staging: one complete download for ordinary files and sparse read-ahead for large files. |
 | Upload/save | Uploads to a temporary remote name and publishes only after completion. |
 | Create a folder | Uses `rclone mkdir`. |
 | Rename/move | Uses `rclone moveto`. |

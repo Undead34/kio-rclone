@@ -14,7 +14,7 @@ las decisiones específicas del proveedor a rclone.
 | Abrir `rclone:/` | Muestra los remotos configurados por rclone. |
 | Entrar en carpetas | Consulta el listado del proveedor a través de rclone. |
 | Descargar | Transmite archivos normales; materializa primero los de tamaño desconocido o nombre duplicado. |
-| Abrir en LibreOffice o un editor | Usa la caché de archivo completo de KIOFuse para dar acceso local y seekable. |
+| Abrir en LibreOffice o un editor | Usa staging FileJob local y seekable: una descarga completa para archivos normales y caché dispersa con lectura anticipada para archivos grandes. |
 | Subir/guardar | Sube a un nombre remoto temporal y publica el resultado sólo cuando la transferencia termina. |
 | Crear carpeta | Usa `rclone mkdir`. |
 | Renombrar/mover dentro del remoto | Usa `rclone moveto`. |

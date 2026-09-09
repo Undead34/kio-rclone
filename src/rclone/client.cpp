@@ -5,24 +5,121 @@
  */
 
 #include "client.h"
-#include "remotefile.h"
 
 #include <cmath>
-#include <utility>
 #include <memory>
+#include <utility>
 
-#include <QFileInfo>
 #include <QElapsedTimer>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonParseError>
-#include <QJsonObject>
-#include <QJsonValue>
+#include <QUuid>
 
 namespace {
+
+class CleanupContext final : public RcloneContext
+{
+public:
+    [[nodiscard]] bool isCancelled() const override
+    {
+        return false;
+    }
+};
+
+RcloneStatus clientSuccess()
+{
+    return {
+        true,
+        {RcloneErrorCode::None, {}, 0},
+    };
+}
+
+RcloneStatus clientFailure(RcloneErrorCode code,
+                           const QString &message)
+{
+    return {
+        false,
+        {code, message, -1},
+    };
+}
+
+QString uploadStagingSpec(const QString &remoteDest)
+{
+    const qsizetype nameStart =
+        remoteDest.lastIndexOf(QLatin1Char('/')) + 1;
+    const QString fileName = remoteDest.mid(nameStart);
+    const qsizetype extensionStart =
+        fileName.lastIndexOf(QLatin1Char('.'));
+    const QString extension = extensionStart > 0
+            && fileName.size() - extensionStart <= 32
+        ? fileName.mid(extensionStart)
+        : QString();
+    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString stagingName =
+        QStringLiteral(".kio-rclone-upload-%1%2")
+            .arg(token, extension);
+
+    return remoteDest.left(nameStart) + stagingName;
+}
+
+RcloneStatus targetStillMatches(
+    const RcloneTargetSnapshot &expected,
+    const RcloneResponse<RcloneItem> &current)
+{
+    if (!current.success()) {
+        if (current.error.code != RcloneErrorCode::NotFound) {
+            return {false, current.error};
+        }
+
+        if (!expected.exists) {
+            return clientSuccess();
+        }
+
+        return clientFailure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral(
+                "The remote file was deleted while local changes were being prepared"));
+    }
+
+    if (!expected.exists) {
+        return clientFailure(
+            RcloneErrorCode::AlreadyExists,
+            QStringLiteral(
+                "A remote file was created while local changes were being prepared"));
+    }
+
+    if (current.data->isDirectory != expected.isDirectory) {
+        return clientFailure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral(
+                "The remote destination changed type while local changes were being prepared"));
+    }
+
+    if ((!expected.id.isEmpty()
+         && !current.data->id.isEmpty()
+         && expected.id != current.data->id)
+        || (expected.modificationTime.isValid()
+            && current.data->modificationTime.isValid()
+            && expected.modificationTime
+                != current.data->modificationTime)
+        || (expected.size >= 0
+            && current.data->size >= 0
+            && expected.size != current.data->size)) {
+        return clientFailure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral(
+                "The remote file changed while local changes were being prepared"));
+    }
+
+    return clientSuccess();
+}
 
 RcloneErrorCode classifyProcessFailure(
     int exitCode,
@@ -809,27 +906,54 @@ RcloneClient::upload(const QString &localSrc,
             QStringLiteral("Local source is not readable"));
     }
 
-    const qint64 fileSize = source.size();
+    RcloneTargetSnapshot expected;
 
-    // No confundimos un error de stat con un destino inexistente.
-    const auto destination = stat(remoteDest, ctx);
+    if (options.expectedTarget) {
+        expected = *options.expectedTarget;
+    } else {
+        // Do not confuse a failed stat with an available destination.
+        const auto destination = stat(remoteDest, ctx);
 
-    if (destination.success()) {
+        if (destination.success()) {
+            expected =
+                RcloneTargetSnapshot::fromItem(*destination.data);
+        } else if (destination.error.code != RcloneErrorCode::NotFound) {
+            return {false, destination.error};
+        }
+    }
+
+    if (expected.exists) {
         if (!options.replaceExisting) {
             return failure(
                 RcloneErrorCode::AlreadyExists,
                 QStringLiteral("Destination already exists"));
         }
 
-        if (destination.data->isDirectory) {
+        if (expected.isDirectory) {
             return failure(
                 RcloneErrorCode::Unsupported,
                 QStringLiteral(
                     "Replacing an existing directory is not supported"));
         }
-    } else if (destination.error.code != RcloneErrorCode::NotFound) {
-        return {false, destination.error};
     }
+
+    const qint64 fileSize = source.size();
+    const QString stagingSpec = uploadStagingSpec(remoteDest);
+
+    auto cleanupStaging = [this, &stagingSpec]() {
+        CleanupContext cleanupContext;
+        (void)runStreamingCommand(
+            {
+                QStringLiteral("deletefile"),
+                stagingSpec,
+            },
+            [](const QByteArray &) {
+                return true;
+            },
+            cleanupContext,
+            {},
+            30000);
+    };
 
     TransferStats progress;
 
@@ -843,7 +967,7 @@ RcloneClient::upload(const QString &localSrc,
         {
             QStringLiteral("copyto"),
             localSrc,
-            remoteDest,
+            stagingSpec,
             QStringLiteral("--no-traverse"),
             QStringLiteral("--use-json-log"),
             QStringLiteral("--stats"),
@@ -903,11 +1027,42 @@ RcloneClient::upload(const QString &localSrc,
         -1);
 
     if (!status.success()) {
+        cleanupStaging();
         return status;
     }
 
-    // El proceso terminó correctamente. La transferencia está completa,
-    // aunque el último intervalo de estadísticas no haya llegado.
+    // Validate after the potentially long transfer. The fully uploaded sibling
+    // can be discarded without ever exposing partial contents at remoteDest.
+    const RcloneStatus unchanged = targetStillMatches(
+        expected,
+        stat(remoteDest, ctx));
+
+    if (!unchanged.success()) {
+        cleanupStaging();
+        return unchanged;
+    }
+
+    const RcloneStatus published = runStreamingCommand(
+        {
+            QStringLiteral("moveto"),
+            stagingSpec,
+            remoteDest,
+            QStringLiteral("--no-traverse"),
+            QStringLiteral("--ignore-times"),
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx,
+        {},
+        -1);
+
+    if (!published.success()) {
+        cleanupStaging();
+        return published;
+    }
+
+    // Publication is complete even when the last stats interval did not fire.
     progress.bytes = fileSize;
     progress.percentage = 100;
     progress.speed = 0;
@@ -917,7 +1072,7 @@ RcloneClient::upload(const QString &localSrc,
         onProgress(progress);
     }
 
-    return status;
+    return published;
 }
 
 QString RcloneClient::locateExecutable()

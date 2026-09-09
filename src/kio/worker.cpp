@@ -677,8 +677,12 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url,
         location->toCliSpec(),
         statOptionsFor(*location),
         ctx);
+    RcloneTargetSnapshot targetSnapshot;
 
     if (destination.success()) {
+        targetSnapshot =
+            RcloneTargetSnapshot::fromItem(*destination.data);
+
         if (destination.data->isDirectory) {
             return KIO::WorkerResult::fail(
                 KIO::ERR_DIR_ALREADY_EXIST,
@@ -783,6 +787,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url,
 
     RcloneWriteOptions options;
     options.replaceExisting = flags & KIO::Overwrite;
+    options.expectedTarget = targetSnapshot;
 
     infoMessage(i18n("Uploading…"));
     const RcloneStatus status = m_client.upload(
