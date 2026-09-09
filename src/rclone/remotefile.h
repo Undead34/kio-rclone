@@ -3,6 +3,7 @@
 #include "client.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QIODevice>
 #include <QTemporaryFile>
 
@@ -46,6 +47,17 @@ private:
     [[nodiscard]] RcloneStatus
     ensureLocalCopy(const RcloneContext &ctx);
 
+    /**
+     * @brief Evita sobrescribir silenciosamente un archivo que cambió desde
+     *        que se preparó su copia local de escritura.
+     *
+     * La comprobación se hace justo antes del único upload de close(). No es
+     * una operación condicional atómica del proveedor, pero sí evita el caso
+     * normal de editar una versión obsoleta durante una sesión FileJob.
+     */
+    [[nodiscard]] RcloneStatus
+    verifyWriteTargetUnchanged(const RcloneContext &ctx) const;
+
     void reset();
 
     RcloneClient &m_client;
@@ -59,6 +71,11 @@ private:
 
     bool m_dirty = false;
     bool m_hasLocalCopy = false;
+
+    bool m_existed = false;
+    QString m_originalId;
+    QDateTime m_originalModificationTime;
+    qint64 m_originalSize = -1;
 
     QTemporaryFile m_localFile;
 };

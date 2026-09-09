@@ -128,6 +128,10 @@ RcloneRemoteFile::open(const QString &remoteSpec,
     m_size = -1;
     m_dirty = false;
     m_hasLocalCopy = false;
+    m_existed = false;
+    m_originalId.clear();
+    m_originalModificationTime = {};
+    m_originalSize = -1;
 
     const auto item = m_client.stat(remoteSpec, ctx);
 
@@ -153,6 +157,10 @@ RcloneRemoteFile::open(const QString &remoteSpec,
                 QStringLiteral("The remote file is read-only"));
         }
 
+        m_existed = true;
+        m_originalId = item.data->id;
+        m_originalModificationTime = item.data->modificationTime;
+        m_originalSize = item.data->size;
         m_size = item.data->size;
 
         if (mode.testFlag(QIODevice::Truncate)) {
@@ -428,20 +436,26 @@ RcloneRemoteFile::truncate(qint64 size)
 RcloneStatus
 RcloneRemoteFile::flush(const RcloneContext &ctx)
 {
+    Q_UNUSED(ctx)
+
     if (!isOpen()) {
         return failure(
             RcloneErrorCode::Unsupported,
             QStringLiteral("No remote file is open"));
     }
 
-    if (!m_dirty) {
+    // FileJob writes are staged locally. A flush must never turn into a
+    // network upload: applications such as LibreOffice may issue many flushes
+    // while a document is still being edited.
+    if (!m_hasLocalCopy) {
         return success();
     }
 
-    const RcloneStatus localStatus = ensureLocalCopy(ctx);
-
-    if (!localStatus.success()) {
-        return localStatus;
+    if (!m_localFile.isOpen()
+        && !m_localFile.open()) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            m_localFile.errorString());
     }
 
     if (!m_localFile.flush()) {
@@ -450,23 +464,6 @@ RcloneRemoteFile::flush(const RcloneContext &ctx)
             m_localFile.errorString());
     }
 
-    const QString localPath = m_localFile.fileName();
-
-    RcloneWriteOptions options;
-    options.replaceExisting = true;
-
-    const RcloneStatus status = m_client.upload(
-        localPath,
-        m_remoteSpec,
-        {},
-        options,
-        ctx);
-
-    if (!status.success()) {
-        return status;
-    }
-
-    m_dirty = false;
     return success();
 }
 
@@ -477,10 +474,35 @@ RcloneRemoteFile::close(const RcloneContext &ctx)
         return success();
     }
 
-    const RcloneStatus status = flush(ctx);
+    if (!m_dirty) {
+        reset();
+        return success();
+    }
 
-    if (!status.success()) {
-        return status;
+    const RcloneStatus localStatus = flush(ctx);
+
+    if (!localStatus.success()) {
+        return localStatus;
+    }
+
+    const RcloneStatus unchangedStatus = verifyWriteTargetUnchanged(ctx);
+
+    if (!unchangedStatus.success()) {
+        return unchangedStatus;
+    }
+
+    RcloneWriteOptions options;
+    options.replaceExisting = m_existed;
+
+    const RcloneStatus uploadStatus = m_client.upload(
+        m_localFile.fileName(),
+        m_remoteSpec,
+        {},
+        options,
+        ctx);
+
+    if (!uploadStatus.success()) {
+        return uploadStatus;
     }
 
     reset();
@@ -595,6 +617,59 @@ RcloneRemoteFile::ensureLocalCopy(const RcloneContext &ctx)
     return success();
 }
 
+RcloneStatus
+RcloneRemoteFile::verifyWriteTargetUnchanged(
+    const RcloneContext &ctx) const
+{
+    const auto current = m_client.stat(m_remoteSpec, ctx);
+
+    if (!m_existed) {
+        if (!current.success()) {
+            if (current.error.code == RcloneErrorCode::NotFound) {
+                return success();
+            }
+
+            return {false, current.error};
+        }
+
+        return failure(
+            RcloneErrorCode::AlreadyExists,
+            QStringLiteral("A remote file was created while it was being edited"));
+    }
+
+    if (!current.success()) {
+        if (current.error.code == RcloneErrorCode::NotFound) {
+            return failure(
+                RcloneErrorCode::ProcessFailure,
+                QStringLiteral("The remote file was deleted while it was being edited"));
+        }
+
+        return {false, current.error};
+    }
+
+    if (current.data->isDirectory) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral("The remote file was replaced by a directory while it was being edited"));
+    }
+
+    if ((!m_originalId.isEmpty()
+         && !current.data->id.isEmpty()
+         && m_originalId != current.data->id)
+        || (m_originalModificationTime.isValid()
+            && current.data->modificationTime.isValid()
+            && m_originalModificationTime != current.data->modificationTime)
+        || (m_originalSize >= 0
+            && current.data->size >= 0
+            && m_originalSize != current.data->size)) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral("The remote file changed while it was being edited"));
+    }
+
+    return success();
+}
+
 void RcloneRemoteFile::reset()
 {
     m_localFile.close();
@@ -606,4 +681,8 @@ void RcloneRemoteFile::reset()
     m_size = -1;
     m_dirty = false;
     m_hasLocalCopy = false;
+    m_existed = false;
+    m_originalId.clear();
+    m_originalModificationTime = {};
+    m_originalSize = -1;
 }
