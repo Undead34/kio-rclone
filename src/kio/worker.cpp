@@ -7,14 +7,46 @@
 #include "worker.h"
 #include "rclone/url.h"
 
-#include <QDateTime>
-#include <QUrl>
-
-#include <KIO/UDSEntry>
-#include <KIO/Global>
 #include <KLocalizedString>
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocale>
+#include <QLoggingCategory>
+#include <QProcess>
+
+#include <optional>
+
+Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
+
 namespace {
+
+class KIOPluginForMetaData : public QObject
+{
+    Q_OBJECT
+    Q_PLUGIN_METADATA(IID "org.kde.kio.worker.rclone" FILE "rclone.json")
+};
+
+extern "C" Q_DECL_EXPORT int kdemain(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    app.setApplicationName(QStringLiteral("kio_rclone"));
+
+    if (argc != 4) {
+        qCritical("Usage: kio_rclone protocol domain-socket1 domain-socket2");
+        return 1;
+    }
+
+    RcloneWorker worker(argv[1], argv[2], argv[3]);
+    worker.dispatchLoop();
+    return 0;
+}
 
 class WorkerRcloneContext final : public RcloneContext
 {
@@ -104,13 +136,24 @@ KIO::WorkerResult listFailure(const RcloneError &error,
         display);
 }
 
-KIO::UDSEntry makeDirectoryEntry(const QString &name)
+QString iconForRemoteType(const QString &type)
+{
+    static const QHash<QString, QString> icons = {
+        {QStringLiteral("drive"), QStringLiteral("folder-gdrive")},
+        {QStringLiteral("dropbox"), QStringLiteral("folder-dropbox")},
+        {QStringLiteral("onedrive"), QStringLiteral("folder-onedrive")},
+    };
+    return icons.value(type, QStringLiteral("folder-cloud"));
+}
+
+KIO::UDSEntry makeRemoteEntry(const QString &name, const QString &type)
 {
     KIO::UDSEntry entry;
 
     entry.fastInsert(KIO::UDSEntry::UDS_NAME, name);
     entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
     entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
+    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, iconForRemoteType(type));
     entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, 0700);
 
     return entry;
@@ -133,55 +176,46 @@ KIO::UDSEntry makeConfigLauncherEntry()
     return entry;
 }
 
-KIO::UDSEntry makeEntry(const RcloneItem &item)
+KIO::UDSEntry makeEntry(const RcloneNavigationEntry &entry)
 {
-    KIO::UDSEntry entry;
+    KIO::UDSEntry uds;
 
-    QString name = item.name;
+    uds.fastInsert(KIO::UDSEntry::UDS_NAME, entry.name);
+    uds.fastInsert(
+        KIO::UDSEntry::UDS_FILE_TYPE,
+        entry.isDirectory ? S_IFDIR : S_IFREG);
 
-    if (name.isEmpty()) {
-        name = item.path.section(QLatin1Char('/'), -1);
+    uds.fastInsert(
+        KIO::UDSEntry::UDS_ACCESS,
+        entry.readOnly
+            ? (entry.isDirectory ? 0500 : 0400)
+            : (entry.isDirectory ? 0700 : 0600));
+
+    if (!entry.mimeType.isEmpty()) {
+        uds.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, entry.mimeType);
     }
 
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, name);
-
-    if (item.isDirectory) {
-        entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
-        entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
-        entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, item.readOnly ? 0500 : 0700);
-    } else {
-        entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFREG);
-        entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, item.readOnly ? 0400 : 0600);
-
-        if (!item.mimeType.isEmpty()) {
-            entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, item.mimeType);
-        }
-
-        if (item.size >= 0) {
-            entry.fastInsert(KIO::UDSEntry::UDS_SIZE, item.size);
-        }
+    if (!entry.iconName.isEmpty()) {
+        uds.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, entry.iconName);
     }
 
-    if (item.modificationTime.isValid()) {
-        entry.fastInsert(
+    if (entry.size >= 0) {
+        uds.fastInsert(KIO::UDSEntry::UDS_SIZE, entry.size);
+    }
+
+    if (entry.modificationTime.isValid()) {
+        uds.fastInsert(
             KIO::UDSEntry::UDS_MODIFICATION_TIME,
-            item.modificationTime.toSecsSinceEpoch());
+            entry.modificationTime.toSecsSinceEpoch());
     }
 
-    return entry;
-}
+    if (entry.url.isValid()) {
+        uds.fastInsert(
+            KIO::UDSEntry::UDS_URL,
+            entry.url.toString());
+    }
 
-KIO::UDSEntry makeRootEntry()
-{
-    KIO::UDSEntry entry;
-    reserveEntry(entry, 4, 2);
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, QStringLiteral("."));
-    entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, i18n("Rclone Remotes"));
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("folder-kio-rclone"));
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
-    return entry;
+    return uds;
 }
 
 } // namespace
@@ -190,37 +224,42 @@ RcloneWorker::RcloneWorker(const QByteArray &protocol,
                            const QByteArray &poolSocket,
                            const QByteArray &appSocket)
     : KIO::WorkerBase(protocol, poolSocket, appSocket)
+    , m_client()
+    , m_navigation(m_client)
 {
 }
 
 KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 {
-    const auto rcloneUrl = RcloneUrl::parse(url);
+    const auto location = RcloneLocation::parse(url);
 
-    if (!rcloneUrl) {
+    if (!location) {
         return malformedUrlResult(url);
     }
 
-    if (rcloneUrl->isConfigureEntry()) {
+    if (location->isConfigureEntry()) {
         return KIO::WorkerResult::fail(
             KIO::ERR_IS_FILE,
             url.toDisplayString());
     }
 
-    if (rcloneUrl->isRoot()) {
-        return listRoot(url);
-    }
-
     WorkerRcloneContext ctx(*this);
 
-    const RcloneStatus status = m_client.list(
-        rcloneUrl->toCliSpec(),
-        false,
-        [this](const RcloneItem &item) {
-            listEntry(makeEntry(item));
-            return !wasKilled();
-        },
-        ctx);
+    const RcloneStatus status =
+        location->isRoot()
+            ? m_navigation.listRoot(
+                  [this](const RcloneNavigationEntry &entry) {
+                      listEntry(makeEntry(entry));
+                      return !wasKilled();
+                  },
+                  ctx)
+            : m_navigation.list(
+                  *location,
+                  [this](const RcloneNavigationEntry &entry) {
+                      listEntry(makeEntry(entry));
+                      return !wasKilled();
+                  },
+                  ctx);
 
     if (!status.success()) {
         return listFailure(status.error, url);
@@ -321,31 +360,9 @@ KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
 
 /// Privates
 
-KIO::WorkerResult RcloneWorker::listRoot(const QUrl &url)
-{
-    WorkerRcloneContext ctx(*this);
 
-    const auto remotes = m_client.listRemotes(ctx);
 
-    if (!remotes.success()) {
-        return listFailure(remotes.error, url);
-    }
-
-    listEntry(makeRootEntry());
-    listEntry(makeConfigLauncherEntry());
-
-    for (const RcloneRemote &remote : *remotes.data) {
-        if (ctx.isCancelled()) {
-            return KIO::WorkerResult::fail(
-                KIO::ERR_USER_CANCELED,
-                url.toDisplayString());
-        }
-
-        listEntry(makeDirectoryEntry(remote.name));
-    }
-
-    return KIO::WorkerResult::pass();
-}
+#include "worker.moc"
 
 // /*
 //  * SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>

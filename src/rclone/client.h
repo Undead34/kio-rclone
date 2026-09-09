@@ -104,6 +104,11 @@ struct RcloneWriteOptions {
     bool replaceExisting = false;
 };
 
+struct RcloneListOptions {
+    bool recursive = false;
+    QStringList extraArguments;
+};
+
 /**
  * @brief Cliente bloqueante para operaciones de archivos mediante rclone.
  *
@@ -162,6 +167,12 @@ public:
     [[nodiscard]] RcloneStatus
     list(const QString &remoteSpec,
          bool recursive,
+         const ItemCallback &onItem,
+         const RcloneContext &ctx) const;
+
+    [[nodiscard]] RcloneStatus
+    list(const QString &remoteSpec,
+         const RcloneListOptions &options,
          const ItemCallback &onItem,
          const RcloneContext &ctx) const;
 

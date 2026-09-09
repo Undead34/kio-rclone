@@ -70,3 +70,14 @@ struct RcloneRemote {
     [[nodiscard]] static std::optional<RcloneRemote>
     fromJson(const QJsonObject &object);
 };
+
+/**
+ * @brief Unidad compartida de Google Drive.
+ */
+struct RcloneSharedDrive {
+    QString id;
+    QString name;
+
+    [[nodiscard]] static std::optional<RcloneSharedDrive>
+    fromJson(const QJsonObject &object);
+};

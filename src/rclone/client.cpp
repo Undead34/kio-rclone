@@ -258,14 +258,28 @@ RcloneClient::list(const QString &remoteSpec,
                    const ItemCallback &onItem,
                    const RcloneContext &ctx) const
 {
+    RcloneListOptions options;
+    options.recursive = recursive;
+
+    return list(remoteSpec, options, onItem, ctx);
+}
+
+RcloneStatus
+RcloneClient::list(const QString &remoteSpec,
+                   const RcloneListOptions &options,
+                   const ItemCallback &onItem,
+                   const RcloneContext &ctx) const
+{
     QStringList arguments{
         QStringLiteral("lsjson"),
         remoteSpec,
     };
 
-    if (recursive) {
+    if (options.recursive) {
         arguments.append(QStringLiteral("--recursive"));
     }
+
+    arguments.append(options.extraArguments);
 
     QByteArray pending;
     bool arrayStarted = false;

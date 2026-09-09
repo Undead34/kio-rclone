@@ -6,179 +6,200 @@
 
 #include "location.h"
 
-#include <QChar>
-
+#include <QUrlQuery>
 #include <utility>
 
-namespace
-{
-constexpr auto MyDrive = "my-drive";
-constexpr auto SharedWithMe = "shared-with-me";
-constexpr auto SharedDrives = "shared-drives";
-constexpr auto Trash = "trash";
-constexpr auto Starred = "starred";
-constexpr auto Folders = "folders";
+namespace {
 
-QString appendPath(const QString &rootSpec, const QString &path)
+constexpr auto ViewQueryKey = "rclone-view";
+constexpr auto IdQueryKey = "id";
+constexpr auto NameQueryKey = "name";
+
+QString viewName(RcloneLocation::Kind kind)
 {
-    return rootSpec + path;
+    switch (kind) {
+    case RcloneLocation::Kind::DriveHub:
+        return QStringLiteral("drive-hub");
+    case RcloneLocation::Kind::DriveMyDrive:
+        return QStringLiteral("drive-my-drive");
+    case RcloneLocation::Kind::DriveSharedWithMe:
+        return QStringLiteral("drive-shared-with-me");
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return QStringLiteral("drive-shared-drives");
+    case RcloneLocation::Kind::DriveTrash:
+        return QStringLiteral("drive-trash");
+    case RcloneLocation::Kind::DriveStarred:
+        return QStringLiteral("drive-starred");
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return QStringLiteral("drive-shared-drive");
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+        break;
+    }
+
+    return {};
 }
 
-QString appendCachePath(const QString &nameSpace, const QString &path)
+std::optional<RcloneLocation::Kind> kindFromView(const QString &view)
 {
-    if (nameSpace.isEmpty()) {
-        return path;
-    }
-    return path.isEmpty() ? nameSpace : nameSpace + QLatin1Char('/') + path;
-}
-} // namespace
-
-RcloneLocation::RcloneLocation(Kind kind,
-                               QString remote,
-                               QString relativePath,
-                               QString identifier,
-                               QString rootSpec,
-                               QString cacheNamespace,
-                               QString mutationScope,
-                               bool writable)
-    : m_kind(kind)
-    , m_remote(std::move(remote))
-    , m_relativePath(std::move(relativePath))
-    , m_identifier(std::move(identifier))
-    , m_rootSpec(std::move(rootSpec))
-    , m_cacheNamespace(std::move(cacheNamespace))
-    , m_mutationScope(std::move(mutationScope))
-    , m_writable(writable)
-{
-}
-
-RcloneLocation RcloneLocation::standard(const QString &remote, const QString &remotePath)
-{
-    return {Kind::Standard,
-            remote,
-            remotePath,
-            {},
-            remote + QLatin1Char(':'),
-            {},
-            QStringLiteral("standard:") + remote,
-            true};
-}
-
-std::optional<RcloneLocation> RcloneLocation::googleDrive(const QString &remote, const QString &remotePath)
-{
-    if (remote.isEmpty() || !isValidRelativePath(remotePath)) {
-        return std::nullopt;
+    if (view == QStringLiteral("drive-hub")) {
+        return RcloneLocation::Kind::DriveHub;
     }
 
-    if (remotePath.isEmpty()) {
-        return RcloneLocation{Kind::DriveHub,
-                              remote,
-                              {},
-                              {},
-                              {},
-                              QStringLiteral("drive/hub"),
-                              {},
-                              false};
+    if (view == QStringLiteral("drive-my-drive")) {
+        return RcloneLocation::Kind::DriveMyDrive;
     }
 
-    const QStringList parts = remotePath.split(QLatin1Char('/'), Qt::SkipEmptyParts);
-    const QString first = parts.constFirst();
-    const QString relative = parts.mid(1).join(QLatin1Char('/'));
+    if (view == QStringLiteral("drive-shared-with-me")) {
+        return RcloneLocation::Kind::DriveSharedWithMe;
+    }
 
-    if (first == QLatin1String(MyDrive)) {
-        return RcloneLocation{Kind::DriveMyDrive,
-                              remote,
-                              relative,
-                              {},
-                              remote + QLatin1Char(':'),
-                              QStringLiteral("drive/my-drive"),
-                              QStringLiteral("drive:my-drive"),
-                              true};
+    if (view == QStringLiteral("drive-shared-drives")) {
+        return RcloneLocation::Kind::DriveSharedDrives;
     }
-    if (first == QLatin1String(SharedWithMe)) {
-        return RcloneLocation{Kind::DriveSharedWithMe,
-                              remote,
-                              relative,
-                              {},
-                              remote + QStringLiteral(",shared_with_me:"),
-                              QStringLiteral("drive/shared-with-me"),
-                              {},
-                              false};
-    }
-    if (first == QLatin1String(Trash)) {
-        return RcloneLocation{Kind::DriveTrash,
-                              remote,
-                              relative,
-                              {},
-                              remote + QStringLiteral(",trashed_only:"),
-                              QStringLiteral("drive/trash"),
-                              {},
-                              false};
-    }
-    if (first == QLatin1String(Starred)) {
-        return RcloneLocation{Kind::DriveStarred,
-                              remote,
-                              relative,
-                              {},
-                              remote + QStringLiteral(",starred_only:"),
-                              QStringLiteral("drive/starred"),
-                              {},
-                              false};
-    }
-    if (first == QLatin1String(SharedDrives)) {
-        if (parts.size() == 1) {
-            return RcloneLocation{Kind::DriveSharedDrives,
-                                  remote,
-                                  {},
-                                  {},
-                                  {},
-                                  QStringLiteral("drive/shared-drives"),
-                                  {},
-                                  false};
-        }
 
-        const QString id = parts.at(1);
-        if (!isValidIdentifier(id)) {
-            return std::nullopt;
-        }
-        const QString driveRelative = parts.mid(2).join(QLatin1Char('/'));
-        return RcloneLocation{Kind::DriveSharedDrive,
-                              remote,
-                              driveRelative,
-                              id,
-                              remote + QStringLiteral(",team_drive=") + id + QStringLiteral(",root_folder_id=:"),
-                              QStringLiteral("drive/shared-drives/") + id,
-                              QStringLiteral("drive:shared-drive:") + id,
-                              true};
+    if (view == QStringLiteral("drive-trash")) {
+        return RcloneLocation::Kind::DriveTrash;
     }
-    if (first == QLatin1String(Folders)) {
-        if (parts.size() == 1) {
-            return RcloneLocation{Kind::DriveFolders,
-                                  remote,
-                                  {},
-                                  {},
-                                  {},
-                                  QStringLiteral("drive/folders"),
-                                  {},
-                                  false};
-        }
 
-        const QString id = parts.at(1);
-        if (!isValidIdentifier(id)) {
-            return std::nullopt;
-        }
-        const QString folderRelative = parts.mid(2).join(QLatin1Char('/'));
-        return RcloneLocation{Kind::DriveFolder,
-                              remote,
-                              folderRelative,
-                              id,
-                              remote + QStringLiteral(",root_folder_id=") + id + QLatin1Char(':'),
-                              QStringLiteral("drive/folders/") + id,
-                              QStringLiteral("drive:folder:") + id,
-                              true};
+    if (view == QStringLiteral("drive-starred")) {
+        return RcloneLocation::Kind::DriveStarred;
+    }
+
+    if (view == QStringLiteral("drive-shared-drive")) {
+        return RcloneLocation::Kind::DriveSharedDrive;
     }
 
     return std::nullopt;
+}
+
+QUrl makeBaseUrl(const QString &remoteName,
+                 const QString &remotePath)
+{
+    QString path = QLatin1Char('/') + remoteName;
+
+    if (!remotePath.isEmpty()) {
+        path += QLatin1Char('/');
+        path += remotePath;
+    } else {
+        path += QLatin1Char('/');
+    }
+
+    QUrl url;
+    url.setScheme(QStringLiteral("rclone"));
+    url.setPath(path);
+
+    return url;
+}
+
+QUrl withDriveView(QUrl url,
+                   RcloneLocation::Kind kind,
+                   const QString &identifier = {},
+                   const QString &label = {})
+{
+    QUrlQuery query;
+    query.addQueryItem(QString::fromLatin1(ViewQueryKey), viewName(kind));
+
+    if (!identifier.isEmpty()) {
+        query.addQueryItem(QString::fromLatin1(IdQueryKey), identifier);
+    }
+
+    if (!label.isEmpty()) {
+        query.addQueryItem(QString::fromLatin1(NameQueryKey), label);
+    }
+
+    url.setQuery(query);
+    return url;
+}
+
+} // namespace
+
+RcloneLocation::RcloneLocation(RcloneUrl base,
+                               Kind kind,
+                               QString identifier,
+                               QString label)
+    : m_base(std::move(base))
+    , m_kind(kind)
+    , m_identifier(std::move(identifier))
+    , m_label(std::move(label))
+{
+}
+
+std::optional<RcloneLocation>
+RcloneLocation::parse(const QUrl &url)
+{
+    QUrl baseUrl = url;
+    const QUrlQuery query(url);
+
+    baseUrl.setQuery(QString{});
+
+    auto base = RcloneUrl::parse(baseUrl);
+
+    if (!base) {
+        return std::nullopt;
+    }
+
+    if (base->isRoot()) {
+        return RcloneLocation(std::move(*base), Kind::Root);
+    }
+
+    if (base->isConfigureEntry()) {
+        return RcloneLocation(std::move(*base), Kind::ConfigureEntry);
+    }
+
+    const QString view =
+        query.queryItemValue(QString::fromLatin1(ViewQueryKey));
+
+    if (view.isEmpty()) {
+        return RcloneLocation(std::move(*base), Kind::Standard);
+    }
+
+    const auto kind = kindFromView(view);
+
+    if (!kind) {
+        return std::nullopt;
+    }
+
+    return RcloneLocation(
+        std::move(*base),
+        *kind,
+        query.queryItemValue(QString::fromLatin1(IdQueryKey)),
+        query.queryItemValue(QString::fromLatin1(NameQueryKey)));
+}
+
+QUrl RcloneLocation::standardUrl(const QString &remoteName,
+                                 const QString &remotePath)
+{
+    return makeBaseUrl(remoteName, remotePath);
+}
+
+QUrl RcloneLocation::driveHubUrl(const QString &remoteName)
+{
+    return withDriveView(
+        makeBaseUrl(remoteName, {}),
+        Kind::DriveHub);
+}
+
+QUrl RcloneLocation::driveViewUrl(const QString &remoteName,
+                                  Kind kind,
+                                  const QString &remotePath)
+{
+    return withDriveView(
+        makeBaseUrl(remoteName, remotePath),
+        kind);
+}
+
+QUrl RcloneLocation::driveSharedDriveUrl(const QString &remoteName,
+                                         const QString &driveId,
+                                         const QString &driveName,
+                                         const QString &remotePath)
+{
+    return withDriveView(
+        makeBaseUrl(remoteName, remotePath),
+        Kind::DriveSharedDrive,
+        driveId,
+        driveName);
 }
 
 RcloneLocation::Kind RcloneLocation::kind() const
@@ -186,14 +207,54 @@ RcloneLocation::Kind RcloneLocation::kind() const
     return m_kind;
 }
 
-QString RcloneLocation::remote() const
+bool RcloneLocation::isRoot() const
 {
-    return m_remote;
+    return m_kind == Kind::Root;
 }
 
-QString RcloneLocation::relativePath() const
+bool RcloneLocation::isConfigureEntry() const
 {
-    return m_relativePath;
+    return m_kind == Kind::ConfigureEntry;
+}
+
+bool RcloneLocation::isDriveVirtual() const
+{
+    switch (m_kind) {
+    case Kind::DriveHub:
+    case Kind::DriveMyDrive:
+    case Kind::DriveSharedWithMe:
+    case Kind::DriveSharedDrives:
+    case Kind::DriveTrash:
+    case Kind::DriveStarred:
+    case Kind::DriveSharedDrive:
+        return true;
+    case Kind::Root:
+    case Kind::ConfigureEntry:
+    case Kind::Standard:
+        return false;
+    }
+
+    return false;
+}
+
+QString RcloneLocation::remoteName() const
+{
+    return m_base.remoteName();
+}
+
+QString RcloneLocation::remotePath() const
+{
+    return m_base.remotePath();
+}
+
+QString RcloneLocation::toCliSpec() const
+{
+    return m_base.toCliSpec();
+}
+
+QUrl RcloneLocation::toQUrl() const
+{
+    return m_base.toQUrl();
 }
 
 QString RcloneLocation::identifier() const
@@ -201,122 +262,7 @@ QString RcloneLocation::identifier() const
     return m_identifier;
 }
 
-QString RcloneLocation::rcloneSpec() const
+QString RcloneLocation::label() const
 {
-    return hasRcloneTarget() ? appendPath(m_rootSpec, m_relativePath) : QString();
-}
-
-QString RcloneLocation::rcloneRootSpec() const
-{
-    return m_rootSpec;
-}
-
-QString RcloneLocation::parentSpec() const
-{
-    if (!hasRcloneTarget()) {
-        return {};
-    }
-    return appendPath(m_rootSpec, m_relativePath.section(QLatin1Char('/'), 0, -2));
-}
-
-QString RcloneLocation::leafName() const
-{
-    return m_relativePath.section(QLatin1Char('/'), -1);
-}
-
-QString RcloneLocation::cachePath() const
-{
-    return appendCachePath(m_cacheNamespace, m_relativePath);
-}
-
-QString RcloneLocation::mutationScope() const
-{
-    return m_mutationScope;
-}
-
-bool RcloneLocation::hasRcloneTarget() const
-{
-    return !m_rootSpec.isEmpty();
-}
-
-bool RcloneLocation::isVirtualDirectory() const
-{
-    return m_kind == Kind::DriveHub || m_kind == Kind::DriveSharedDrives || m_kind == Kind::DriveFolders;
-}
-
-bool RcloneLocation::canWrite() const
-{
-    return m_writable;
-}
-
-bool RcloneLocation::isDriveHub() const
-{
-    return m_kind == Kind::DriveHub;
-}
-
-bool RcloneLocation::isDriveTrash() const
-{
-    return m_kind == Kind::DriveTrash;
-}
-
-bool RcloneLocation::isSharedDrivesRoot() const
-{
-    return m_kind == Kind::DriveSharedDrives;
-}
-
-bool RcloneLocation::isFoldersRoot() const
-{
-    return m_kind == Kind::DriveFolders;
-}
-
-bool RcloneLocation::isPhysicalRoot() const
-{
-    return hasRcloneTarget() && m_relativePath.isEmpty();
-}
-
-bool RcloneLocation::sharesMutationScope(const RcloneLocation &other) const
-{
-    return !m_mutationScope.isEmpty() && m_mutationScope == other.m_mutationScope;
-}
-
-RcloneLocation RcloneLocation::withRelativePath(const QString &path) const
-{
-    RcloneLocation copy = *this;
-    copy.m_relativePath = path;
-    return copy;
-}
-
-QList<RcloneLocation::HubEntry> RcloneLocation::driveHubEntries()
-{
-    return {
-        {Kind::DriveMyDrive, QString::fromLatin1(MyDrive), QStringLiteral("user-home"), true},
-        {Kind::DriveSharedWithMe, QString::fromLatin1(SharedWithMe), QStringLiteral("folder-publicshare"), false},
-        {Kind::DriveSharedDrives, QString::fromLatin1(SharedDrives), QStringLiteral("folder-cloud"), false},
-        {Kind::DriveTrash, QString::fromLatin1(Trash), QStringLiteral("user-trash-full"), false},
-        {Kind::DriveStarred, QString::fromLatin1(Starred), QStringLiteral("folder-favorites"), false},
-    };
-}
-
-bool RcloneLocation::isValidRelativePath(const QString &path)
-{
-    for (const QString &part : path.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
-        if (part == QLatin1String(".") || part == QLatin1String("..") || part.contains(QChar::Null)) {
-            return false;
-        }
-    }
-    return !path.startsWith(QLatin1Char('/'));
-}
-
-bool RcloneLocation::isValidIdentifier(const QString &identifier)
-{
-    if (identifier.isEmpty()) {
-        return false;
-    }
-    for (const QChar character : identifier) {
-        if (character.isLetterOrNumber() || character == QLatin1Char('-') || character == QLatin1Char('_')) {
-            continue;
-        }
-        return false;
-    }
-    return true;
+    return m_label;
 }

@@ -254,3 +254,33 @@ RcloneRemote::fromJson(const QJsonObject &object)
 
     return remote;
 }
+
+
+std::optional<RcloneSharedDrive>
+RcloneSharedDrive::fromJson(const QJsonObject &object)
+{
+    QJsonValue id = object.value(QStringLiteral("id"));
+    QJsonValue name = object.value(QStringLiteral("name"));
+
+    if (!id.isString()) {
+        id = object.value(QStringLiteral("ID"));
+    }
+
+    if (!name.isString()) {
+        name = object.value(QStringLiteral("Name"));
+    }
+
+    if (!id.isString() || !name.isString()) {
+        return std::nullopt;
+    }
+
+    RcloneSharedDrive drive;
+    drive.id = id.toString();
+    drive.name = name.toString();
+
+    if (drive.id.isEmpty() || drive.name.isEmpty()) {
+        return std::nullopt;
+    }
+
+    return drive;
+}

@@ -1,9 +1,10 @@
 add_library(kio_rclone_common STATIC
-    rclone/client.cpp
-    rclone/entryformat.cpp
-    rclone/location.cpp
-    rclone/url.cpp
-    rclone/models.cpp
+  rclone/client.cpp
+  rclone/location.cpp
+  rclone/models.cpp
+  rclone/navigation.cpp
+  rclone/navigationentry.cpp
+  rclone/url.cpp
 )
 
 set_target_properties(kio_rclone_common PROPERTIES
@@ -26,6 +27,7 @@ target_link_libraries(kio_rclone_common
         Qt6::Core
         KF6::ConfigCore
         KF6::CoreAddons
+        KF6::I18n
 )
 
 kcoreaddons_add_plugin(kio_rclone

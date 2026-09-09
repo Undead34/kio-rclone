@@ -1,12 +1,7 @@
-/*
- * SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
- *
- * SPDX-License-Identifier: GPL-2.0-or-later
- */
-
 #pragma once
 
 #include "rclone/client.h"
+#include "rclone/navigation.h"
 
 #include <KIO/WorkerBase>
 #include <QHash>
@@ -31,11 +26,9 @@ public:
     KIO::WorkerResult fileSystemFreeSpace(const QUrl &url) override;
 
 private:
-    [[nodiscard]] KIO::WorkerResult listRoot(const QUrl &url);
-
     RcloneClient m_client;
+    RcloneNavigation m_navigation;
 };
-
 
 // /*
 //  * SPDX-FileCopyrightText: 2026 Gabriel Maizo González <maizogabriel@gmail.com>
