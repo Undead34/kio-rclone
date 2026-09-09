@@ -6,7 +6,7 @@
             "Icon": "folder-kio-rclone",
             "deleteRecursive": true,
             "deleting": true,
-            "input": "none",
+            "input": "filesystem",
             "listing": [
                 "Name",
                 "Type",
@@ -23,6 +23,7 @@
             "output": "filesystem",
             "protocol": "rclone",
             "reading": true,
+            "truncating": false,
             "writing": true
         }
     }

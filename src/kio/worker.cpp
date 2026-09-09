@@ -20,7 +20,9 @@
 #include <QLocale>
 #include <QLoggingCategory>
 #include <QProcess>
+#include <QUrlQuery>
 
+#include <limits>
 #include <optional>
 
 Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
@@ -65,13 +67,6 @@ private:
     const KIO::WorkerBase &m_worker;
 };
 
-KIO::WorkerResult notImplemented(const QString &operation)
-{
-    return KIO::WorkerResult::fail(
-        KIO::ERR_UNSUPPORTED_ACTION,
-        operation + QStringLiteral(" not implemented"));
-}
-
 KIO::WorkerResult malformedUrlResult(const QUrl &url)
 {
     return KIO::WorkerResult::fail(
@@ -79,8 +74,9 @@ KIO::WorkerResult malformedUrlResult(const QUrl &url)
         url.toDisplayString());
 }
 
-KIO::WorkerResult listFailure(const RcloneError &error,
-                              const QUrl &url)
+KIO::WorkerResult rcloneFailure(const RcloneError &error,
+                                const QUrl &url,
+                                int fallbackError)
 {
     const QString display = url.toDisplayString();
 
@@ -117,13 +113,31 @@ KIO::WorkerResult listFailure(const RcloneError &error,
 
     if (!error.message.isEmpty()) {
         return KIO::WorkerResult::fail(
-            KIO::ERR_CANNOT_ENTER_DIRECTORY,
+            fallbackError,
             error.message);
     }
 
     return KIO::WorkerResult::fail(
-        KIO::ERR_CANNOT_ENTER_DIRECTORY,
+        fallbackError,
         display);
+}
+
+KIO::WorkerResult listFailure(const RcloneError &error,
+                              const QUrl &url)
+{
+    return rcloneFailure(
+        error,
+        url,
+        KIO::ERR_CANNOT_ENTER_DIRECTORY);
+}
+
+KIO::WorkerResult statFailure(const RcloneError &error,
+                              const QUrl &url)
+{
+    return rcloneFailure(
+        error,
+        url,
+        KIO::ERR_CANNOT_STAT);
 }
 
 QString iconForRemoteType(const QString &type)
@@ -134,19 +148,6 @@ QString iconForRemoteType(const QString &type)
         {QStringLiteral("onedrive"), QStringLiteral("folder-onedrive")},
     };
     return icons.value(type, QStringLiteral("folder-cloud"));
-}
-
-KIO::UDSEntry makeRemoteEntry(const QString &name, const QString &type)
-{
-    KIO::UDSEntry entry;
-
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, name);
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, iconForRemoteType(type));
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, 0700);
-
-    return entry;
 }
 
 KIO::UDSEntry makeEntry(const RcloneNavigationEntry &entry)
@@ -206,6 +207,170 @@ KIO::UDSEntry makeEntry(const RcloneNavigationEntry &entry)
     return uds;
 }
 
+QUrl withItemIdentity(QUrl url,
+                      const RcloneItem &item)
+{
+    QUrlQuery query(url);
+
+    if (!item.id.isEmpty()) {
+        query.removeAllQueryItems(QStringLiteral("rclone-id"));
+        query.addQueryItem(QStringLiteral("rclone-id"), item.id);
+    }
+
+    if (!item.originalId.isEmpty()) {
+        query.removeAllQueryItems(QStringLiteral("rclone-orig-id"));
+        query.addQueryItem(QStringLiteral("rclone-orig-id"), item.originalId);
+    }
+
+    url.setQuery(query);
+    return url;
+}
+
+QUrl withRemoteType(QUrl url,
+                    const QString &remoteType)
+{
+    QUrlQuery query(url);
+    query.removeAllQueryItems(QStringLiteral("rclone-remote-type"));
+    query.addQueryItem(QStringLiteral("rclone-remote-type"), remoteType);
+    url.setQuery(query);
+    return url;
+}
+
+RcloneNavigationEntry virtualDirectoryForStat(
+    const RcloneLocation &location,
+    const QUrl &url)
+{
+    QString name;
+    QString iconName = QStringLiteral("folder");
+    bool readOnly = true;
+
+    switch (location.kind()) {
+    case RcloneLocation::Kind::Root:
+        name = QStringLiteral(".");
+        break;
+
+    case RcloneLocation::Kind::Standard:
+        name = location.remoteName();
+        iconName = iconForRemoteType(
+            QUrlQuery(url).queryItemValue(
+                QStringLiteral("rclone-remote-type")));
+        readOnly = false;
+        break;
+
+    case RcloneLocation::Kind::DriveHub:
+        name = location.remoteName();
+        iconName = QStringLiteral("folder-gdrive");
+        break;
+
+    case RcloneLocation::Kind::DriveMyDrive:
+        name = i18n("My Drive");
+        iconName = QStringLiteral("user-home");
+        break;
+
+    case RcloneLocation::Kind::DriveSharedWithMe:
+        name = i18n("Shared With Me");
+        iconName = QStringLiteral("folder-publicshare");
+        break;
+
+    case RcloneLocation::Kind::DriveSharedDrives:
+        name = i18n("Shared Drives");
+        iconName = QStringLiteral("folder-cloud");
+        break;
+
+    case RcloneLocation::Kind::DriveTrash:
+        name = i18n("Trash");
+        iconName = QStringLiteral("user-trash-full");
+        break;
+
+    case RcloneLocation::Kind::DriveStarred:
+        name = i18n("Starred");
+        iconName = QStringLiteral("folder-favorites");
+        break;
+
+    case RcloneLocation::Kind::DriveSharedDrive:
+        name = location.label().isEmpty()
+            ? location.identifier()
+            : location.label();
+        iconName = QStringLiteral("folder-cloud");
+        break;
+
+    case RcloneLocation::Kind::ConfigureEntry:
+        break;
+    }
+
+    RcloneNavigationEntry entry =
+        RcloneNavigationEntry::virtualDirectory(
+            name,
+            url,
+            iconName);
+    entry.readOnly = readOnly;
+
+    return entry;
+}
+
+bool isSyntheticDirectory(const RcloneLocation &location)
+{
+    if (location.isRoot() || location.remotePath().isEmpty()) {
+        return true;
+    }
+
+    switch (location.kind()) {
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return true;
+
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+    case RcloneLocation::Kind::DriveSharedDrive:
+    case RcloneLocation::Kind::Root:
+        return false;
+    }
+
+    return false;
+}
+
+RcloneListOptions statOptionsFor(const RcloneLocation &location)
+{
+    RcloneListOptions options;
+
+    switch (location.kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+        options.extraArguments.append(
+            QStringLiteral("--drive-shared-with-me"));
+        break;
+
+    case RcloneLocation::Kind::DriveStarred:
+        options.extraArguments.append(
+            QStringLiteral("--drive-starred-only"));
+        break;
+
+    case RcloneLocation::Kind::DriveSharedDrive:
+        options.extraArguments.append(
+            QStringLiteral("--drive-team-drive"));
+        options.extraArguments.append(location.identifier());
+        break;
+
+    case RcloneLocation::Kind::DriveTrash:
+        options.extraArguments.append(
+            QStringLiteral("--drive-trashed-only"));
+        break;
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveMyDrive:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        break;
+    }
+
+    return options;
+}
+
 } // namespace
 
 RcloneWorker::RcloneWorker(const QByteArray &protocol,
@@ -217,192 +382,6 @@ RcloneWorker::RcloneWorker(const QByteArray &protocol,
 {
 }
 
-
-// KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
-// {
-//     const auto directory = RcloneUrl::parse(url);
-
-//     if (!directory.has_value()) {
-//         return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
-//     }
-
-//     if (directory->isConfigureEntry()) {
-//         return KIO::WorkerResult::fail(KIO::ERR_IS_FILE, url.toDisplayString());
-//     }
-
-//     if (const auto result = ensureRcloneClient(); !result.success()) {
-//         return result;
-//     }
-
-//     const bool reloadRequested = bypassesDirectorySnapshot(metaData(QStringLiteral("cache")));
-
-//     if (directory.isRoot()) {
-//         if (reloadRequested) {
-//             invalidateDirectorySnapshots();
-//         }
-//         return listRoot(url);
-//     }
-
-//     QString locationError;
-//     const std::optional<RcloneLocation> location = resolveLocation(directory, &locationError);
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!location) {
-//         return errorResult(locationError, KIO::ERR_MALFORMED_URL, url);
-//     }
-
-//     if (reloadRequested) {
-//         // F5/reload deliberately has stronger freshness semantics. Clear the
-//         // shared snapshots before doing any virtual or physical listing, so
-//         // an unsuccessful refresh cannot revive data the user rejected.
-//         invalidateDirectorySnapshots();
-//     }
-//     if (location->isDriveHub()) {
-//         return listDriveHub(*location);
-//     }
-//     if (location->isSharedDrivesRoot()) {
-//         return listSharedDrives(url, *location);
-//     }
-//     if (location->isFoldersRoot()) {
-//         return listFoldersIndex(*location);
-//     }
-
-//     const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
-//     if (location->isDriveTrash()) {
-//         return listDriveTrash(url, *location, policy);
-//     }
-//     if (!reloadRequested) {
-//         if (const auto cachedItems = cachedDirectory(*location, policy)) {
-//             publishDirectoryEntries(*location, *cachedItems);
-//             return KIO::WorkerResult::pass();
-//         }
-//     }
-
-//     return listRemoteDirectory(url, *location, policy);
-// }
-
-// KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
-// {
-//     QString error;
-//     const QList<RcloneRemote> remotes = m_rclone.remoteList(&error, [this]() {
-//         return wasKilled();
-//     });
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!error.isEmpty()) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     // Current rclone versions report a backend type here. If an older version
-//     // omits it, preserve the generic remote-path behavior instead of reading
-//     // the full config or guessing a provider from its name.
-//     m_remoteDuplicateNameSupport.clear();
-//     m_remoteTypes.clear();
-//     m_sharedDriveNames.clear();
-//     listEntry(KioEntryBuilder::root());
-//     for (const RcloneRemote &remote : remotes) {
-//         m_remoteTypes.insert(remote.name, remote.type);
-//         listEntry(KioEntryBuilder::remote(remote.name, false, remote.type));
-//     }
-//     listEntry(KioEntryBuilder::configure());
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listDriveHub(const RcloneLocation &location)
-// {
-//     listEntry(currentDirectoryEntry(location));
-//     for (const RcloneLocation::HubEntry &entry : RcloneLocation::driveHubEntries()) {
-//         listEntry(KioEntryBuilder::directory(entry.name, driveDisplayName(entry.kind), entry.iconName, entry.writable));
-//     }
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listDriveTrash(const QUrl &requestUrl,
-//                                                const RcloneLocation &directory,
-//                                                const DirectoryListingPolicy &policy)
-// {
-//     if (const auto cachedItems = cachedDirectory(directory, policy)) {
-//         publishDirectoryEntries(directory, *cachedItems);
-//         return KIO::WorkerResult::pass();
-//     }
-
-//     // `--drive-trashed-only` can supply ordinary parent folders when listing
-//     // one level at a time. Ask rclone for the whole filtered result once, then
-//     // reconstruct only branches which lead to a trashed item. rclone documents
-//     // --recursive for lsjson at https://rclone.org/commands/rclone_lsjson/.
-//     QList<RcloneItem> recursiveItems;
-//     QString error;
-//     const bool listed = m_rclone.listStreaming(
-//         directory.rcloneRootSpec(),
-//         [&recursiveItems](const RcloneItem &item) {
-//             recursiveItems.append(item);
-//             return true;
-//         },
-//         &error,
-//         [this]() {
-//             return wasKilled();
-//         },
-//         RcloneListingDepth::Recursive);
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!listed) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     const auto listing = RcloneRecursiveListing::fromItems(recursiveItems, &error);
-//     if (!listing) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     rememberSyntheticTrashItems(directory, *listing);
-//     for (auto snapshot = listing->directories().cbegin(); snapshot != listing->directories().cend(); ++snapshot) {
-//         if (!policy.allowsSnapshots()) {
-//             break;
-//         }
-//         const RcloneLocation snapshotDirectory = directory.withRelativePath(snapshot.key());
-//         static_cast<void>(m_directorySnapshots.store(snapshotDirectory.remote(), snapshotDirectory.cachePath(), snapshot.value()));
-//     }
-
-//     const auto entries = listing->entries(directory.relativePath());
-//     if (!entries) {
-//         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl.toDisplayString());
-//     }
-//     publishDirectoryEntries(directory, *entries);
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listSharedDrives(const QUrl &requestUrl, const RcloneLocation &location)
-// {
-//     QString error;
-//     const QList<RcloneSharedDrive> drives = m_rclone.sharedDrives(location.remote() + QLatin1Char(':'), &error, [this]() {
-//         return wasKilled();
-//     });
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!error.isEmpty()) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     listEntry(currentDirectoryEntry(location));
-//     for (const RcloneSharedDrive &drive : drives) {
-//         m_sharedDriveNames.insert(location.remote() + QLatin1Char('\n') + drive.id, drive.name);
-//         listEntry(KioEntryBuilder::directory(drive.id, drive.name, QStringLiteral("folder-cloud"), true));
-//     }
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listFoldersIndex(const RcloneLocation &location)
-// {
-//     // Folder IDs are not enumerable through rclone. This expert route exists
-//     // for a known ID (for example a Drive URL), not as a misleading empty
-//     // representation of the user's My Drive.
-//     listEntry(currentDirectoryEntry(location));
-//     return KIO::WorkerResult::pass();
-// }
 
 KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 {
@@ -445,60 +424,565 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 
 KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
 {
-    Q_UNUSED(url)
+    const auto location = RcloneLocation::parse(url);
 
-    // TODO: Obtener los metadatos del elemento.
-    return notImplemented(QStringLiteral("stat"));
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (location->isConfigureEntry()) {
+        statEntry(makeEntry(RcloneNavigationEntry::virtualFile(
+            RcloneUrl::ConfigureEntry,
+            RcloneUrlBuilder::createConfigLauncher(),
+            RcloneUrl::ConfigurationLauncherMimeType,
+            QStringLiteral("configure"),
+            i18n("Configure Remotes…"))));
+        return KIO::WorkerResult::pass();
+    }
+
+    if (location->kind() == RcloneLocation::Kind::DriveSharedDrive
+        && location->identifier().isEmpty()) {
+        return malformedUrlResult(url);
+    }
+
+    if (isSyntheticDirectory(*location)) {
+        statEntry(makeEntry(virtualDirectoryForStat(*location, url)));
+        return KIO::WorkerResult::pass();
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto item = m_client.stat(
+        location->toCliSpec(),
+        statOptionsFor(*location),
+        ctx);
+
+    if (!item.success()) {
+        return statFailure(item.error, url);
+    }
+
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+
+    QUrl itemUrl = withItemIdentity(url, *item.data);
+
+    if (location->isDriveVirtual()) {
+        itemUrl = withRemoteType(itemUrl, QStringLiteral("drive"));
+    }
+
+    statEntry(makeEntry(RcloneNavigationEntry::fromItem(
+        *item.data,
+        itemUrl)));
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
 {
-    Q_UNUSED(url)
+    const auto location = RcloneLocation::parse(url);
 
-    // TODO: Determinar el tipo MIME del elemento.
-    return notImplemented(QStringLiteral("mimetype"));
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (location->isConfigureEntry()) {
+        mimeType(RcloneUrl::ConfigurationLauncherMimeType);
+        return KIO::WorkerResult::pass();
+    }
+
+    if (location->kind() == RcloneLocation::Kind::DriveSharedDrive
+        && location->identifier().isEmpty()) {
+        return malformedUrlResult(url);
+    }
+
+    if (isSyntheticDirectory(*location)) {
+        mimeType(QStringLiteral("inode/directory"));
+        return KIO::WorkerResult::pass();
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto item = m_client.stat(
+        location->toCliSpec(),
+        statOptionsFor(*location),
+        ctx);
+
+    if (!item.success()) {
+        return rcloneFailure(item.error, url, KIO::ERR_DOES_NOT_EXIST);
+    }
+
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+
+    mimeType(item.data->isDirectory
+                 ? QStringLiteral("inode/directory")
+                 : item.data->mimeType.isEmpty()
+                 ? QStringLiteral("application/octet-stream")
+                 : item.data->mimeType);
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::get(const QUrl &url)
 {
-    Q_UNUSED(url)
+    const auto location = RcloneLocation::parse(url);
 
-    // TODO: Descargar el archivo y entregar sus datos a KIO.
-    return notImplemented(QStringLiteral("get"));
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (location->isConfigureEntry()) {
+        redirection(RcloneUrlBuilder::createConfigLauncher());
+        return KIO::WorkerResult::pass();
+    }
+
+    if (isSyntheticDirectory(*location)) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IS_DIRECTORY,
+            url.toDisplayString());
+    }
+
+    /*
+     * download() todavía no recibe flags por vista. No debemos omitirlos:
+     * hacerlo podría leer un homónimo de My Drive en vez del elemento que
+     * Dolphin muestra en la vista filtrada.
+     */
+    switch (location->kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Reading files from this Google Drive view is not available yet."));
+
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IS_DIRECTORY,
+            url.toDisplayString());
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+        break;
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto item = m_client.stat(
+        location->toCliSpec(),
+        statOptionsFor(*location),
+        ctx);
+
+    if (!item.success()) {
+        return rcloneFailure(item.error, url, KIO::ERR_CANNOT_READ);
+    }
+
+    if (item.data->isDirectory) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IS_DIRECTORY,
+            url.toDisplayString());
+    }
+
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+
+    mimeType(item.data->mimeType.isEmpty()
+                 ? QStringLiteral("application/octet-stream")
+                 : item.data->mimeType);
+
+    if (item.data->size >= 0) {
+        totalSize(item.data->size);
+    }
+
+    qint64 processed = 0;
+    const RcloneStatus status = m_client.download(
+        location->toCliSpec(),
+        [this, &processed](const QByteArray &chunk) {
+            if (wasKilled()) {
+                return false;
+            }
+
+            data(chunk);
+            processed += chunk.size();
+            processedSize(processed);
+            return true;
+        },
+        ctx);
+
+    if (!status.success()) {
+        return rcloneFailure(status.error, url, KIO::ERR_CANNOT_READ);
+    }
+
+    if (item.data->size >= 0 && processed != item.data->size) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_READ,
+            i18n("The remote file changed while it was being read."));
+    }
+
+    data(QByteArray());
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::put(const QUrl &url,
                                     int permissions,
                                     KIO::JobFlags flags)
 {
-    Q_UNUSED(url)
     Q_UNUSED(permissions)
-    Q_UNUSED(flags)
 
-    // TODO: Recibir los datos de KIO y subir el archivo.
-    return notImplemented(QStringLiteral("put"));
+    const auto location = RcloneLocation::parse(url);
+
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (location->isRoot()
+        || location->isConfigureEntry()
+        || location->remotePath().isEmpty()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_WRITE,
+            url.toDisplayString());
+    }
+
+    switch (location->kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_WRITE_ACCESS_DENIED,
+            i18n("This Google Drive view is read-only."));
+
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_WRITE,
+            url.toDisplayString());
+
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Uploading files to Shared Drives is not available yet."));
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+        break;
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto destination = m_client.stat(
+        location->toCliSpec(),
+        statOptionsFor(*location),
+        ctx);
+
+    if (destination.success()) {
+        if (destination.data->isDirectory) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_DIR_ALREADY_EXIST,
+                url.toDisplayString());
+        }
+
+        if (destination.data->readOnly) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_WRITE_ACCESS_DENIED,
+                url.toDisplayString());
+        }
+
+        if (!(flags & KIO::Overwrite)) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                url.toDisplayString());
+        }
+    } else if (destination.error.code != RcloneErrorCode::NotFound) {
+        return rcloneFailure(destination.error, url, KIO::ERR_CANNOT_STAT);
+    }
+
+    bool sizeOk = false;
+    const qint64 sourceSize = metaData(
+        QStringLiteral("sourceSize")).toLongLong(&sizeOk);
+
+    if (sizeOk && sourceSize >= 0) {
+        totalSize(sourceSize);
+    }
+
+    const QString suffix = QFileInfo(
+        location->remotePath()).completeSuffix();
+    const QString extension = suffix.isEmpty()
+        ? QString()
+        : QLatin1Char('.') + suffix;
+    QTemporaryFile localUpload(
+        QDir::tempPath()
+        + QStringLiteral("/kio-rclone-upload-XXXXXX")
+        + extension);
+
+    if (!localUpload.open()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_OPEN_FOR_WRITING,
+            localUpload.errorString());
+    }
+
+    qint64 stagedSize = 0;
+    infoMessage(i18n("Preparing upload…"));
+
+    while (true) {
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+
+        dataReq();
+        QByteArray sourceData;
+        const int readResult = readData(sourceData);
+
+        if (readResult < 0) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_CANNOT_READ,
+                url.toDisplayString());
+        }
+
+        if (readResult == 0) {
+            break;
+        }
+
+        if (sizeOk && sourceSize >= 0
+            && stagedSize > sourceSize - sourceData.size()) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_CANNOT_WRITE,
+                i18n("The upload source changed size while it was being read."));
+        }
+
+        if (localUpload.write(sourceData) != sourceData.size()) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_CANNOT_WRITE,
+                localUpload.errorString());
+        }
+
+        stagedSize += sourceData.size();
+    }
+
+    if (sizeOk && sourceSize >= 0 && stagedSize != sourceSize) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_WRITE,
+            i18n("The upload source changed size while it was being read."));
+    }
+
+    if (!localUpload.flush()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_WRITE,
+            localUpload.errorString());
+    }
+
+    const QString localUploadPath = localUpload.fileName();
+    localUpload.close();
+
+    if (!sizeOk || sourceSize < 0) {
+        totalSize(stagedSize);
+    }
+
+    RcloneWriteOptions options;
+    options.replaceExisting = flags & KIO::Overwrite;
+
+    infoMessage(i18n("Uploading…"));
+    const RcloneStatus status = m_client.upload(
+        localUploadPath,
+        location->toCliSpec(),
+        [this](const RcloneClient::TransferStats &progress) {
+            if (wasKilled()) {
+                return;
+            }
+
+            processedSize(progress.bytes);
+
+            if (progress.speed >= 0) {
+                const quint64 maximumSpeed =
+                    static_cast<quint64>(
+                        std::numeric_limits<unsigned long>::max());
+                const quint64 boundedSpeed = qMin(
+                    static_cast<quint64>(progress.speed),
+                    maximumSpeed);
+                speed(static_cast<unsigned long>(boundedSpeed));
+            }
+        },
+        options,
+        ctx);
+
+    if (!status.success()) {
+        if (status.error.code == RcloneErrorCode::AlreadyExists) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                url.toDisplayString());
+        }
+
+        return rcloneFailure(status.error, url, KIO::ERR_CANNOT_WRITE);
+    }
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url,
                                       int permissions)
 {
-    Q_UNUSED(url)
     Q_UNUSED(permissions)
 
-    // TODO: Crear el directorio remoto.
-    return notImplemented(QStringLiteral("mkdir"));
+    const auto location = RcloneLocation::parse(url);
+
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    /*
+     * La raíz del worker y los índices de Drive no representan directorios
+     * remotos sobre los que rclone pueda crear algo. El nombre nuevo que KIO
+     * entrega sí tendrá una ruta remota no vacía.
+     */
+    if (location->isRoot()
+        || location->isConfigureEntry()
+        || location->remotePath().isEmpty()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_MKDIR,
+            url.toDisplayString());
+    }
+
+    /*
+     * Estas vistas de Drive son filtros de navegación. No podemos enviarlas
+     * como una creación normal: sin sus flags, rclone podría crear la carpeta
+     * en My Drive en vez de en la vista que Dolphin está mostrando.
+     */
+    switch (location->kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_WRITE_ACCESS_DENIED,
+            i18n("This Google Drive view is read-only."));
+
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_MKDIR,
+            url.toDisplayString());
+
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Creating folders in Shared Drives is not available yet."));
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+        break;
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const RcloneStatus status = m_client.mkdir(
+        location->toCliSpec(),
+        ctx);
+
+    if (!status.success()) {
+        return rcloneFailure(
+            status.error,
+            url,
+            KIO::ERR_CANNOT_MKDIR);
+    }
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::rename(const QUrl &src,
                                        const QUrl &dest,
                                        KIO::JobFlags flags)
 {
-    Q_UNUSED(src)
-    Q_UNUSED(dest)
-    Q_UNUSED(flags)
+    const auto source = RcloneLocation::parse(src);
+    const auto destination = RcloneLocation::parse(dest);
 
-    // TODO: Mover o renombrar el elemento remoto.
-    return notImplemented(QStringLiteral("rename"));
+    if (!source || !destination) {
+        return malformedUrlResult(source ? dest : src);
+    }
+
+    if (source->isRoot()
+        || source->isConfigureEntry()
+        || source->remotePath().isEmpty()
+        || destination->isRoot()
+        || destination->isConfigureEntry()
+        || destination->remotePath().isEmpty()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_RENAME,
+            src.toDisplayString());
+    }
+
+    const auto isDirectMoveLocation = [](const RcloneLocation &location) {
+        return location.kind() == RcloneLocation::Kind::Standard
+            || location.kind() == RcloneLocation::Kind::DriveMyDrive;
+    };
+
+    if (!isDirectMoveLocation(*source)
+        || !isDirectMoveLocation(*destination)) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Moving items in this Google Drive view is not available yet."));
+    }
+
+    if (source->remoteName() != destination->remoteName()
+        || source->kind() != destination->kind()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Moving between different rclone remotes or Google Drive views is not available yet."));
+    }
+
+    if (source->toCliSpec() == destination->toCliSpec()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IDENTICAL_FILES,
+            src.toDisplayString());
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto existingDestination = m_client.stat(
+        destination->toCliSpec(),
+        statOptionsFor(*destination),
+        ctx);
+
+    if (existingDestination.success()) {
+        if (existingDestination.data->isDirectory) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_DIR_ALREADY_EXIST,
+                dest.toDisplayString());
+        }
+
+        if (!(flags & KIO::Overwrite)) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                dest.toDisplayString());
+        }
+    } else if (existingDestination.error.code != RcloneErrorCode::NotFound) {
+        return rcloneFailure(
+            existingDestination.error,
+            dest,
+            KIO::ERR_CANNOT_STAT);
+    }
+
+    RcloneWriteOptions options;
+    options.replaceExisting = flags & KIO::Overwrite;
+
+    const RcloneStatus status = m_client.move(
+        source->toCliSpec(),
+        destination->toCliSpec(),
+        options,
+        ctx);
+
+    if (!status.success()) {
+        if (status.error.code == RcloneErrorCode::AlreadyExists) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                dest.toDisplayString());
+        }
+
+        return rcloneFailure(status.error, src, KIO::ERR_CANNOT_RENAME);
+    }
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::copy(const QUrl &src,
@@ -506,31 +990,499 @@ KIO::WorkerResult RcloneWorker::copy(const QUrl &src,
                                      int permissions,
                                      KIO::JobFlags flags)
 {
-    Q_UNUSED(src)
-    Q_UNUSED(dest)
     Q_UNUSED(permissions)
-    Q_UNUSED(flags)
 
-    // TODO: Copiar el elemento remoto.
-    return notImplemented(QStringLiteral("copy"));
+    const auto source = RcloneLocation::parse(src);
+    const auto destination = RcloneLocation::parse(dest);
+
+    if (!source || !destination) {
+        return malformedUrlResult(source ? dest : src);
+    }
+
+    if (source->isRoot()
+        || source->isConfigureEntry()
+        || source->remotePath().isEmpty()
+        || destination->isRoot()
+        || destination->isConfigureEntry()
+        || destination->remotePath().isEmpty()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_WRITE,
+            dest.toDisplayString());
+    }
+
+    const auto isDirectCopyLocation = [](const RcloneLocation &location) {
+        return location.kind() == RcloneLocation::Kind::Standard
+            || location.kind() == RcloneLocation::Kind::DriveMyDrive;
+    };
+
+    if (!isDirectCopyLocation(*source)
+        || !isDirectCopyLocation(*destination)) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Copying items in this Google Drive view is not available yet."));
+    }
+
+    if (source->toCliSpec() == destination->toCliSpec()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IDENTICAL_FILES,
+            src.toDisplayString());
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto existingDestination = m_client.stat(
+        destination->toCliSpec(),
+        statOptionsFor(*destination),
+        ctx);
+
+    if (existingDestination.success()) {
+        if (existingDestination.data->isDirectory) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_DIR_ALREADY_EXIST,
+                dest.toDisplayString());
+        }
+
+        if (!(flags & KIO::Overwrite)) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                dest.toDisplayString());
+        }
+    } else if (existingDestination.error.code != RcloneErrorCode::NotFound) {
+        return rcloneFailure(
+            existingDestination.error,
+            dest,
+            KIO::ERR_CANNOT_STAT);
+    }
+
+    RcloneWriteOptions options;
+    options.replaceExisting = flags & KIO::Overwrite;
+
+    const RcloneStatus status = m_client.copy(
+        source->toCliSpec(),
+        destination->toCliSpec(),
+        options,
+        ctx);
+
+    if (!status.success()) {
+        if (status.error.code == RcloneErrorCode::AlreadyExists) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                dest.toDisplayString());
+        }
+
+        return rcloneFailure(status.error, dest, KIO::ERR_CANNOT_WRITE);
+    }
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::del(const QUrl &url,
                                     bool isFile)
 {
-    Q_UNUSED(url)
-    Q_UNUSED(isFile)
+    const int fallbackError = isFile
+        ? KIO::ERR_CANNOT_DELETE
+        : KIO::ERR_CANNOT_RMDIR;
 
-    // TODO: Eliminar el archivo o directorio remoto.
-    return notImplemented(QStringLiteral("del"));
+    const auto location = RcloneLocation::parse(url);
+
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (location->isRoot()
+        || location->isConfigureEntry()
+        || location->remotePath().isEmpty()) {
+        return KIO::WorkerResult::fail(
+            fallbackError,
+            url.toDisplayString());
+    }
+
+    /*
+     * Estas vistas de Drive son filtros de navegación. Borrar con su ruta
+     * base, sin los flags de la vista, podría afectar un elemento distinto
+     * de My Drive.
+     */
+    switch (location->kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_WRITE_ACCESS_DENIED,
+            i18n("This Google Drive view is read-only."));
+
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return KIO::WorkerResult::fail(
+            fallbackError,
+            url.toDisplayString());
+
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Deleting items in Shared Drives is not available yet."));
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+        break;
+    }
+
+    RcloneRemovalMode mode = RcloneRemovalMode::File;
+
+    if (!isFile) {
+        mode = metaData(QStringLiteral("recurse"))
+            == QLatin1String("true")
+            ? RcloneRemovalMode::Recursive
+            : RcloneRemovalMode::EmptyDirectory;
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const RcloneStatus status = m_client.remove(
+        location->toCliSpec(),
+        mode,
+        ctx);
+
+    if (!status.success()) {
+        return rcloneFailure(status.error, url, fallbackError);
+    }
+
+    return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
 {
-    Q_UNUSED(url)
+    const auto location = RcloneLocation::parse(url);
 
-    // TODO: Consultar las métricas de espacio del remoto.
-    return notImplemented(QStringLiteral("fileSystemFreeSpace"));
+    if (!location || location->isRoot() || location->isConfigureEntry()) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_STAT,
+            url.toDisplayString());
+    }
+
+    /*
+     * spaceInfo() todavía no acepta --drive-team-drive. No devolvemos la
+     * cuota de My Drive como si fuera la de una unidad compartida distinta.
+     */
+    if (location->kind() == RcloneLocation::Kind::DriveSharedDrive) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Storage information for Shared Drives is not available yet."));
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto space = m_client.spaceInfo(
+        location->remoteName() + QLatin1Char(':'),
+        ctx);
+
+    if (!space.success()) {
+        return rcloneFailure(
+            space.error,
+            url,
+            KIO::ERR_UNSUPPORTED_ACTION);
+    }
+
+    if (space.data->total >= 0) {
+        setMetaData(
+            QStringLiteral("total"),
+            QString::number(space.data->total));
+    }
+
+    if (space.data->free >= 0) {
+        setMetaData(
+            QStringLiteral("available"),
+            QString::number(space.data->free));
+    }
+
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::open(const QUrl &url,
+                   QIODevice::OpenMode mode)
+{
+    const bool writing = mode.testFlag(QIODevice::WriteOnly);
+    const int fallbackError = writing
+        ? KIO::ERR_CANNOT_OPEN_FOR_WRITING
+        : KIO::ERR_CANNOT_OPEN_FOR_READING;
+
+    if (m_openFile) {
+        return KIO::WorkerResult::fail(
+            fallbackError,
+            i18n("Another remote file is already open."));
+    }
+
+    const auto location = RcloneLocation::parse(url);
+
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (location->isRoot()
+        || location->isConfigureEntry()
+        || location->remotePath().isEmpty()
+        || isSyntheticDirectory(*location)) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IS_DIRECTORY,
+            url.toDisplayString());
+    }
+
+    /*
+     * FileJob reads must use exactly the same view as Dolphin. downloadRange()
+     * and upload() currently accept a plain remote spec only; accepting a
+     * filtered Drive view here could silently target a same-named My Drive
+     * item instead.
+     */
+    switch (location->kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("File access in this Google Drive view is not available yet."));
+
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_IS_DIRECTORY,
+            url.toDisplayString());
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+        break;
+    }
+
+    WorkerRcloneContext ctx(*this);
+    auto file = std::make_unique<RcloneRemoteFile>(m_client);
+    const RcloneStatus status = file->open(
+        location->toCliSpec(),
+        mode,
+        ctx);
+
+    if (!status.success()) {
+        if (status.error.code == RcloneErrorCode::AlreadyExists) {
+            return KIO::WorkerResult::fail(
+                KIO::ERR_FILE_ALREADY_EXIST,
+                url.toDisplayString());
+        }
+
+        return rcloneFailure(status.error, url, fallbackError);
+    }
+
+    m_openUrl = url;
+    m_openFile = std::move(file);
+
+    // KIO::FileJob starts with a size of zero. It must receive the remote
+    // size before this method returns (and therefore before its open signal)
+    // so consumers such as KIO-FUSE do not issue read(0).
+    if (m_openFile->size() >= 0) {
+        totalSize(static_cast<KIO::filesize_t>(m_openFile->size()));
+    }
+
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::read(KIO::filesize_t size)
+{
+    if (!m_openFile) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_READ,
+            i18n("No remote file is open."));
+    }
+
+    if (size > static_cast<KIO::filesize_t>(
+                   std::numeric_limits<qint64>::max())) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_READ,
+            i18n("The requested read size is too large."));
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const auto result = m_openFile->read(
+        static_cast<qint64>(size),
+        ctx);
+
+    if (!result.success()) {
+        return rcloneFailure(
+            result.error,
+            m_openUrl,
+            KIO::ERR_CANNOT_READ);
+    }
+
+    data(*result.data);
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::write(const QByteArray &buffer)
+{
+    if (!m_openFile) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_WRITE,
+            i18n("No remote file is open."));
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const RcloneStatus status = m_openFile->write(buffer, ctx);
+
+    if (!status.success()) {
+        return rcloneFailure(
+            status.error,
+            m_openUrl,
+            KIO::ERR_CANNOT_WRITE);
+    }
+
+    written(buffer.size());
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::seek(KIO::filesize_t offset)
+{
+    if (!m_openFile) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_SEEK,
+            i18n("No remote file is open."));
+    }
+
+    if (offset > static_cast<KIO::filesize_t>(
+                     std::numeric_limits<qint64>::max())) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_SEEK,
+            i18n("The requested offset is too large."));
+    }
+
+    const RcloneStatus status = m_openFile->seek(
+        static_cast<qint64>(offset));
+
+    if (!status.success()) {
+        return rcloneFailure(
+            status.error,
+            m_openUrl,
+            KIO::ERR_CANNOT_SEEK);
+    }
+
+    position(static_cast<KIO::filesize_t>(m_openFile->position()));
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::truncate(KIO::filesize_t length)
+{
+    if (!m_openFile) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_TRUNCATE,
+            i18n("No remote file is open."));
+    }
+
+    if (length > static_cast<KIO::filesize_t>(
+                     std::numeric_limits<qint64>::max())) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_TRUNCATE,
+            i18n("The requested length is too large."));
+    }
+
+    const RcloneStatus status = m_openFile->truncate(
+        static_cast<qint64>(length));
+
+    if (!status.success()) {
+        return rcloneFailure(
+            status.error,
+            m_openUrl,
+            KIO::ERR_CANNOT_TRUNCATE);
+    }
+
+    truncated(length);
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::close()
+{
+    if (!m_openFile) {
+        return KIO::WorkerResult::pass();
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const QUrl openUrl = m_openUrl;
+    const RcloneStatus status = m_openFile->close(ctx);
+
+    m_openFile.reset();
+    m_openUrl = QUrl();
+
+    if (!status.success()) {
+        return rcloneFailure(
+            status.error,
+            openUrl,
+            KIO::ERR_CANNOT_WRITE);
+    }
+
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult
+RcloneWorker::setModificationTime(const QUrl &url,
+                                  const QDateTime &mtime)
+{
+    const auto location = RcloneLocation::parse(url);
+
+    if (!location) {
+        return malformedUrlResult(url);
+    }
+
+    if (!mtime.isValid()
+        || location->isRoot()
+        || location->isConfigureEntry()
+        || location->remotePath().isEmpty()
+        || isSyntheticDirectory(*location)) {
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_SETTIME,
+            url.toDisplayString());
+    }
+
+    switch (location->kind()) {
+    case RcloneLocation::Kind::DriveSharedWithMe:
+    case RcloneLocation::Kind::DriveTrash:
+    case RcloneLocation::Kind::DriveStarred:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_WRITE_ACCESS_DENIED,
+            i18n("This Google Drive view is read-only."));
+
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_UNSUPPORTED_ACTION,
+            i18n("Changing modification times in Shared Drives is not available yet."));
+
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_SETTIME,
+            url.toDisplayString());
+
+    case RcloneLocation::Kind::Root:
+    case RcloneLocation::Kind::ConfigureEntry:
+    case RcloneLocation::Kind::Standard:
+    case RcloneLocation::Kind::DriveMyDrive:
+        break;
+    }
+
+    WorkerRcloneContext ctx(*this);
+    const RcloneStatus status = m_client.setModificationTime(
+        location->toCliSpec(),
+        mtime,
+        ctx);
+
+    if (!status.success()) {
+        return rcloneFailure(
+            status.error,
+            url,
+            KIO::ERR_CANNOT_SETTIME);
+    }
+
+    return KIO::WorkerResult::pass();
 }
 
 /// Privates
