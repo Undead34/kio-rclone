@@ -16,7 +16,7 @@ the responsible layer before opening a file.
 ```text
 src/
   cache/     directory-listing policy and persistent snapshots
-  rclone/    CLI client, process setup, URL parsing, item presentation
+  rclone/    CLI client, process setup, URL and location mapping, item presentation
   kio/       KIO worker, UDS entry building, KDirNotify boundary
 app/
   dialogs/   settings and interactive rclone prompts
@@ -32,6 +32,7 @@ folder needs a dependency boundary that can be stated in one sentence.
 | --- | --- | --- |
 | `RcloneWorker` | KIO request/response adaptation, progress, KIO-visible errors, and applying a listing policy to a request. | rclone protocol parsing, cache serialization, or preference persistence. |
 | `RcloneUrl` | Parsing and constructing `rclone:/` URLs. | Process invocation or KIO entries. |
+| `RcloneLocation` | Pure mapping from a public remote path to one rclone connection string and cache namespace. | Remote discovery, process invocation, or KIO entries. |
 | `RcloneClient` | rclone command arguments, process results, and rclone JSON decoding. | `KIO::WorkerResult`, `UDSEntry`, or DBus notification. |
 | `DirectoryListingPolicyStore` | Persisting and normalizing the user's freshness choice. | Snapshot bytes or KIO request metadata. |
 | `DirectorySnapshotCache` | Short-lived, private directory snapshots. | Deciding whether a request is a reload or reading user preferences. |
@@ -47,6 +48,7 @@ KDE / Dolphin
     ▼
 RcloneWorker ──► RcloneClient ──► rclone
     │
+    ├──► RcloneLocation
     ├──► DirectoryListingPolicyStore
     ├──► DirectorySnapshotCache
     └──► KioEntryBuilder / KioDirectoryNotifier
@@ -88,6 +90,33 @@ listDir
 `F5`/reload enters only through the explicit reload branch. Normal navigation
 continues to be eligible for a fresh snapshot, so cache invalidation cannot
 accidentally change ordinary enter/leave-folder behavior.
+
+### Google Drive virtual namespace
+
+When `rclone listremotes --json` identifies a remote as `type=drive`, its
+public root is a small virtual hub instead of the provider's raw root.
+`RcloneLocation` owns this translation and returns both the effective rclone
+connection string and a distinct cache namespace:
+
+| Public path below `rclone:/<remote>/` | rclone target | Mutability |
+| --- | --- | --- |
+| `my-drive/<path>` | `<remote>:<path>` | normal |
+| `shared-with-me/<path>` | `<remote>,shared_with_me:<path>` | read-only |
+| `shared-drives/<ID>/<path>` | `<remote>,team_drive=<ID>,root_folder_id=:<path>` | normal, subject to provider permissions |
+| `trash/<path>` | `<remote>,trashed_only:<path>` | read-only |
+| `starred/<path>` | `<remote>,starred_only:<path>` | read-only |
+| `folders/<ID>/<path>` | `<remote>,root_folder_id=<ID>:<path>` | normal |
+
+`shared-drives/` is virtual and gets its children from `rclone backend drives`.
+Its `UDS_NAME` is the stable Drive ID while its display name remains human
+friendly. The worker does not call a Google API or retain Google credentials:
+rclone owns both. Filtered views are deliberately read-only, and mutations
+cannot cross location mutation scopes. Snapshot keys include the view namespace
+so filtered listings cannot collide with `my-drive` listings of the same path.
+
+Do not add a generic `files/<ID>` route until its parent/provenance and KIO
+mutation contract are explicit. Existing duplicate-name handling remains the
+safe fallback for files whose public path is ambiguous.
 
 ### Mutation
 
@@ -135,6 +164,7 @@ code comment only when the local invariant would otherwise be surprising.
 | Change | Preferred home |
 | --- | --- |
 | Another rclone JSON field or command flag | `src/rclone/` and its tests. |
+| A provider-specific public namespace or connection-string mapping | `RcloneLocation`, with a pure mapping test before worker integration. |
 | A different KIO error mapping or progress signal | `RcloneWorker` boundary code. |
 | Directory freshness, deduplication, or streaming choice | The directory-listing operation, with a policy-focused test. |
 | Policy persistence or its range | `DirectoryListingPolicyStore`. |

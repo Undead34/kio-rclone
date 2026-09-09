@@ -18,6 +18,7 @@ class RcloneClientTest : public QObject
 
 private Q_SLOTS:
     void parsesRemoteLists();
+    void parsesSharedDriveLists();
     void parsesDuplicateNameSupport();
     void parsesRemoteInfo();
     void parsesListing();
@@ -53,6 +54,26 @@ void RcloneClientTest::parsesRemoteLists()
     QCOMPARE(details.constFirst().type, QStringLiteral("s3"));
     QCOMPARE(details.constLast().name, QStringLiteral("Photos"));
     QCOMPARE(details.constLast().type, QStringLiteral("drive"));
+}
+
+void RcloneClientTest::parsesSharedDriveLists()
+{
+    QString error;
+    const QList<RcloneSharedDrive> drives = RcloneClient::parseSharedDriveList(
+        R"([
+          {"id":"0B-second","kind":"drive#drive","name":"Second"},
+          {"id":"0A-first","kind":"drive#drive","name":"First"}
+      ])",
+        &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(drives.size(), 2);
+    QCOMPARE(drives.constFirst().id, QStringLiteral("0A-first"));
+    QCOMPARE(drives.constFirst().name, QStringLiteral("First"));
+
+    QString malformedError;
+    const QList<RcloneSharedDrive> malformed = RcloneClient::parseSharedDriveList(R"([{"id":"missing-name"}])", &malformedError);
+    QVERIFY(malformed.isEmpty());
+    QVERIFY(!malformedError.isEmpty());
 }
 
 void RcloneClientTest::parsesDuplicateNameSupport()

@@ -80,6 +80,28 @@ KIO::UDSEntry remote(const QString &name, bool currentDirectory, const QString &
     return entry;
 }
 
+KIO::UDSEntry directory(const QString &name,
+                         const QString &displayName,
+                         const QString &iconName,
+                         bool writable,
+                         const QString &comment)
+{
+    KIO::UDSEntry entry;
+    reserveEntry(entry, comment.isEmpty() ? 4 : 5, 2);
+    entry.fastInsert(KIO::UDSEntry::UDS_NAME, name);
+    entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, displayName);
+    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
+    const mode_t access = writable ? S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH
+                                   : S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, access);
+    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, iconName);
+    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
+    if (!comment.isEmpty()) {
+        entry.fastInsert(KIO::UDSEntry::UDS_COMMENT, comment);
+    }
+    return entry;
+}
+
 bool isRepresentable(const RcloneItem &item)
 {
     // UDS_NAME becomes a URL path component. KIO reserves dot components, and

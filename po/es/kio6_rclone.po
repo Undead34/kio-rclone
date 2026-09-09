@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kio-rclone\n"
 "Report-Msgid-Bugs-To: https://github.com/Undead34/kio-rclone/issues\n"
-"POT-Creation-Date: 2026-09-08 17:46-0400\n"
+"POT-Creation-Date: 2026-09-08 21:22-0400\n"
 "PO-Revision-Date: 2026-07-18 09:00-0400\n"
 "Last-Translator: Gabriel Maizo González <maizogabriel@gmail.com>\n"
 "Language-Team: Spanish\n"
@@ -16,157 +16,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/rcloneworker.cpp:44
-#, kde-format
-msgid "“Configure Remotes…” is a virtual launcher and cannot be modified."
-msgstr "«Configurar remotos…» es un lanzador virtual y no se puede modificar."
-
-#: src/rcloneworker.cpp:471
-#, kde-format
-msgid "The remote file changed while it was being read."
-msgstr "El archivo remoto cambió mientras se estaba leyendo."
-
-#: src/rcloneworker.cpp:523
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. Rename or remove the duplicates "
-"before editing this file."
-msgstr ""
-"Varios objetos remotos tienen este nombre. Renombre o elimine los duplicados "
-"antes de editar este archivo."
-
-#: src/rcloneworker.cpp:528
-#, kde-format
-msgid ""
-"This is an exported cloud document with no stable remote size. It is "
-"available read-only to avoid replacing the original."
-msgstr ""
-"Este es un documento en la nube exportado sin un tamaño remoto estable. Está "
-"disponible solo en lectura para evitar reemplazar el original."
-
-#: src/rcloneworker.cpp:549
-#, kde-format
-msgid "Preparing upload…"
-msgstr "Preparando la subida…"
-
-#: src/rcloneworker.cpp:565 src/rcloneworker.cpp:574
-#, kde-format
-msgid "The upload source changed size while it was being read."
-msgstr "El origen de la subida cambió de tamaño mientras se estaba leyendo."
-
-#: src/rcloneworker.cpp:599
-#, kde-format
-msgid "The remote file changed while the local edit was being prepared."
-msgstr "El archivo remoto cambió mientras se preparaba la edición local."
-
-#: src/rcloneworker.cpp:653
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. Resolve the duplicates before "
-"creating this path."
-msgstr ""
-"Varios objetos remotos tienen este nombre. Resuelva los duplicados antes de "
-"crear esta ruta."
-
-#: src/rcloneworker.cpp:693
-#, kde-format
-msgid "Moving between different rclone remotes is streamed by KIO."
-msgstr "Mover entre remotos de rclone distintos se transmite a través de KIO."
-
-#: src/rcloneworker.cpp:718
-#, kde-format
-msgid ""
-"Multiple remote objects have the source name. Resolve the duplicates before "
-"renaming this path."
-msgstr ""
-"Varios objetos remotos tienen el nombre de origen. Resuelva los duplicados "
-"antes de renombrar esta ruta."
-
-#: src/rcloneworker.cpp:731
-#, kde-format
-msgid ""
-"The destination is ambiguous or read-only and cannot be replaced safely."
-msgstr ""
-"El destino es ambiguo o de solo lectura y no se puede reemplazar de forma "
-"segura."
-
-#: src/rcloneworker.cpp:762
-#, kde-format
-msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
-msgstr "«Configurar remotos…» es un lanzador virtual y no se puede copiar."
-
-#: src/rcloneworker.cpp:810
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. Resolve the duplicates before "
-"deleting this path."
-msgstr ""
-"Varios objetos remotos tienen este nombre. Resuelva los duplicados antes de "
-"borrar esta ruta."
-
-#: src/rcloneworker.cpp:881 app/configwindow.cpp:282
-#, kde-format
-msgid ""
-"rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
-"path."
-msgstr ""
-"No se encontró rclone. Instálelo o establezca KIO_RCLONE_EXECUTABLE con su "
-"ruta completa."
-
-#: src/rcloneworker.cpp:1001
-#, kde-format
-msgid "Uploading… %1% · %2/s · %3 s remaining"
-msgstr "Subiendo… %1% · %2/s · %3 s restantes"
-
-#: src/rcloneworker.cpp:1003
-#, kde-format
-msgid "Uploading… %1% · %2/s"
-msgstr "Subiendo… %1% · %2/s"
-
-#: src/rcloneworker.cpp:1030
-#, kde-format
-msgid "Uploading…"
-msgstr "Subiendo…"
-
-#: src/rcloneworker.cpp:1088
-#, kde-format
-msgid "The parent directory could not be resolved safely."
-msgstr "No se pudo resolver el directorio padre de forma segura."
-
-#: src/rcloneworker.cpp:1091
-#, kde-format
-msgid "A parent path component is not a directory."
-msgstr "Un componente de la ruta padre no es un directorio."
-
-#: src/rcloneworker.cpp:1095
-#, kde-format
-msgid ""
-"A parent directory has multiple remote objects with the same name. Resolve "
-"the duplicates before changing this path."
-msgstr ""
-"Un directorio padre tiene varios objetos remotos con el mismo nombre. "
-"Resuelva los duplicados antes de cambiar esta ruta."
-
-#: src/rcloneworker.cpp:1192
-#, kde-format
-msgid ""
-"Multiple remote objects have this name, and this backend cannot identify "
-"which one to open safely."
-msgstr ""
-"Varios objetos remotos tienen este nombre y este motor no puede identificar "
-"cuál abrir de forma segura."
-
-#: src/kioentryfactory.cpp:37 app/configwindow.cpp:149 app/main.cpp:24
+#: src/kio/entrybuilder.cpp:37 app/main.cpp:24 app/configwindow.cpp:149
 #, kde-format
 msgid "Rclone Remotes"
 msgstr "Remotos de Rclone"
 
-#: src/kioentryfactory.cpp:52
+#: src/kio/entrybuilder.cpp:52
 #, kde-format
 msgid "Configure Remotes…"
 msgstr "Configurar remotos…"
 
-#: src/kioentryfactory.cpp:100
+#: src/kio/entrybuilder.cpp:132
 #, kde-format
 msgid ""
 "Multiple remote directories have this name. This ambiguous folder is read-"
@@ -175,13 +35,374 @@ msgstr ""
 "Varios directorios remotos tienen este nombre. Esta carpeta ambigua es de "
 "solo lectura; resuélvala con rclone dedupe antes de modificarla."
 
-#: src/kioentryfactory.cpp:102
+#: src/kio/entrybuilder.cpp:134
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. KIO Rclone selected one read-only."
 msgstr ""
 "Varios objetos remotos tienen este nombre. KIO Rclone seleccionó uno de solo "
 "lectura."
+
+#: src/kio/worker.cpp:42
+#, kde-format
+msgid "“Configure Remotes…” is a virtual launcher and cannot be modified."
+msgstr "«Configurar remotos…» es un lanzador virtual y no se puede modificar."
+
+#: src/kio/worker.cpp:60
+#, kde-format
+msgid "My Drive"
+msgstr "Mi unidad"
+
+#: src/kio/worker.cpp:62
+#, kde-format
+msgid "Shared With Me"
+msgstr "Compartido conmigo"
+
+#: src/kio/worker.cpp:64
+#, kde-format
+msgid "Shared Drives"
+msgstr "Unidades compartidas"
+
+#: src/kio/worker.cpp:66
+#, kde-format
+msgid "Trash (original folder structure)"
+msgstr "Papelera (estructura de carpetas original)"
+
+#: src/kio/worker.cpp:68
+#, kde-format
+msgid "Starred"
+msgstr "Favoritos"
+
+#: src/kio/worker.cpp:70
+#, kde-format
+msgid "Folders by ID"
+msgstr "Carpetas por ID"
+
+#: src/kio/worker.cpp:72
+#, kde-format
+msgid "Folder %1"
+msgstr "Carpeta %1"
+
+#: src/kio/worker.cpp:89
+#, kde-format
+msgid ""
+"Shows trashed items in their original folder structure. Some folders only "
+"provide the path to a trashed item."
+msgstr ""
+"Muestra los elementos eliminados en la estructura de sus carpetas originales. "
+"Algunas carpetas solo proporcionan la ruta hasta un elemento eliminado."
+
+#: src/kio/worker.cpp:300
+#, kde-format
+msgid ""
+"This Google Drive location is not valid. Open My Drive to browse the normal "
+"Drive root."
+msgstr ""
+"Esta ubicación de Google Drive no es válida. Abre Mi unidad para explorar la "
+"raíz normal de Drive."
+
+#: src/kio/worker.cpp:332
+#, kde-format
+msgid "The rclone remote “%1” was not found."
+msgstr "No se encontró el remoto de rclone «%1»."
+
+#: src/kio/worker.cpp:731
+#, kde-format
+msgid "The remote file changed while it was being read."
+msgstr "El archivo remoto cambió mientras se estaba leyendo."
+
+#: src/kio/worker.cpp:769 src/kio/worker.cpp:924 src/kio/worker.cpp:1124
+#, kde-format
+msgid "This virtual folder cannot be modified."
+msgstr "Esta carpeta virtual no se puede modificar."
+
+#: src/kio/worker.cpp:773 src/kio/worker.cpp:928 src/kio/worker.cpp:1008
+#: src/kio/worker.cpp:1128
+#, kde-format
+msgid ""
+"This Google Drive view is read-only. Open My Drive or a Shared Drive to make "
+"changes."
+msgstr ""
+"Esta vista de Google Drive es de solo lectura. Abre Mi unidad o una unidad "
+"compartida para hacer cambios."
+
+#: src/kio/worker.cpp:799
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. Rename or remove the duplicates "
+"before editing this file."
+msgstr ""
+"Varios objetos remotos tienen este nombre. Renombre o elimine los duplicados "
+"antes de editar este archivo."
+
+#: src/kio/worker.cpp:804
+#, kde-format
+msgid ""
+"This is an exported cloud document with no stable remote size. It is "
+"available read-only to avoid replacing the original."
+msgstr ""
+"Este es un documento en la nube exportado sin un tamaño remoto estable. Está "
+"disponible solo en lectura para evitar reemplazar el original."
+
+#: src/kio/worker.cpp:825
+#, kde-format
+msgid "Preparing upload…"
+msgstr "Preparando la subida…"
+
+#: src/kio/worker.cpp:841 src/kio/worker.cpp:850
+#, kde-format
+msgid "The upload source changed size while it was being read."
+msgstr "El origen de la subida cambió de tamaño mientras se estaba leyendo."
+
+#: src/kio/worker.cpp:875
+#, kde-format
+msgid "The remote file changed while the local edit was being prepared."
+msgstr "El archivo remoto cambió mientras se preparaba la edición local."
+
+#: src/kio/worker.cpp:945
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. Resolve the duplicates before "
+"creating this path."
+msgstr ""
+"Varios objetos remotos tienen este nombre. Resuelva los duplicados antes de "
+"crear esta ruta."
+
+#: src/kio/worker.cpp:1004
+#, kde-format
+msgid "A virtual folder cannot be renamed."
+msgstr "Una carpeta virtual no se puede renombrar."
+
+#: src/kio/worker.cpp:1012
+#, kde-format
+msgid ""
+"Moving between different rclone remotes or Google Drive views is streamed by "
+"KIO."
+msgstr ""
+"Mover entre remotos de rclone o vistas de Google Drive distintos se "
+"transmite a través de KIO."
+
+#: src/kio/worker.cpp:1037
+#, kde-format
+msgid ""
+"Multiple remote objects have the source name. Resolve the duplicates before "
+"renaming this path."
+msgstr ""
+"Varios objetos remotos tienen el nombre de origen. Resuelva los duplicados "
+"antes de renombrar esta ruta."
+
+#: src/kio/worker.cpp:1050
+#, kde-format
+msgid ""
+"The destination is ambiguous or read-only and cannot be replaced safely."
+msgstr ""
+"El destino es ambiguo o de solo lectura y no se puede reemplazar de forma "
+"segura."
+
+#: src/kio/worker.cpp:1082
+#, kde-format
+msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
+msgstr "«Configurar remotos…» es un lanzador virtual y no se puede copiar."
+
+#: src/kio/worker.cpp:1148
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. Resolve the duplicates before "
+"deleting this path."
+msgstr ""
+"Varios objetos remotos tienen este nombre. Resuelva los duplicados antes de "
+"borrar esta ruta."
+
+#: src/kio/worker.cpp:1212 app/configwindow.cpp:282
+#, kde-format
+msgid ""
+"rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
+"path."
+msgstr ""
+"No se encontró rclone. Instálelo o establezca KIO_RCLONE_EXECUTABLE con su "
+"ruta completa."
+
+#: src/kio/worker.cpp:1332
+#, kde-format
+msgid "Uploading… %1% · %2/s · %3 s remaining"
+msgstr "Subiendo… %1% · %2/s · %3 s restantes"
+
+#: src/kio/worker.cpp:1334
+#, kde-format
+msgid "Uploading… %1% · %2/s"
+msgstr "Subiendo… %1% · %2/s"
+
+#: src/kio/worker.cpp:1361
+#, kde-format
+msgid "Uploading…"
+msgstr "Subiendo…"
+
+#: src/kio/worker.cpp:1415
+#, kde-format
+msgid "The parent directory could not be resolved safely."
+msgstr "No se pudo resolver el directorio padre de forma segura."
+
+#: src/kio/worker.cpp:1418
+#, kde-format
+msgid "A parent path component is not a directory."
+msgstr "Un componente de la ruta padre no es un directorio."
+
+#: src/kio/worker.cpp:1422
+#, kde-format
+msgid ""
+"A parent directory has multiple remote objects with the same name. Resolve "
+"the duplicates before changing this path."
+msgstr ""
+"Un directorio padre tiene varios objetos remotos con el mismo nombre. "
+"Resuelva los duplicados antes de cambiar esta ruta."
+
+#: src/kio/worker.cpp:1526
+#, kde-format
+msgid ""
+"Multiple remote objects have this name, and this backend cannot identify "
+"which one to open safely."
+msgstr ""
+"Varios objetos remotos tienen este nombre y este motor no puede identificar "
+"cuál abrir de forma segura."
+
+#: app/dialogs/rclonepromptdialog.cpp:46
+#, kde-format
+msgid "rclone output:"
+msgstr "Salida de rclone:"
+
+#: app/dialogs/rclonepromptdialog.cpp:52
+#, kde-format
+msgid "rclone output"
+msgstr "Salida de rclone"
+
+#: app/dialogs/rclonepromptdialog.cpp:58
+#, kde-format
+msgid "Type a response and press Enter"
+msgstr "Escriba una respuesta y pulse Intro"
+
+#: app/dialogs/rclonepromptdialog.cpp:59
+#, kde-format
+msgid "Sends your response to the question shown by rclone."
+msgstr "Envía su respuesta a la pregunta mostrada por rclone."
+
+#: app/dialogs/rclonepromptdialog.cpp:60
+#, kde-format
+msgid "Response:"
+msgstr "Respuesta:"
+
+#: app/dialogs/settingsdialog.cpp:48
+#, kde-format
+msgid "Rclone Settings"
+msgstr "Configuración de Rclone"
+
+#: app/dialogs/settingsdialog.cpp:61
+#, kde-format
+msgid "Configure how Dolphin browses Rclone remotes."
+msgstr "Configure cómo navega Dolphin por los remotos de Rclone."
+
+#: app/dialogs/settingsdialog.cpp:70
+#, kde-format
+msgid "Folder listings"
+msgstr "Listados de carpetas"
+
+#: app/dialogs/settingsdialog.cpp:85
+#, kde-format
+msgid "Use recent listings (recommended)"
+msgstr "Usar listados recientes (recomendado)"
+
+#: app/dialogs/settingsdialog.cpp:89
+#, kde-format
+msgid "Always check the remote"
+msgstr "Comprobar siempre el remoto"
+
+#: app/dialogs/settingsdialog.cpp:96
+#, kde-format
+msgid ""
+"Choose whether Dolphin may reuse a recently saved folder listing or requests "
+"a new listing from the remote each time."
+msgstr ""
+"Elija si Dolphin puede reutilizar un listado de carpeta guardado "
+"recientemente o si solicita uno nuevo al remoto cada vez."
+
+#: app/dialogs/settingsdialog.cpp:100
+#, kde-format
+msgid "How to open folders"
+msgstr "Cómo abrir carpetas"
+
+#: app/dialogs/settingsdialog.cpp:103
+#, kde-format
+msgid "How to open folders:"
+msgstr "Cómo abrir carpetas:"
+
+#: app/dialogs/settingsdialog.cpp:118 app/dialogs/settingsdialog.cpp:210
+#, kde-format
+msgid " second"
+msgid_plural " seconds"
+msgstr[0] " segundo"
+msgstr[1] " segundos"
+
+#: app/dialogs/settingsdialog.cpp:121
+#, kde-format
+msgid ""
+"How long Dolphin may reuse a saved folder listing before requesting a new "
+"one from the remote."
+msgstr ""
+"Cuánto tiempo puede Dolphin reutilizar un listado de carpeta guardado antes "
+"de solicitar uno nuevo al remoto."
+
+#: app/dialogs/settingsdialog.cpp:125
+#, kde-format
+msgid "Keep listings for"
+msgstr "Conservar los listados durante"
+
+#: app/dialogs/settingsdialog.cpp:128
+#, kde-format
+msgid "Keep listings for:"
+msgstr "Conservar los listados durante:"
+
+#: app/dialogs/settingsdialog.cpp:146
+#, kde-format
+msgid "Saved listings"
+msgstr "Listados guardados"
+
+#: app/dialogs/settingsdialog.cpp:150 app/dialogs/settingsdialog.cpp:159
+#, kde-format
+msgid "Clear saved listings when saving"
+msgstr "Borrar los listados guardados al guardar"
+
+#: app/dialogs/settingsdialog.cpp:154
+#, kde-format
+msgid ""
+"Removes locally saved folder listings when these settings are saved. Remote "
+"files and folders are not affected."
+msgstr ""
+"Elimina los listados de carpetas guardados localmente al guardar esta "
+"configuración. Los archivos y carpetas remotos no se ven afectados."
+
+#: app/dialogs/settingsdialog.cpp:165
+#, kde-format
+msgid "Useful when a folder appears outdated. Remote files are never deleted."
+msgstr ""
+"Útil cuando una carpeta parece desactualizada. Los archivos remotos nunca se "
+"eliminan."
+
+#: app/dialogs/settingsdialog.cpp:253
+#, kde-format
+msgid ""
+"Recently visited folders can open faster. Changes made through Dolphin still "
+"check the remote."
+msgstr ""
+"Las carpetas visitadas recientemente pueden abrirse más rápido. Los cambios "
+"realizados desde Dolphin siguen comprobando el remoto."
+
+#: app/dialogs/settingsdialog.cpp:257
+#, kde-format
+msgid ""
+"Opening a folder always requests a new listing from rclone and the remote "
+"provider."
+msgstr ""
+"Abrir una carpeta siempre solicita un listado nuevo a rclone y al proveedor "
+"remoto."
 
 #: app/configwindow.cpp:105
 #, kde-format
@@ -436,7 +657,7 @@ msgstr "Ya existe un remoto llamado «%1»."
 #: app/configwindow.cpp:532 app/configwindow.cpp:681 app/configwindow.cpp:687
 #: app/configwindow.cpp:695 app/configwindow.cpp:760 app/configwindow.cpp:804
 #: app/configwindow.cpp:812 app/configwindow.cpp:832 app/configwindow.cpp:1002
-#: app/configwindow.cpp:1056 app/configwindow.cpp:1065
+#: app/configwindow.cpp:1057 app/configwindow.cpp:1064
 #, kde-format
 msgid "Rclone Error"
 msgstr "Error de rclone"
@@ -631,144 +852,13 @@ msgstr ""
 "\n"
 "%1 config"
 
-#: app/directorylistingsettingsdialog.cpp:48
 #, kde-format
-msgid "Rclone Settings"
-msgstr "Configuración de Rclone"
+#~ msgid "Trash"
+#~ msgstr "Papelera"
 
-#: app/directorylistingsettingsdialog.cpp:61
 #, kde-format
-msgid "Configure how Dolphin browses Rclone remotes."
-msgstr "Configure cómo navega Dolphin por los remotos de Rclone."
-
-#: app/directorylistingsettingsdialog.cpp:70
-#, kde-format
-msgid "Folder listings"
-msgstr "Listados de carpetas"
-
-#: app/directorylistingsettingsdialog.cpp:85
-#, kde-format
-msgid "Use recent listings (recommended)"
-msgstr "Usar listados recientes (recomendado)"
-
-#: app/directorylistingsettingsdialog.cpp:89
-#, kde-format
-msgid "Always check the remote"
-msgstr "Comprobar siempre el remoto"
-
-#: app/directorylistingsettingsdialog.cpp:96
-#, kde-format
-msgid ""
-"Choose whether Dolphin may reuse a recently saved folder listing or requests "
-"a new listing from the remote each time."
-msgstr ""
-"Elija si Dolphin puede reutilizar un listado de carpeta guardado recientemente "
-"o si solicita uno nuevo al remoto cada vez."
-
-#: app/directorylistingsettingsdialog.cpp:100
-#, kde-format
-msgid "How to open folders"
-msgstr "Cómo abrir carpetas"
-
-#: app/directorylistingsettingsdialog.cpp:103
-#, kde-format
-msgid "How to open folders:"
-msgstr "Cómo abrir carpetas:"
-
-#: app/directorylistingsettingsdialog.cpp:118
-#: app/directorylistingsettingsdialog.cpp:210
-#, kde-format
-msgid " second"
-msgid_plural " seconds"
-msgstr[0] " segundo"
-msgstr[1] " segundos"
-
-#: app/directorylistingsettingsdialog.cpp:121
-#, kde-format
-msgid ""
-"How long Dolphin may reuse a saved folder listing before requesting a new "
-"one from the remote."
-msgstr ""
-"Cuánto tiempo puede Dolphin reutilizar un listado de carpeta guardado antes "
-"de solicitar uno nuevo al remoto."
-
-#: app/directorylistingsettingsdialog.cpp:125
-#, kde-format
-msgid "Keep listings for"
-msgstr "Conservar los listados durante"
-
-#: app/directorylistingsettingsdialog.cpp:128
-#, kde-format
-msgid "Keep listings for:"
-msgstr "Conservar los listados durante:"
-
-#: app/directorylistingsettingsdialog.cpp:146
-#, kde-format
-msgid "Saved listings"
-msgstr "Listados guardados"
-
-#: app/directorylistingsettingsdialog.cpp:150
-#: app/directorylistingsettingsdialog.cpp:159
-#, kde-format
-msgid "Clear saved listings when saving"
-msgstr "Borrar los listados guardados al guardar"
-
-#: app/directorylistingsettingsdialog.cpp:154
-#, kde-format
-msgid ""
-"Removes locally saved folder listings when these settings are saved. Remote "
-"files and folders are not affected."
-msgstr ""
-"Elimina los listados de carpetas guardados localmente al guardar esta "
-"configuración. Los archivos y carpetas remotos no se ven afectados."
-
-#: app/directorylistingsettingsdialog.cpp:165
-#, kde-format
-msgid "Useful when a folder appears outdated. Remote files are never deleted."
-msgstr "Útil cuando una carpeta parece desactualizada. Los archivos remotos nunca se eliminan."
-
-#: app/directorylistingsettingsdialog.cpp:253
-#, kde-format
-msgid ""
-"Recently visited folders can open faster. Changes made through Dolphin still "
-"check the remote."
-msgstr ""
-"Las carpetas visitadas recientemente pueden abrirse más rápido. Los cambios "
-"realizados desde Dolphin siguen comprobando el remoto."
-
-#: app/directorylistingsettingsdialog.cpp:257
-#, kde-format
-msgid ""
-"Opening a folder always requests a new listing from rclone and the remote "
-"provider."
-msgstr ""
-"Abrir una carpeta siempre solicita un listado nuevo a rclone y al proveedor "
-"remoto."
-
-#: app/interactiverclonedialog.cpp:45
-#, kde-format
-msgid "rclone output:"
-msgstr "Salida de rclone:"
-
-#: app/interactiverclonedialog.cpp:51
-#, kde-format
-msgid "rclone output"
-msgstr "Salida de rclone"
-
-#: app/interactiverclonedialog.cpp:57
-#, kde-format
-msgid "Type a response and press Enter"
-msgstr "Escriba una respuesta y pulse Intro"
-
-#: app/interactiverclonedialog.cpp:58
-#, kde-format
-msgid "Sends your response to the question shown by rclone."
-msgstr "Envía su respuesta a la pregunta mostrada por rclone."
-
-#: app/interactiverclonedialog.cpp:59
-#, kde-format
-msgid "Response:"
-msgstr "Respuesta:"
+#~ msgid "This Google Drive location is not valid."
+#~ msgstr "Esta ubicación de Google Drive no es válida."
 
 #, kde-format
 #~ msgid "Waiting for rclone…"

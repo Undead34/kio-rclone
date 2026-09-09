@@ -153,6 +153,56 @@ rclone config redacted
 Después abre `rclone:/Google%20Drive/` en Dolphin y prueba crear una carpeta
 dentro de un directorio de pruebas.
 
+## Vistas de Drive en Dolphin
+
+KIO Rclone reconoce los remotos que rclone reporta como Google Drive y muestra
+un hub pequeño en la raíz del remoto. La raíz normal del proveedor vive
+intencionalmente bajo **Mi unidad**, para que las vistas especiales de Drive
+se mantengan estables a medida que crece el worker:
+
+| Ubicación en Dolphin | Qué representa | Cambios |
+| --- | --- | --- |
+| `rclone:/Google%20Drive/my-drive/` | Tu raíz normal de Drive | Permitidos si Drive los permite. |
+| `rclone:/Google%20Drive/shared-with-me/` | Archivos compartidos contigo | Solo lectura. |
+| `rclone:/Google%20Drive/shared-drives/` | Unidades compartidas disponibles para la cuenta | Abre una unidad por nombre; su URL usa el ID estable de Drive. |
+| `rclone:/Google%20Drive/trash/` | Elementos en Papelera, con la estructura de sus carpetas originales | Solo lectura. |
+| `rclone:/Google%20Drive/starred/` | Archivos destacados | Solo lectura. |
+| `rclone:/Google%20Drive/folders/<FOLDER_ID>/` | Una carpeta de ID conocido como raíz temporal | Permitidos si Drive los permite. |
+
+La ruta `folders/<FOLDER_ID>/` se escribe intencionalmente en la barra de
+ubicación de Dolphin; no aparece como una carpeta vacía porque rclone no puede
+enumerar todos los IDs de carpeta útiles. Sirve para una URL de carpeta o un
+ID que ya conoces, incluso una carpeta compatible de Computers.
+
+**Papelera no es una vista plana como la web de Google Drive.** rclone conserva
+deliberadamente la ruta original de cada elemento eliminado, así que Dolphin
+puede mostrar carpetas padre normales que solo permiten navegar hasta un hijo
+en la Papelera. Esas carpetas son contexto de navegación, no una segunda lista
+de tu unidad activa. El worker etiqueta la vista como **Papelera (estructura de
+carpetas original)** y la mantiene en solo lectura, en vez de inventar una
+vista plana basada en IDs que no podría soportar de forma segura las
+operaciones normales de archivo de KIO.
+
+Si ya tenías un marcador con una ruta cruda de Drive, inserta `my-drive/`: por
+ejemplo, `rclone:/Google%20Drive/Projects/` pasa a ser
+`rclone:/Google%20Drive/my-drive/Projects/`. El worker no adivina qué vista
+virtual quería decir una ruta antigua, porque adivinar haría ambiguas las
+carpetas reales que se llamen como una vista especial.
+
+KIO Rclone delega estas vistas a los connection strings y a `backend drives`
+de rclone; no guarda otra base de cuentas Google ni llama directamente a la
+API de Google. Los flags y el comando exactos están documentados en el
+[backend Google Drive de rclone](https://rclone.org/drive/).
+
+Las vistas filtradas son de solo lectura a propósito: que un archivo esté
+compartido, destacado o en la Papelera no prueba que editarlo a través de esa
+ruta sea seguro. Si necesitas restaurar algo de la Papelera, hazlo de forma
+explícita con rclone; restaurar aún no es una acción de Dolphin. Mover entre
+dos vistas Drive también queda en el flujo normal de copia de KIO, en vez de
+adivinar si las dos raíces virtuales son la misma carpeta del proveedor. Los
+nombres de archivos visibles duplicados se mantienen de solo lectura hasta que
+su identidad pueda representarse de manera segura en una URL pública KIO.
+
 ## Modo Testing y tokens de siete días
 
 Este punto es importante. Google limita las apps **External** que siguen en

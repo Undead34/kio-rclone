@@ -24,10 +24,7 @@
 #include <QJsonObject>
 #include <QLocale>
 #include <QLoggingCategory>
-#include <QMimeDatabase>
 #include <QProcess>
-#include <QProcessEnvironment>
-#include <QUuid>
 
 #include <algorithm>
 #include <limits>
@@ -43,6 +40,81 @@ constexpr qsizetype DownloadChunkSize = 64 * 1024;
 KIO::WorkerResult configurationEntryMutationError(int error)
 {
     return KIO::WorkerResult::fail(error, i18n("“Configure Remotes…” is a virtual launcher and cannot be modified."));
+}
+
+bool canRepresentInKio(const RcloneItem &item)
+{
+    // UDS_NAME becomes a URL path component. KIO reserves dot components, and
+    // neither literal slashes nor NUL are representable in one component.
+    // rclone documents that Drive can expose such names, so never let them
+    // escape into a KIO URL with changed meaning.
+    return !item.name.isEmpty() && !item.name.contains(QLatin1Char('/')) && item.name != QLatin1String(".")
+        && item.name != QLatin1String("..") && !item.name.contains(QChar::Null)
+        && (item.path.isEmpty() || item.path == item.name);
+}
+
+QString driveDisplayName(RcloneLocation::Kind kind, const QString &identifier = {})
+{
+    switch (kind) {
+    case RcloneLocation::Kind::DriveMyDrive:
+        return i18n("My Drive");
+    case RcloneLocation::Kind::DriveSharedWithMe:
+        return i18n("Shared With Me");
+    case RcloneLocation::Kind::DriveSharedDrives:
+        return i18n("Shared Drives");
+    case RcloneLocation::Kind::DriveTrash:
+        return i18n("Trash (original folder structure)");
+    case RcloneLocation::Kind::DriveStarred:
+        return i18n("Starred");
+    case RcloneLocation::Kind::DriveFolders:
+        return i18n("Folders by ID");
+    case RcloneLocation::Kind::DriveFolder:
+        return i18n("Folder %1", identifier);
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return identifier;
+    case RcloneLocation::Kind::DriveHub:
+    case RcloneLocation::Kind::Standard:
+        break;
+    }
+    return {};
+}
+
+QString driveComment(RcloneLocation::Kind kind)
+{
+    if (kind == RcloneLocation::Kind::DriveTrash) {
+        // rclone's --drive-trashed-only deliberately retains normal parent
+        // folders so that a trashed item can be reached at its original path.
+        // See https://rclone.org/drive/#drive-trashed-only.
+        // Keep that provider behaviour, but make it clear in Dolphin that a
+        // folder in this view is not necessarily itself trashed.
+        return i18n("Shows trashed items in their original folder structure. Some folders only provide the path to a trashed item.");
+    }
+    return {};
+}
+
+QString driveIconName(RcloneLocation::Kind kind)
+{
+    switch (kind) {
+    case RcloneLocation::Kind::DriveHub:
+        return QStringLiteral("folder-gdrive");
+    case RcloneLocation::Kind::DriveMyDrive:
+        return QStringLiteral("user-home");
+    case RcloneLocation::Kind::DriveSharedWithMe:
+        return QStringLiteral("folder-publicshare");
+    case RcloneLocation::Kind::DriveSharedDrives:
+    case RcloneLocation::Kind::DriveSharedDrive:
+        return QStringLiteral("folder-cloud");
+    case RcloneLocation::Kind::DriveTrash:
+        return QStringLiteral("user-trash-full");
+    case RcloneLocation::Kind::DriveStarred:
+        return QStringLiteral("folder-favorites");
+    case RcloneLocation::Kind::DriveFolders:
+    case RcloneLocation::Kind::DriveFolder:
+        return QStringLiteral("folder");
+    case RcloneLocation::Kind::Standard:
+        break;
+    }
+    return QStringLiteral("folder");
 }
 
 QUrl parentDirectoryUrl(const QUrl &url)
@@ -99,22 +171,48 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
+    const bool reloadRequested = bypassesDirectorySnapshot(metaData(QStringLiteral("cache")));
     if (directory.isRoot()) {
+        if (reloadRequested) {
+            invalidateDirectorySnapshots();
+        }
         return listRoot(url);
     }
 
-    const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
-    if (bypassesDirectorySnapshot(metaData(QStringLiteral("cache")))) {
-        // F5/reload deliberately has stronger freshness semantics. Clear the
-        // shared snapshots before listing so an unsuccessful refresh cannot
-        // make a later normal request revive data the user rejected.
-        invalidateDirectorySnapshots();
-    } else if (const auto cachedItems = cachedDirectory(directory, policy)) {
-        publishDirectoryEntries(directory, *cachedItems);
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(directory, &locationError);
+    if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_MALFORMED_URL, url);
+    }
 
-    return listRemoteDirectory(url, directory, policy);
+    if (reloadRequested) {
+        // F5/reload deliberately has stronger freshness semantics. Clear the
+        // shared snapshots before doing any virtual or physical listing, so
+        // an unsuccessful refresh cannot revive data the user rejected.
+        invalidateDirectorySnapshots();
+    }
+    if (location->isDriveHub()) {
+        return listDriveHub(*location);
+    }
+    if (location->isSharedDrivesRoot()) {
+        return listSharedDrives(url, *location);
+    }
+    if (location->isFoldersRoot()) {
+        return listFoldersIndex(*location);
+    }
+
+    const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
+    if (!reloadRequested) {
+        if (const auto cachedItems = cachedDirectory(*location, policy)) {
+            publishDirectoryEntries(*location, *cachedItems);
+            return KIO::WorkerResult::pass();
+        }
+    }
+
+    return listRemoteDirectory(url, *location, policy);
 }
 
 KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
@@ -130,23 +228,139 @@ KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
     }
 
-    // listremotes --json carries the type on current rclone versions. Older
-    // versions simply fall back to the generic cloud icon; no config dump is
-    // needed for a cosmetic detail.
+    // Current rclone versions report a backend type here. If an older version
+    // omits it, preserve the generic remote-path behavior instead of reading
+    // the full config or guessing a provider from its name.
     m_remoteDuplicateNameSupport.clear();
+    m_remoteTypes.clear();
+    m_sharedDriveNames.clear();
     listEntry(KioEntryBuilder::root());
     for (const RcloneRemote &remote : remotes) {
+        m_remoteTypes.insert(remote.name, remote.type);
         listEntry(KioEntryBuilder::remote(remote.name, false, remote.type));
     }
     listEntry(KioEntryBuilder::configure());
     return KIO::WorkerResult::pass();
 }
 
+KIO::WorkerResult RcloneWorker::listDriveHub(const RcloneLocation &location)
+{
+    listEntry(currentDirectoryEntry(location));
+    for (const RcloneLocation::HubEntry &entry : RcloneLocation::driveHubEntries()) {
+        listEntry(KioEntryBuilder::directory(entry.name,
+                                             driveDisplayName(entry.kind),
+                                             entry.iconName,
+                                             entry.writable,
+                                             driveComment(entry.kind)));
+    }
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult RcloneWorker::listSharedDrives(const QUrl &requestUrl, const RcloneLocation &location)
+{
+    QString error;
+    const QList<RcloneSharedDrive> drives = m_rclone.sharedDrives(location.remote() + QLatin1Char(':'), &error, [this]() {
+        return wasKilled();
+    });
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!error.isEmpty()) {
+        return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+    }
+
+    listEntry(currentDirectoryEntry(location));
+    for (const RcloneSharedDrive &drive : drives) {
+        m_sharedDriveNames.insert(location.remote() + QLatin1Char('\n') + drive.id, drive.name);
+        listEntry(KioEntryBuilder::directory(drive.id, drive.name, QStringLiteral("folder-cloud"), true));
+    }
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult RcloneWorker::listFoldersIndex(const RcloneLocation &location)
+{
+    // Folder IDs are not enumerable through rclone. This expert route exists
+    // for a known ID (for example a Drive URL), not as a misleading empty
+    // representation of the user's My Drive.
+    listEntry(currentDirectoryEntry(location));
+    return KIO::WorkerResult::pass();
+}
+
+std::optional<RcloneLocation> RcloneWorker::resolveLocation(const RcloneUrl &url, QString *error)
+{
+    const std::optional<bool> isDrive = isGoogleDriveRemote(url.remote(), error);
+    if (!isDrive) {
+        return std::nullopt;
+    }
+    if (!*isDrive) {
+        return RcloneLocation::standard(url.remote(), url.remotePath());
+    }
+
+    const std::optional<RcloneLocation> location = RcloneLocation::googleDrive(url.remote(), url.remotePath());
+    if (!location && error) {
+        *error = i18n("This Google Drive location is not valid. Open My Drive to browse the normal Drive root.");
+    }
+    return location;
+}
+
+std::optional<bool> RcloneWorker::isGoogleDriveRemote(const QString &remote, QString *error)
+{
+    const auto cached = m_remoteTypes.constFind(remote);
+    if (cached != m_remoteTypes.cend()) {
+        return *cached == QLatin1String("drive");
+    }
+
+    QString remoteError;
+    const QList<RcloneRemote> remotes = m_rclone.remoteList(&remoteError, [this]() {
+        return wasKilled();
+    });
+    if (wasKilled()) {
+        return std::nullopt;
+    }
+    if (!remoteError.isEmpty()) {
+        if (error) {
+            *error = remoteError;
+        }
+        return std::nullopt;
+    }
+
+    for (const RcloneRemote &candidate : remotes) {
+        m_remoteTypes.insert(candidate.name, candidate.type);
+    }
+    const auto type = m_remoteTypes.constFind(remote);
+    if (type == m_remoteTypes.cend()) {
+        if (error) {
+            *error = i18n("The rclone remote “%1” was not found.", remote);
+        }
+        return std::nullopt;
+    }
+    return *type == QLatin1String("drive");
+}
+
+KIO::UDSEntry RcloneWorker::currentDirectoryEntry(const RcloneLocation &location, const QString &entryName) const
+{
+    if (location.kind() == RcloneLocation::Kind::Standard) {
+        return KioEntryBuilder::remote(location.remote(), entryName == QLatin1String("."), m_remoteTypes.value(location.remote()));
+    }
+
+    QString displayName = driveDisplayName(location.kind(), location.identifier());
+    if (location.kind() == RcloneLocation::Kind::DriveHub) {
+        displayName = location.remote();
+    } else if (location.kind() == RcloneLocation::Kind::DriveSharedDrive) {
+        displayName = m_sharedDriveNames.value(location.remote() + QLatin1Char('\n') + location.identifier(), displayName);
+    }
+    return KioEntryBuilder::directory(entryName,
+                                      displayName,
+                                      driveIconName(location.kind()),
+                                      location.canWrite(),
+                                      driveComment(location.kind()));
+}
+
 KIO::WorkerResult RcloneWorker::listRemoteDirectory(const QUrl &requestUrl,
-                                                     const RcloneUrl &directory,
+                                                     const RcloneLocation &directory,
                                                      const DirectoryListingPolicy &policy)
 {
-    const std::optional<bool> duplicateNames = remoteMayHaveDuplicateNames(directory.remote());
+    const std::optional<bool> duplicateNames = remoteMayHaveDuplicateNames(directory);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -159,24 +373,24 @@ KIO::WorkerResult RcloneWorker::listRemoteDirectory(const QUrl &requestUrl,
 }
 
 KIO::WorkerResult RcloneWorker::listUniqueDirectory(const QUrl &requestUrl,
-                                                     const RcloneUrl &directory,
+                                                     const RcloneLocation &directory,
                                                      const DirectoryListingPolicy &policy)
 {
     // rclone guarantees this remote has no duplicate names. Send each entry to
     // KIO as it arrives; WorkerBase batches IPC internally, avoiding a JSON
     // array and UDSEntryList peak for ordinary remotes.
-    listEntry(KioEntryBuilder::remote(directory.remote(), true));
+    listEntry(currentDirectoryEntry(directory));
 
     QList<RcloneItem> cacheItems;
     bool cacheableSnapshot = policy.allowsSnapshots();
     QString error;
     const bool listed = m_rclone.listStreaming(
-        directory.remoteSpec(),
+        directory.rcloneSpec(),
         [this, &cacheItems, &cacheableSnapshot](const RcloneItem &item) {
             if (wasKilled()) {
                 return false;
             }
-            if (!KioEntryBuilder::isRepresentable(item)) {
+            if (!canRepresentInKio(item)) {
                 return true;
             }
 
@@ -202,13 +416,13 @@ KIO::WorkerResult RcloneWorker::listUniqueDirectory(const QUrl &requestUrl,
         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
     }
     if (cacheableSnapshot) {
-        static_cast<void>(m_directorySnapshots.store(directory.remote(), directory.remotePath(), cacheItems));
+        static_cast<void>(m_directorySnapshots.store(directory.remote(), directory.cachePath(), cacheItems));
     }
     return KIO::WorkerResult::pass();
 }
 
 KIO::WorkerResult RcloneWorker::listDuplicateSafeDirectory(const QUrl &requestUrl,
-                                                            const RcloneUrl &directory,
+                                                            const RcloneLocation &directory,
                                                             const DirectoryListingPolicy &policy)
 {
     // The capability probe is deliberately fail-safe. If an older rclone or a
@@ -219,12 +433,12 @@ KIO::WorkerResult RcloneWorker::listDuplicateSafeDirectory(const QUrl &requestUr
     QList<RcloneItem> visibleItems;
     QHash<QString, qsizetype> itemIndexes;
     const bool listed = m_rclone.listStreaming(
-        directory.remoteSpec(),
+        directory.rcloneSpec(),
         [this, &visibleItems, &itemIndexes](const RcloneItem &item) {
             if (wasKilled()) {
                 return false;
             }
-            if (!KioEntryBuilder::isRepresentable(item)) {
+            if (!canRepresentInKio(item)) {
                 return true;
             }
 
@@ -256,25 +470,25 @@ KIO::WorkerResult RcloneWorker::listDuplicateSafeDirectory(const QUrl &requestUr
 
     publishDirectoryEntries(directory, visibleItems);
     if (policy.allowsSnapshots()) {
-        static_cast<void>(m_directorySnapshots.store(directory.remote(), directory.remotePath(), visibleItems));
+        static_cast<void>(m_directorySnapshots.store(directory.remote(), directory.cachePath(), visibleItems));
     }
     return KIO::WorkerResult::pass();
 }
 
-std::optional<QList<RcloneItem>> RcloneWorker::cachedDirectory(const RcloneUrl &directory,
+std::optional<QList<RcloneItem>> RcloneWorker::cachedDirectory(const RcloneLocation &directory,
                                                                 const DirectoryListingPolicy &policy)
 {
     if (!policy.allowsSnapshots()) {
         return std::nullopt;
     }
-    return m_directorySnapshots.load(directory.remote(), directory.remotePath(), policy.freshnessSeconds);
+    return m_directorySnapshots.load(directory.remote(), directory.cachePath(), policy.freshnessSeconds);
 }
 
-void RcloneWorker::publishDirectoryEntries(const RcloneUrl &directory, const QList<RcloneItem> &items)
+void RcloneWorker::publishDirectoryEntries(const RcloneLocation &directory, const QList<RcloneItem> &items)
 {
     KIO::UDSEntryList entries;
     entries.reserve(items.size() + 1);
-    entries.append(KioEntryBuilder::remote(directory.remote(), true));
+    entries.append(currentDirectoryEntry(directory));
     for (const RcloneItem &item : items) {
         entries.append(KioEntryBuilder::item(item));
     }
@@ -298,36 +512,29 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
-    if (rcloneUrl.isRemoteRoot()) {
-        // listremotes is sufficient to confirm the remote and obtain its type;
-        // do not start a config dump just to stat a virtual root.
-        QString error;
-        const QList<RcloneRemote> remotes = m_rclone.remoteList(&error, [this]() {
-            return wasKilled();
-        });
-        if (wasKilled()) {
-            return KIO::WorkerResult::pass();
-        }
-        if (!error.isEmpty()) {
-            return errorResult(error, KIO::ERR_CANNOT_STAT, url);
-        }
-        const auto remote = std::find_if(remotes.cbegin(), remotes.cend(), [&rcloneUrl](const RcloneRemote &candidate) {
-            return candidate.name == rcloneUrl.remote();
-        });
-        if (remote == remotes.cend()) {
-            return KIO::WorkerResult::fail(KIO::ERR_DOES_NOT_EXIST, url.toDisplayString());
-        }
-        statEntry(KioEntryBuilder::remote(remote->name, false, remote->type));
+
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_CANNOT_STAT, url);
+    }
+    if (location->isVirtualDirectory() || location->isPhysicalRoot()) {
+        const QString entryName = rcloneUrl.isRemoteRoot() ? rcloneUrl.remote()
+                                                            : rcloneUrl.remotePath().section(QLatin1Char('/'), -1);
+        statEntry(currentDirectoryEntry(*location, entryName));
         return KIO::WorkerResult::pass();
     }
 
-    if (const auto cachedItem = cachedItemForReadOnlyRequest(rcloneUrl)) {
+    if (const auto cachedItem = cachedItemForReadOnlyRequest(*location)) {
         statEntry(KioEntryBuilder::item(*cachedItem));
         return KIO::WorkerResult::pass();
     }
 
     QString error;
-    const auto item = sourceItem(rcloneUrl, &error);
+    const auto item = sourceItem(*location, &error);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -337,7 +544,7 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
 
     RcloneItem resolvedItem = *item;
     if (!resolvedItem.isDirectory && resolvedItem.size < 0) {
-        if (const auto result = resolveUnknownSize(rcloneUrl, resolvedItem); !result.success()) {
+        if (const auto result = resolveUnknownSize(url, *location, resolvedItem); !result.success()) {
             return result;
         }
         if (wasKilled()) {
@@ -370,13 +577,26 @@ KIO::WorkerResult RcloneWorker::mimetype(const QUrl &url)
         return result;
     }
 
-    if (const auto cachedItem = cachedItemForReadOnlyRequest(rcloneUrl)) {
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_DOES_NOT_EXIST, url);
+    }
+    if (location->isVirtualDirectory() || location->isPhysicalRoot()) {
+        mimeType(QStringLiteral("inode/directory"));
+        return KIO::WorkerResult::pass();
+    }
+
+    if (const auto cachedItem = cachedItemForReadOnlyRequest(*location)) {
         mimeType(RcloneEntryFormat::fallbackMimeType(*cachedItem));
         return KIO::WorkerResult::pass();
     }
 
     QString error;
-    const auto item = sourceItem(rcloneUrl, &error);
+    const auto item = sourceItem(*location, &error);
 
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
@@ -403,7 +623,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return KIO::WorkerResult::pass();
     }
 
-    if (rcloneUrl.remoteSpec().isEmpty() || rcloneUrl.isRemoteRoot()) {
+    if (rcloneUrl.isRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
     }
 
@@ -411,8 +631,20 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return result;
     }
 
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_CANNOT_READ, url);
+    }
+    if (location->isVirtualDirectory() || location->isPhysicalRoot()) {
+        return KIO::WorkerResult::fail(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
+    }
+
     QString error;
-    auto item = sourceItem(rcloneUrl, &error);
+    auto item = sourceItem(*location, &error);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -421,26 +653,25 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     }
 
     mimeType(RcloneEntryFormat::fallbackMimeType(*item));
-    if (cachedDownloadMatches(rcloneUrl, *item)) {
-        return sendCachedDownload(rcloneUrl);
+    if (cachedDownloadMatches(*location, *item)) {
+        return sendCachedDownload(url);
     }
     if (item->ambiguous || item->size < 0) {
-        if (const auto result = cacheRemoteFile(rcloneUrl, *item); !result.success()) {
+        if (const auto result = cacheRemoteFile(url, *location, *item); !result.success()) {
             return result;
         }
         if (wasKilled()) {
             return KIO::WorkerResult::pass();
         }
-        return sendCachedDownload(rcloneUrl);
+        return sendCachedDownload(url);
     }
     totalSize(item->size);
 
-    const QString fileName = rcloneUrl.remotePath().section(QLatin1Char('/'), -1);
+    const QString fileName = location->leafName();
     if (fileName.contains(QLatin1Char('\n'))) {
         return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
     }
-    const QString parentPath = rcloneUrl.remotePath().section(QLatin1Char('/'), 0, -2);
-    const QString parentSpec = rcloneUrl.remote() + QLatin1Char(':') + parentPath;
+    const QString parentSpec = location->parentSpec();
 
     QProcess process;
     RcloneProcess::configureProcess(process,
@@ -519,25 +750,41 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         return configurationEntryMutationError(KIO::ERR_WRITE_ACCESS_DENIED);
     }
 
-    if (rcloneUrl.remoteSpec().isEmpty() || rcloneUrl.isRemoteRoot()) {
+    if (rcloneUrl.isRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, url.toDisplayString());
     }
 
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
-    if (const auto result = ensureUnambiguousParentDirectories(rcloneUrl, KIO::ERR_CANNOT_WRITE); !result.success()) {
+
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_CANNOT_WRITE, url);
+    }
+    if (!location->hasRcloneTarget() || location->isPhysicalRoot()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, i18n("This virtual folder cannot be modified."));
+    }
+    if (!location->canWrite()) {
+        return KIO::WorkerResult::fail(KIO::ERR_WRITE_ACCESS_DENIED,
+                                       i18n("This Google Drive view is read-only. Open My Drive or a Shared Drive to make changes."));
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(*location, KIO::ERR_CANNOT_WRITE); !result.success()) {
         return result;
     }
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
-    if (m_cachedDownloadSpec == rcloneUrl.remoteSpec()) {
+    if (m_cachedDownloadSpec == location->rcloneSpec()) {
         clearCachedDownload();
     }
 
     QString destinationError;
-    const std::optional<RcloneItem> expectedDestination = sourceItem(rcloneUrl, &destinationError);
+    const std::optional<RcloneItem> expectedDestination = sourceItem(*location, &destinationError);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -568,7 +815,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         totalSize(sourceSize);
     }
 
-    const QString suffix = QFileInfo(rcloneUrl.remotePath()).completeSuffix();
+    const QString suffix = QFileInfo(location->relativePath()).completeSuffix();
     const QString extension = suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix;
     QTemporaryFile localUpload(QDir::tempPath() + QStringLiteral("/kio-rclone-upload-XXXXXX") + extension);
     if (!localUpload.open()) {
@@ -613,8 +860,8 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         return expectedDestination.has_value() != current.has_value()
             || (expectedDestination && current && (current->ambiguous || RcloneEntryFormat::itemVersion(*expectedDestination) != RcloneEntryFormat::itemVersion(*current)));
     };
-    const auto currentDestination = [this, &rcloneUrl](QString *error) {
-        return sourceItem(rcloneUrl, error);
+    const auto currentDestination = [this, &location](QString *error) {
+        return sourceItem(*location, error);
     };
 
     QString currentError;
@@ -629,7 +876,7 @@ KIO::WorkerResult RcloneWorker::put(const QUrl &url, int permissions, KIO::JobFl
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_WRITE, i18n("The remote file changed while the local edit was being prepared."));
     }
 
-    const RcloneResult upload = runUpload(localUploadPath, rcloneUrl.remoteSpec());
+    const RcloneResult upload = runUpload(localUploadPath, location->rcloneSpec());
     if (!upload.success()) {
         return commandResult(upload, KIO::ERR_CANNOT_WRITE, url);
     }
@@ -658,14 +905,30 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
         return configurationEntryMutationError(KIO::ERR_FILE_ALREADY_EXIST);
     }
 
-    if (rcloneUrl.remotePath().isEmpty()) {
+    if (rcloneUrl.isRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_MKDIR, url.toDisplayString());
     }
 
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
-    if (const auto result = ensureUnambiguousParentDirectories(rcloneUrl, KIO::ERR_CANNOT_MKDIR); !result.success()) {
+
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_CANNOT_MKDIR, url);
+    }
+    if (!location->hasRcloneTarget() || location->isPhysicalRoot()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_MKDIR, i18n("This virtual folder cannot be modified."));
+    }
+    if (!location->canWrite()) {
+        return KIO::WorkerResult::fail(KIO::ERR_WRITE_ACCESS_DENIED,
+                                       i18n("This Google Drive view is read-only. Open My Drive or a Shared Drive to make changes."));
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(*location, KIO::ERR_CANNOT_MKDIR); !result.success()) {
         return result;
     }
     if (wasKilled()) {
@@ -673,7 +936,7 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
     }
 
     QString error;
-    const std::optional<RcloneItem> existingItem = sourceItem(rcloneUrl, &error);
+    const std::optional<RcloneItem> existingItem = sourceItem(*location, &error);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -689,7 +952,7 @@ KIO::WorkerResult RcloneWorker::mkdir(const QUrl &url, int permissions)
         return errorResult(error, KIO::ERR_CANNOT_STAT, url);
     }
 
-    const RcloneResult result = runCommand({QStringLiteral("mkdir"), rcloneUrl.remoteSpec()});
+    const RcloneResult result = runCommand({QStringLiteral("mkdir"), location->rcloneSpec()});
     if (!result.success()) {
         return commandResult(result, KIO::ERR_CANNOT_MKDIR, url);
     }
@@ -713,22 +976,49 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     if (source.isConfigureEntry() || destination.isConfigureEntry()) {
         return configurationEntryMutationError(KIO::ERR_CANNOT_RENAME);
     }
-    if (source.remoteSpec().isEmpty() || destination.remoteSpec().isEmpty()) {
+    if (source.isRoot() || destination.isRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_RENAME, src.toDisplayString());
-    }
-    if (source.remoteSpec() == destination.remoteSpec()) {
-        return KIO::WorkerResult::fail(KIO::ERR_IDENTICAL_FILES, src.toDisplayString());
-    }
-    if (source.remote() != destination.remote()) {
-        return KIO::WorkerResult::fail(KIO::ERR_UNSUPPORTED_ACTION, i18n("Moving between different rclone remotes is streamed by KIO."));
     }
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
-    if (const auto result = ensureUnambiguousParentDirectories(source, KIO::ERR_CANNOT_RENAME); !result.success()) {
+
+    QString sourceLocationError;
+    const std::optional<RcloneLocation> sourceLocation = resolveLocation(source, &sourceLocationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!sourceLocation) {
+        return errorResult(sourceLocationError, KIO::ERR_CANNOT_RENAME, src);
+    }
+
+    QString destinationLocationError;
+    const std::optional<RcloneLocation> destinationLocation = resolveLocation(destination, &destinationLocationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!destinationLocation) {
+        return errorResult(destinationLocationError, KIO::ERR_CANNOT_RENAME, dest);
+    }
+    if (!sourceLocation->hasRcloneTarget() || !destinationLocation->hasRcloneTarget() || sourceLocation->isPhysicalRoot()
+        || destinationLocation->isPhysicalRoot()) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_RENAME, i18n("A virtual folder cannot be renamed."));
+    }
+    if (!sourceLocation->canWrite() || !destinationLocation->canWrite()) {
+        return KIO::WorkerResult::fail(KIO::ERR_WRITE_ACCESS_DENIED,
+                                       i18n("This Google Drive view is read-only. Open My Drive or a Shared Drive to make changes."));
+    }
+    if (!sourceLocation->sharesMutationScope(*destinationLocation)) {
+        return KIO::WorkerResult::fail(KIO::ERR_UNSUPPORTED_ACTION,
+                                       i18n("Moving between different rclone remotes or Google Drive views is streamed by KIO."));
+    }
+    if (sourceLocation->rcloneSpec() == destinationLocation->rcloneSpec()) {
+        return KIO::WorkerResult::fail(KIO::ERR_IDENTICAL_FILES, src.toDisplayString());
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(*sourceLocation, KIO::ERR_CANNOT_RENAME); !result.success()) {
         return result;
     }
-    if (const auto result = ensureUnambiguousParentDirectories(destination, KIO::ERR_CANNOT_RENAME); !result.success()) {
+    if (const auto result = ensureUnambiguousParentDirectories(*destinationLocation, KIO::ERR_CANNOT_RENAME); !result.success()) {
         return result;
     }
     if (wasKilled()) {
@@ -736,7 +1026,7 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     }
 
     QString sourceError;
-    const std::optional<RcloneItem> sourceItemResult = sourceItem(source, &sourceError);
+    const std::optional<RcloneItem> sourceItemResult = sourceItem(*sourceLocation, &sourceError);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -749,7 +1039,7 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
     }
 
     QString destinationError;
-    const std::optional<RcloneItem> destinationItem = sourceItem(destination, &destinationError);
+    const std::optional<RcloneItem> destinationItem = sourceItem(*destinationLocation, &destinationError);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -765,7 +1055,8 @@ KIO::WorkerResult RcloneWorker::rename(const QUrl &src, const QUrl &dest, KIO::J
         }
     }
 
-    const RcloneResult result = runCommand({QStringLiteral("moveto"), source.remoteSpec(), destination.remoteSpec(), QStringLiteral("--ignore-times")});
+    const RcloneResult result = runCommand(
+        {QStringLiteral("moveto"), sourceLocation->rcloneSpec(), destinationLocation->rcloneSpec(), QStringLiteral("--ignore-times")});
     if (!result.success()) {
         return commandResult(result, KIO::ERR_CANNOT_RENAME, src);
     }
@@ -813,14 +1104,32 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
     if (rcloneUrl.isConfigureEntry()) {
         return configurationEntryMutationError(KIO::ERR_CANNOT_DELETE);
     }
-    if (rcloneUrl.remotePath().isEmpty()) {
+    if (rcloneUrl.isRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_DELETE, url.toDisplayString());
     }
 
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
-    if (const auto result = ensureUnambiguousParentDirectories(rcloneUrl, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR); !result.success()) {
+
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR, url);
+    }
+    if (!location->hasRcloneTarget() || location->isPhysicalRoot()) {
+        return KIO::WorkerResult::fail(isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR,
+                                       i18n("This virtual folder cannot be modified."));
+    }
+    if (!location->canWrite()) {
+        return KIO::WorkerResult::fail(KIO::ERR_WRITE_ACCESS_DENIED,
+                                       i18n("This Google Drive view is read-only. Open My Drive or a Shared Drive to make changes."));
+    }
+    if (const auto result = ensureUnambiguousParentDirectories(*location, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR);
+        !result.success()) {
         return result;
     }
     if (wasKilled()) {
@@ -828,7 +1137,7 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
     }
 
     QString sourceError;
-    const std::optional<RcloneItem> item = sourceItem(rcloneUrl, &sourceError);
+    const std::optional<RcloneItem> item = sourceItem(*location, &sourceError);
     if (wasKilled()) {
         return KIO::WorkerResult::pass();
     }
@@ -849,7 +1158,7 @@ KIO::WorkerResult RcloneWorker::del(const QUrl &url, bool isFile)
         command = QStringLiteral("rmdir");
     }
 
-    const RcloneResult result = runCommand({command, rcloneUrl.remoteSpec()});
+    const RcloneResult result = runCommand({command, location->rcloneSpec()});
     if (!result.success()) {
         return commandResult(result, isFile ? KIO::ERR_CANNOT_DELETE : KIO::ERR_CANNOT_RMDIR, url);
     }
@@ -865,9 +1174,22 @@ KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
     if (!rcloneUrl.isValid() || rcloneUrl.remote().isEmpty() || rcloneUrl.isConfigureEntry()) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_STAT, url.toDisplayString());
     }
+    if (const auto result = ensureRcloneClient(); !result.success()) {
+        return result;
+    }
+
+    QString locationError;
+    const std::optional<RcloneLocation> location = resolveLocation(rcloneUrl, &locationError);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!location) {
+        return errorResult(locationError, KIO::ERR_CANNOT_STAT, url);
+    }
 
     QString error;
-    const auto space = m_rclone.about(rcloneUrl.remote() + QLatin1Char(':'), &error, [this]() {
+    const QString remoteSpec = location->hasRcloneTarget() ? location->rcloneRootSpec() : location->remote() + QLatin1Char(':');
+    const auto space = m_rclone.about(remoteSpec, &error, [this]() {
         return wasKilled();
     });
     if (!space) {
@@ -1052,40 +1374,46 @@ RcloneResult RcloneWorker::runUpload(const QString &localPath, const QString &re
     return result;
 }
 
-std::optional<bool> RcloneWorker::remoteMayHaveDuplicateNames(const QString &remote)
+std::optional<bool> RcloneWorker::remoteMayHaveDuplicateNames(const RcloneLocation &location)
 {
-    const auto cached = m_remoteDuplicateNameSupport.constFind(remote);
+    const QString remoteSpec = location.rcloneRootSpec();
+    if (remoteSpec.isEmpty()) {
+        return std::nullopt;
+    }
+
+    const auto cached = m_remoteDuplicateNameSupport.constFind(remoteSpec);
     if (cached != m_remoteDuplicateNameSupport.cend()) {
         return *cached;
     }
 
     QString ignoredError;
     const std::optional<bool> support = m_rclone.mayHaveDuplicateNames(
-        remote + QLatin1Char(':'),
+        remoteSpec,
         &ignoredError,
         [this]() {
             return wasKilled();
         });
     if (support && !wasKilled()) {
-        m_remoteDuplicateNameSupport.insert(remote, *support);
+        m_remoteDuplicateNameSupport.insert(remoteSpec, *support);
     }
     return support;
 }
 
-KIO::WorkerResult RcloneWorker::ensureUnambiguousParentDirectories(const RcloneUrl &url, int fallbackError) const
+KIO::WorkerResult RcloneWorker::ensureUnambiguousParentDirectories(const RcloneLocation &location, int fallbackError) const
 {
-    const QStringList parts = url.remotePath().split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    const QStringList parts = location.relativePath().split(QLatin1Char('/'), Qt::SkipEmptyParts);
     QString parentPath;
     for (qsizetype index = 0; index + 1 < parts.size(); ++index) {
         parentPath += (parentPath.isEmpty() ? QString() : QStringLiteral("/")) + parts.at(index);
 
         QString error;
-        const std::optional<RcloneItem> parent = sourceItem(url.remote(), parentPath, &error);
+        const std::optional<RcloneItem> parent = sourceItem(location.withRelativePath(parentPath), &error);
         if (wasKilled()) {
             return KIO::WorkerResult::pass();
         }
         if (!parent) {
-            return errorResult(error.isEmpty() ? i18n("The parent directory could not be resolved safely.") : error, fallbackError, url.url());
+            return KIO::WorkerResult::fail(fallbackError,
+                                           error.isEmpty() ? i18n("The parent directory could not be resolved safely.") : error);
         }
         if (!parent->isDirectory) {
             return KIO::WorkerResult::fail(fallbackError, i18n("A parent path component is not a directory."));
@@ -1099,48 +1427,17 @@ KIO::WorkerResult RcloneWorker::ensureUnambiguousParentDirectories(const RcloneU
     return KIO::WorkerResult::pass();
 }
 
-std::optional<RcloneItem> RcloneWorker::sourceItem(const RcloneUrl &url, QString *error) const
+std::optional<RcloneItem> RcloneWorker::sourceItem(const RcloneLocation &location, QString *error) const
 {
-    return sourceItem(url.remote(), url.remotePath(), error);
-}
-
-std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const RcloneUrl &url)
-{
-    if (url.remotePath().isEmpty()) {
+    if (!location.hasRcloneTarget() || location.relativePath().isEmpty()) {
+        if (error) {
+            *error = QStringLiteral("object not found");
+        }
         return std::nullopt;
     }
 
-    const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
-    if (!policy.allowsSnapshots()) {
-        return std::nullopt;
-    }
-
-    const QString fileName = url.remotePath().section(QLatin1Char('/'), -1);
-    const QString parentPath = url.remotePath().section(QLatin1Char('/'), 0, -2);
-    const auto items = m_directorySnapshots.load(url.remote(), parentPath, policy.freshnessSeconds);
-    if (!items) {
-        return std::nullopt;
-    }
-
-    const auto item = std::find_if(items->cbegin(), items->cend(), [&fileName](const RcloneItem &candidate) {
-        return candidate.name == fileName;
-    });
-    if (item == items->cend()) {
-        return std::nullopt;
-    }
-    return *item;
-}
-
-void RcloneWorker::invalidateDirectorySnapshots()
-{
-    m_directorySnapshots.clear();
-}
-
-std::optional<RcloneItem> RcloneWorker::sourceItem(const QString &remote, const QString &remotePath, QString *error) const
-{
-    const QString fileName = remotePath.section(QLatin1Char('/'), -1);
-    const QString parentPath = remotePath.section(QLatin1Char('/'), 0, -2);
-    const QString parentSpec = remote + QLatin1Char(':') + parentPath;
+    const QString fileName = location.leafName();
+    const QString parentSpec = location.parentSpec();
 
     QString listError;
     std::optional<RcloneItem> selected;
@@ -1183,9 +1480,42 @@ std::optional<RcloneItem> RcloneWorker::sourceItem(const QString &remote, const 
     return selected;
 }
 
-KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem &item)
+std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const RcloneLocation &location)
 {
-    if (cachedDownloadMatches(url, item)) {
+    if (!location.hasRcloneTarget() || location.relativePath().isEmpty()) {
+        return std::nullopt;
+    }
+
+    const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
+    if (!policy.allowsSnapshots()) {
+        return std::nullopt;
+    }
+
+    const QString fileName = location.leafName();
+    const QString parentPath = location.relativePath().section(QLatin1Char('/'), 0, -2);
+    const RcloneLocation parent = location.withRelativePath(parentPath);
+    const auto items = m_directorySnapshots.load(location.remote(), parent.cachePath(), policy.freshnessSeconds);
+    if (!items) {
+        return std::nullopt;
+    }
+
+    const auto item = std::find_if(items->cbegin(), items->cend(), [&fileName](const RcloneItem &candidate) {
+        return candidate.name == fileName;
+    });
+    if (item == items->cend()) {
+        return std::nullopt;
+    }
+    return *item;
+}
+
+void RcloneWorker::invalidateDirectorySnapshots()
+{
+    m_directorySnapshots.clear();
+}
+
+KIO::WorkerResult RcloneWorker::cacheRemoteFile(const QUrl &url, const RcloneLocation &location, RcloneItem &item)
+{
+    if (cachedDownloadMatches(location, item)) {
         item.size = m_cachedDownload->size();
         return KIO::WorkerResult::pass();
     }
@@ -1197,7 +1527,7 @@ KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem
                                        i18n("Multiple remote objects have this name, and this backend cannot identify which one to open safely."));
     }
 
-    const QString suffix = QFileInfo(url.remotePath()).completeSuffix();
+    const QString suffix = QFileInfo(location.relativePath()).completeSuffix();
     const QString extension = suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix;
     const QString fileTemplate = QDir::tempPath() + QStringLiteral("/kio-rclone-XXXXXX") + extension;
     auto temporaryFile = std::make_unique<QTemporaryFile>(fileTemplate);
@@ -1211,7 +1541,7 @@ KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem
     if (!item.id.isEmpty()) {
         result = m_rclone.run({QStringLiteral("backend"),
                                 QStringLiteral("copyid"),
-                                url.remote() + QLatin1Char(':'),
+                                location.rcloneRootSpec(),
                                 item.id,
                                 temporaryPath,
                                 QStringLiteral("--ignore-times"),
@@ -1228,12 +1558,12 @@ KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem
             return KIO::WorkerResult::pass();
         }
         if (item.ambiguous && !item.id.isEmpty()) {
-            return errorResult(result.errorMessage(), KIO::ERR_CANNOT_READ, url.url());
+            return errorResult(result.errorMessage(), KIO::ERR_CANNOT_READ, url);
         }
 
         QFile::remove(temporaryPath);
         result = m_rclone.run({QStringLiteral("copyto"),
-                                url.remoteSpec(),
+                                location.rcloneSpec(),
                                 temporaryPath,
                                 QStringLiteral("--ignore-times"),
                                 QStringLiteral("--log-level"),
@@ -1248,34 +1578,35 @@ KIO::WorkerResult RcloneWorker::cacheRemoteFile(const RcloneUrl &url, RcloneItem
         return KIO::WorkerResult::pass();
     }
     if (!result.success()) {
-        return errorResult(result.errorMessage(), KIO::ERR_CANNOT_READ, url.url());
+        return errorResult(result.errorMessage(), KIO::ERR_CANNOT_READ, url);
     }
     if (!temporaryFile->open() || !temporaryFile->seek(0)) {
         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, temporaryFile->errorString());
     }
 
     item.size = temporaryFile->size();
-    m_cachedDownloadSpec = url.remoteSpec();
+    m_cachedDownloadSpec = location.rcloneSpec();
     m_cachedDownloadVersion = remoteVersion;
     m_cachedDownload = std::move(temporaryFile);
     return KIO::WorkerResult::pass();
 }
 
-KIO::WorkerResult RcloneWorker::resolveUnknownSize(const RcloneUrl &url, RcloneItem &item)
+KIO::WorkerResult RcloneWorker::resolveUnknownSize(const QUrl &url, const RcloneLocation &location, RcloneItem &item)
 {
-    return cacheRemoteFile(url, item);
+    return cacheRemoteFile(url, location, item);
 }
 
-bool RcloneWorker::cachedDownloadMatches(const RcloneUrl &url, const RcloneItem &item) const
+bool RcloneWorker::cachedDownloadMatches(const RcloneLocation &location, const RcloneItem &item) const
 {
-    return m_cachedDownload && m_cachedDownloadSpec == url.remoteSpec() && m_cachedDownloadVersion == RcloneEntryFormat::itemVersion(item);
+    return m_cachedDownload && m_cachedDownloadSpec == location.rcloneSpec()
+        && m_cachedDownloadVersion == RcloneEntryFormat::itemVersion(item);
 }
 
-KIO::WorkerResult RcloneWorker::sendCachedDownload(const RcloneUrl &url)
+KIO::WorkerResult RcloneWorker::sendCachedDownload(const QUrl &url)
 {
     if (!m_cachedDownload || !m_cachedDownload->seek(0)) {
         clearCachedDownload();
-        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, url.url().toDisplayString());
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_READ, url.toDisplayString());
     }
 
     totalSize(m_cachedDownload->size());

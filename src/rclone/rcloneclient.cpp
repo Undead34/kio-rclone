@@ -325,6 +325,17 @@ QStringList RcloneClient::remotes(QString *error, const CancellationCallback &is
     return result;
 }
 
+QList<RcloneSharedDrive>
+RcloneClient::sharedDrives(const QString &remoteSpec, QString *error, const CancellationCallback &isCancelled) const
+{
+    const RcloneResult result = run({QStringLiteral("backend"), QStringLiteral("drives"), remoteSpec}, 30000, isCancelled);
+    if (!result.success()) {
+        setError(error, result.errorMessage());
+        return {};
+    }
+    return parseSharedDriveList(result.standardOutput, error);
+}
+
 std::optional<RcloneRemoteInfo> RcloneClient::remoteInfo(const QString &remote, QString *error, const CancellationCallback &isCancelled) const
 {
     const RcloneResult result = run({QStringLiteral("config"), QStringLiteral("redacted"), remote}, 30000, isCancelled);
@@ -467,6 +478,39 @@ QStringList RcloneClient::parseRemoteList(const QByteArray &json, QString *error
         remotes.append(remote.name);
     }
     return remotes;
+}
+
+QList<RcloneSharedDrive> RcloneClient::parseSharedDriveList(const QByteArray &json, QString *error)
+{
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isArray()) {
+        setError(error, parseError.errorString());
+        return {};
+    }
+
+    QList<RcloneSharedDrive> drives;
+    for (const QJsonValue &value : document.array()) {
+        if (!value.isObject()) {
+            setError(error, QStringLiteral("rclone returned an invalid Shared Drive entry"));
+            return {};
+        }
+
+        const QJsonObject object = value.toObject();
+        RcloneSharedDrive drive;
+        drive.id = object.value(QStringLiteral("id")).toString();
+        drive.name = object.value(QStringLiteral("name")).toString();
+        if (drive.id.isEmpty() || drive.name.isEmpty()) {
+            setError(error, QStringLiteral("rclone returned an incomplete Shared Drive entry"));
+            return {};
+        }
+        drives.append(std::move(drive));
+    }
+    std::sort(drives.begin(), drives.end(), [](const RcloneSharedDrive &left, const RcloneSharedDrive &right) {
+        const int comparison = QString::compare(left.name, right.name, Qt::CaseInsensitive);
+        return comparison == 0 ? left.id < right.id : comparison < 0;
+    });
+    return drives;
 }
 
 std::optional<bool> RcloneClient::parseDuplicateNameSupport(const QByteArray &json, QString *error)

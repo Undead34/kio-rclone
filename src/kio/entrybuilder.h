@@ -24,6 +24,13 @@ namespace KioEntryBuilder
 [[nodiscard]] KIO::UDSEntry root();
 [[nodiscard]] KIO::UDSEntry configure();
 [[nodiscard]] KIO::UDSEntry remote(const QString &name, bool currentDirectory = false, const QString &type = {});
+[[nodiscard]] KIO::UDSEntry directory(const QString &name,
+                                       const QString &displayName,
+                                       const QString &iconName,
+                                       bool writable,
+                                       // Published as UDS_COMMENT when non-empty; see
+                                       // https://api.kde.org/kio-udsentry.html.
+                                       const QString &comment = {});
 [[nodiscard]] bool isRepresentable(const RcloneItem &item);
 [[nodiscard]] KIO::UDSEntry item(const RcloneItem &item);
 }

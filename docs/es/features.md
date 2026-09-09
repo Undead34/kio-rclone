@@ -54,6 +54,19 @@ cache-first en esta ruta. Añadirlos introduciría actividad de red y cambios
 sorpresivos en la vista sin resolver tan directamente la demora habitual de
 cerrar y reabrir Dolphin.
 
+## Google Drive es un hub pequeño, no una raíz plana
+
+Para un remoto de Google Drive, Dolphin organiza su raíz en **Mi unidad**,
+**Compartido conmigo**, **Unidades compartidas**, **Papelera** y **Favoritos**.
+Así el árbol principal es predecible y cada consulta específica del proveedor
+sigue delegada a rclone. Mi unidad y una unidad compartida seleccionada pueden
+modificarse si el proveedor lo permite; las vistas filtradas son
+deliberadamente de solo lectura. También puedes abrir una carpeta de Drive de
+ID conocido desde la barra de ubicación sin crear otra base de cuentas.
+
+Consulta [Google Drive y GCP](/es/google-drive#vistas-de-drive-en-dolphin)
+para ver las rutas exactas y los límites conservadores intencionales.
+
 ## Lo que hace especial a las transferencias
 
 Las operaciones entre ubicaciones se transmiten por KIO en vez de delegarse en

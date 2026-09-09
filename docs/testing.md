@@ -23,11 +23,13 @@ ctest --test-dir build/test --output-on-failure
 | --- | --- |
 | `rcloneurltest` | `rclone:/` URL parsing and construction. |
 | `rcloneclienttest` | rclone JSON parsing and local client behavior. |
+| `rclonelocationtest` | Pure standard and Google Drive public-path to rclone-spec mapping. |
 | `rclonepausetest` | Upload/download backpressure and resume behavior. |
 | `rcloneuploadtest` | Atomic publication, exact bytes, cancellation, and cleanup. |
 | `rclonedownloadtest` | Unknown-size and duplicate-object materialization. |
 | `directorysnapshotcachetest` | Snapshot persistence, expiry, policy persistence, configuration invalidation, and private cache permissions. |
 | `rclonedirectorycachetest` | Worker cache hits for listings/stat/MIME, remote-only mode, explicit reload bypass, and mutation invalidation. |
+| `rclonedrivehubtest` | Drive hub labels, Shared Drive IDs, connection strings, filtered-view write protection, and My Drive writes. |
 | `appstreamtest` | Installed AppStream metadata. |
 | `desktopfiletest` | Absolute launcher path plus MIME and URI-handler registration. |
 | `mimefiletest` | Installed shared MIME definition for the launcher. |
@@ -72,15 +74,18 @@ the rclone, Plasma, and KDE Frameworks versions with the result.
    within the configured fresh-cache window, and confirm the listing appears
    promptly. Then select **Always check the remote** in Settings and confirm a
    reopening waits for the remote listing.
-4. Create a directory and refresh it once.
-5. Upload a small file, download it, compare its checksum, and verify pause,
+4. For Google Drive, confirm the remote root is the hub, **My Drive** opens
+   the ordinary root, **Shared Drives** uses stable IDs behind its display
+   names, and the filtered views reject writes.
+5. Create a directory and refresh it once.
+6. Upload a small file, download it, compare its checksum, and verify pause,
    resume, cancellation, and overwrite handling.
-6. Rename and delete the disposable file.
-7. Restart Dolphin and confirm that the remote remains available.
-8. Open a TXT and one ODT/DOCX file, then verify the saved content after
+7. Rename and delete the disposable file.
+8. Restart Dolphin and confirm that the remote remains available.
+9. Open a TXT and one ODT/DOCX file, then verify the saved content after
    reopening it. Treat Google-native exports and duplicate remote names as
    read-only cases.
-9. If the release changes a translation, run its visual locale check before
+10. If the release changes a translation, run its visual locale check before
    accepting the release.
 
 Never include tokens, client secrets, unredacted configuration, or personal

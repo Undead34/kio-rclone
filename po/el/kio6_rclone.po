@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kio-rclone\n"
 "Report-Msgid-Bugs-To: https://github.com/Undead34/kio-rclone/issues\n"
-"POT-Creation-Date: 2026-09-08 17:46-0400\n"
+"POT-Creation-Date: 2026-09-08 21:22-0400\n"
 "PO-Revision-Date: 2026-09-01 19:05+0300\n"
 "Last-Translator: Vasilis Koulouris <vasileskoulouris@gmail.com>\n"
 "Language-Team: Greek\n"
@@ -17,163 +17,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/rcloneworker.cpp:44
-#, kde-format
-msgid "“Configure Remotes…” is a virtual launcher and cannot be modified."
-msgstr ""
-"Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
-"να τροποποιηθεί."
-
-#: src/rcloneworker.cpp:471
-#, kde-format
-msgid "The remote file changed while it was being read."
-msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ διαβαζόταν."
-
-#: src/rcloneworker.cpp:523
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. Rename or remove the duplicates "
-"before editing this file."
-msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Μετονομάστε ή "
-"αφαιρέστε τα διπλότυπα πριν επεξεργαστείτε αυτό το αρχείο."
-
-#: src/rcloneworker.cpp:528
-#, kde-format
-msgid ""
-"This is an exported cloud document with no stable remote size. It is "
-"available read-only to avoid replacing the original."
-msgstr ""
-"Αυτό είναι ένα εξαγμένο αρχείο νέφους χωρίς σταθερό απομακρυσμένο μέγεθος. "
-"Είναι διαθέσιμο μόνο για ανάγνωση για αποφυγή αντικατάστασης του αρχικού."
-
-#: src/rcloneworker.cpp:549
-#, kde-format
-msgid "Preparing upload…"
-msgstr "Προετοιμάζεται μεταφόρτωση…"
-
-#: src/rcloneworker.cpp:565 src/rcloneworker.cpp:574
-#, kde-format
-msgid "The upload source changed size while it was being read."
-msgstr "Η πηγή μεταφόρτωσης άλλαξε μέγεθος ενώ διαβαζόταν."
-
-#: src/rcloneworker.cpp:599
-#, kde-format
-msgid "The remote file changed while the local edit was being prepared."
-msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ η τοπική επεξεργασία ετοιμαζόταν."
-
-#: src/rcloneworker.cpp:653
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. Resolve the duplicates before "
-"creating this path."
-msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Επιλύστε τα "
-"διπλότυπα πριν δημιουργήσετε αυτή τη διαδρομή."
-
-#: src/rcloneworker.cpp:693
-#, kde-format
-msgid "Moving between different rclone remotes is streamed by KIO."
-msgstr ""
-"Η μετακίνηση μεταξύ διαφορετικών απομακρυσμένων χώρων αποθήκευσης rclone "
-"γίνεται με απευθείας ροή από το KIO."
-
-#: src/rcloneworker.cpp:718
-#, kde-format
-msgid ""
-"Multiple remote objects have the source name. Resolve the duplicates before "
-"renaming this path."
-msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν το όνομα προέλευσης. Διαχειριστείτε "
-"τα διπλότυπα πριν μετονομάσετε αυτή τη διαδρομή."
-
-#: src/rcloneworker.cpp:731
-#, kde-format
-msgid ""
-"The destination is ambiguous or read-only and cannot be replaced safely."
-msgstr ""
-"Ο προορισμός είναι ασαφής ή μόνο για ανάγνωση και δεν μπορεί να "
-"αντικατασταθεί με ασφάλεια."
-
-#: src/rcloneworker.cpp:762
-#, kde-format
-msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
-msgstr ""
-"Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
-"να αντιγραφεί."
-
-#: src/rcloneworker.cpp:810
-#, kde-format
-msgid ""
-"Multiple remote objects have this name. Resolve the duplicates before "
-"deleting this path."
-msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Διαχειριστείτε τα "
-"διπλότυπα πριν διαγράψετε αυτή τη διαδρομή."
-
-#: src/rcloneworker.cpp:881 app/configwindow.cpp:282
-#, kde-format
-msgid ""
-"rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
-"path."
-msgstr ""
-"Δεν βρέθηκε το rclone. Εγκαταστήστε το ή ορίστε τη KIO_RCLONE_EXECUTABLE στη "
-"πλήρη διαδρομή του."
-
-#: src/rcloneworker.cpp:1001
-#, kde-format
-msgid "Uploading… %1% · %2/s · %3 s remaining"
-msgstr "Μεταφόρτωση… %1% · %2/s · %3 s απομένουν"
-
-#: src/rcloneworker.cpp:1003
-#, kde-format
-msgid "Uploading… %1% · %2/s"
-msgstr "Μεταφόρτωση… %1% · %2/s"
-
-#: src/rcloneworker.cpp:1030
-#, kde-format
-msgid "Uploading…"
-msgstr "Μεταφόρτωση…"
-
-#: src/rcloneworker.cpp:1088
-#, kde-format
-msgid "The parent directory could not be resolved safely."
-msgstr "Ο γονικός κατάλογος δεν ήταν δυνατό να επιλυθεί με ασφάλεια."
-
-#: src/rcloneworker.cpp:1091
-#, kde-format
-msgid "A parent path component is not a directory."
-msgstr "Ένα στοιχείο της γονικής διαδρομής δεν είναι κατάλογος."
-
-#: src/rcloneworker.cpp:1095
-#, kde-format
-msgid ""
-"A parent directory has multiple remote objects with the same name. Resolve "
-"the duplicates before changing this path."
-msgstr ""
-"Ένας γονικός κατάλογος έχει πολλαπλά απομακρυσμένα αντικείμενα με το ίδιο "
-"όνομα. Επιλύστε τα διπλότυπα πριν αλλάξετε αυτή τη διαδρομή."
-
-#: src/rcloneworker.cpp:1192
-#, kde-format
-msgid ""
-"Multiple remote objects have this name, and this backend cannot identify "
-"which one to open safely."
-msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα, και αυτό το backend "
-"δεν μπορεί να αναγνωρίσει ποιο να ανοίξει με ασφάλεια."
-
-#: src/kioentryfactory.cpp:37 app/configwindow.cpp:149 app/main.cpp:24
+#: src/kio/entrybuilder.cpp:37 app/main.cpp:24 app/configwindow.cpp:149
 #, kde-format
 msgid "Rclone Remotes"
 msgstr "Απομακρυσμένοι χώροι αποθήκευσης Rclone"
 
-#: src/kioentryfactory.cpp:52
+#: src/kio/entrybuilder.cpp:52
 #, kde-format
 msgid "Configure Remotes…"
 msgstr "Διαμόρφωση απομακρυσμένων…"
 
-#: src/kioentryfactory.cpp:100
+#: src/kio/entrybuilder.cpp:132
 #, kde-format
 msgid ""
 "Multiple remote directories have this name. This ambiguous folder is read-"
@@ -183,13 +37,381 @@ msgstr ""
 "φάκελος είναι μόνο για ανάγνωση· επιλύστε τον με rclone dedupe πριν τον "
 "αλλάξετε."
 
-#: src/kioentryfactory.cpp:102
+#: src/kio/entrybuilder.cpp:134
 #, kde-format
 msgid ""
 "Multiple remote objects have this name. KIO Rclone selected one read-only."
 msgstr ""
-"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Το KIO Rclone επέλεξε "
-"ένα μόνο για ανάγνωση."
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Το KIO Rclone "
+"επέλεξε ένα μόνο για ανάγνωση."
+
+#: src/kio/worker.cpp:42
+#, kde-format
+msgid "“Configure Remotes…” is a virtual launcher and cannot be modified."
+msgstr ""
+"Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
+"να τροποποιηθεί."
+
+#: src/kio/worker.cpp:60
+#, kde-format
+msgid "My Drive"
+msgstr "Ο δίσκος μου"
+
+#: src/kio/worker.cpp:62
+#, kde-format
+msgid "Shared With Me"
+msgstr "Κοινόχρηστα με εμένα"
+
+#: src/kio/worker.cpp:64
+#, kde-format
+msgid "Shared Drives"
+msgstr "Κοινόχρηστοι δίσκοι"
+
+#: src/kio/worker.cpp:66
+#, kde-format
+msgid "Trash (original folder structure)"
+msgstr "Κάδος (αρχική δομή φακέλων)"
+
+#: src/kio/worker.cpp:68
+#, kde-format
+msgid "Starred"
+msgstr "Με επισήμανση"
+
+#: src/kio/worker.cpp:70
+#, kde-format
+msgid "Folders by ID"
+msgstr "Φάκελοι κατά ID"
+
+#: src/kio/worker.cpp:72
+#, kde-format
+msgid "Folder %1"
+msgstr "Φάκελος %1"
+
+#: src/kio/worker.cpp:89
+#, kde-format
+msgid ""
+"Shows trashed items in their original folder structure. Some folders only "
+"provide the path to a trashed item."
+msgstr ""
+"Εμφανίζει τα διαγραμμένα στοιχεία στην αρχική δομή φακέλων τους. Ορισμένοι "
+"φάκελοι παρέχουν μόνο τη διαδρομή προς ένα διαγραμμένο στοιχείο."
+
+#: src/kio/worker.cpp:300
+#, kde-format
+msgid ""
+"This Google Drive location is not valid. Open My Drive to browse the normal "
+"Drive root."
+msgstr ""
+"Αυτή η τοποθεσία του Google Drive δεν είναι έγκυρη. Ανοίξτε τον δίσκο μου "
+"για να περιηγηθείτε στην κανονική ρίζα του Drive."
+
+#: src/kio/worker.cpp:332
+#, kde-format
+msgid "The rclone remote “%1” was not found."
+msgstr "Δεν βρέθηκε ο απομακρυσμένος χώρος rclone «%1»."
+
+#: src/kio/worker.cpp:731
+#, kde-format
+msgid "The remote file changed while it was being read."
+msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ διαβαζόταν."
+
+#: src/kio/worker.cpp:769 src/kio/worker.cpp:924 src/kio/worker.cpp:1124
+#, kde-format
+msgid "This virtual folder cannot be modified."
+msgstr "Αυτός ο εικονικός φάκελος δεν μπορεί να τροποποιηθεί."
+
+#: src/kio/worker.cpp:773 src/kio/worker.cpp:928 src/kio/worker.cpp:1008
+#: src/kio/worker.cpp:1128
+#, kde-format
+msgid ""
+"This Google Drive view is read-only. Open My Drive or a Shared Drive to make "
+"changes."
+msgstr ""
+"Αυτή η προβολή του Google Drive είναι μόνο για ανάγνωση. Ανοίξτε τον δίσκο "
+"μου ή έναν κοινόχρηστο δίσκο για αλλαγές."
+
+#: src/kio/worker.cpp:799
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. Rename or remove the duplicates "
+"before editing this file."
+msgstr ""
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Μετονομάστε ή "
+"αφαιρέστε τα διπλότυπα πριν επεξεργαστείτε αυτό το αρχείο."
+
+#: src/kio/worker.cpp:804
+#, kde-format
+msgid ""
+"This is an exported cloud document with no stable remote size. It is "
+"available read-only to avoid replacing the original."
+msgstr ""
+"Αυτό είναι ένα εξαγμένο αρχείο νέφους χωρίς σταθερό απομακρυσμένο μέγεθος. "
+"Είναι διαθέσιμο μόνο για ανάγνωση για αποφυγή αντικατάστασης του αρχικού."
+
+#: src/kio/worker.cpp:825
+#, kde-format
+msgid "Preparing upload…"
+msgstr "Προετοιμάζεται μεταφόρτωση…"
+
+#: src/kio/worker.cpp:841 src/kio/worker.cpp:850
+#, kde-format
+msgid "The upload source changed size while it was being read."
+msgstr "Η πηγή μεταφόρτωσης άλλαξε μέγεθος ενώ διαβαζόταν."
+
+#: src/kio/worker.cpp:875
+#, kde-format
+msgid "The remote file changed while the local edit was being prepared."
+msgstr "Το απομακρυσμένο αρχείο άλλαξε ενώ η τοπική επεξεργασία ετοιμαζόταν."
+
+#: src/kio/worker.cpp:945
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. Resolve the duplicates before "
+"creating this path."
+msgstr ""
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Επιλύστε τα "
+"διπλότυπα πριν δημιουργήσετε αυτή τη διαδρομή."
+
+#: src/kio/worker.cpp:1004
+#, kde-format
+msgid "A virtual folder cannot be renamed."
+msgstr "Ένας εικονικός φάκελος δεν μπορεί να μετονομαστεί."
+
+#: src/kio/worker.cpp:1012
+#, kde-format
+msgid ""
+"Moving between different rclone remotes or Google Drive views is streamed by "
+"KIO."
+msgstr ""
+"Η μετακίνηση μεταξύ διαφορετικών απομακρυσμένων rclone ή προβολών Google "
+"Drive γίνεται με ροή μέσω KIO."
+
+#: src/kio/worker.cpp:1037
+#, kde-format
+msgid ""
+"Multiple remote objects have the source name. Resolve the duplicates before "
+"renaming this path."
+msgstr ""
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν το όνομα προέλευσης. Διαχειριστείτε "
+"τα διπλότυπα πριν μετονομάσετε αυτή τη διαδρομή."
+
+#: src/kio/worker.cpp:1050
+#, kde-format
+msgid ""
+"The destination is ambiguous or read-only and cannot be replaced safely."
+msgstr ""
+"Ο προορισμός είναι ασαφής ή μόνο για ανάγνωση και δεν μπορεί να "
+"αντικατασταθεί με ασφάλεια."
+
+#: src/kio/worker.cpp:1082
+#, kde-format
+msgid "“Configure Remotes…” is a virtual launcher and cannot be copied."
+msgstr ""
+"Η “Διαμόρφωση Απομακρυσμένων…” είναι ένας εικονικός εκκινητής και δεν μπορεί "
+"να αντιγραφεί."
+
+#: src/kio/worker.cpp:1148
+#, kde-format
+msgid ""
+"Multiple remote objects have this name. Resolve the duplicates before "
+"deleting this path."
+msgstr ""
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα. Διαχειριστείτε τα "
+"διπλότυπα πριν διαγράψετε αυτή τη διαδρομή."
+
+#: src/kio/worker.cpp:1212 app/configwindow.cpp:282
+#, kde-format
+msgid ""
+"rclone was not found. Install it or set KIO_RCLONE_EXECUTABLE to its full "
+"path."
+msgstr ""
+"Δεν βρέθηκε το rclone. Εγκαταστήστε το ή ορίστε τη KIO_RCLONE_EXECUTABLE στη "
+"πλήρη διαδρομή του."
+
+#: src/kio/worker.cpp:1332
+#, kde-format
+msgid "Uploading… %1% · %2/s · %3 s remaining"
+msgstr "Μεταφόρτωση… %1% · %2/s · %3 s απομένουν"
+
+#: src/kio/worker.cpp:1334
+#, kde-format
+msgid "Uploading… %1% · %2/s"
+msgstr "Μεταφόρτωση… %1% · %2/s"
+
+#: src/kio/worker.cpp:1361
+#, kde-format
+msgid "Uploading…"
+msgstr "Μεταφόρτωση…"
+
+#: src/kio/worker.cpp:1415
+#, kde-format
+msgid "The parent directory could not be resolved safely."
+msgstr "Ο γονικός κατάλογος δεν ήταν δυνατό να επιλυθεί με ασφάλεια."
+
+#: src/kio/worker.cpp:1418
+#, kde-format
+msgid "A parent path component is not a directory."
+msgstr "Ένα στοιχείο της γονικής διαδρομής δεν είναι κατάλογος."
+
+#: src/kio/worker.cpp:1422
+#, kde-format
+msgid ""
+"A parent directory has multiple remote objects with the same name. Resolve "
+"the duplicates before changing this path."
+msgstr ""
+"Ένας γονικός κατάλογος έχει πολλαπλά απομακρυσμένα αντικείμενα με το ίδιο "
+"όνομα. Επιλύστε τα διπλότυπα πριν αλλάξετε αυτή τη διαδρομή."
+
+#: src/kio/worker.cpp:1526
+#, kde-format
+msgid ""
+"Multiple remote objects have this name, and this backend cannot identify "
+"which one to open safely."
+msgstr ""
+"Πολλαπλά απομακρυσμένα αντικείμενα έχουν αυτό το όνομα, και αυτό το backend "
+"δεν μπορεί να αναγνωρίσει ποιο να ανοίξει με ασφάλεια."
+
+#: app/dialogs/rclonepromptdialog.cpp:46
+#, kde-format
+msgid "rclone output:"
+msgstr "Έξοδος rclone:"
+
+#: app/dialogs/rclonepromptdialog.cpp:52
+#, kde-format
+msgid "rclone output"
+msgstr "Έξοδος rclone"
+
+#: app/dialogs/rclonepromptdialog.cpp:58
+#, kde-format
+msgid "Type a response and press Enter"
+msgstr "Πληκτρολογήστε μια απάντηση και πατήστε Enter"
+
+#: app/dialogs/rclonepromptdialog.cpp:59
+#, kde-format
+msgid "Sends your response to the question shown by rclone."
+msgstr "Στέλνει την απάντησή σας στην ερώτηση που εμφανίζει το rclone."
+
+#: app/dialogs/rclonepromptdialog.cpp:60
+#, kde-format
+msgid "Response:"
+msgstr "Απάντηση:"
+
+#: app/dialogs/settingsdialog.cpp:48
+#, kde-format
+msgid "Rclone Settings"
+msgstr "Ρυθμίσεις Rclone"
+
+#: app/dialogs/settingsdialog.cpp:61
+#, kde-format
+msgid "Configure how Dolphin browses Rclone remotes."
+msgstr ""
+"Διαμορφώστε τον τρόπο με τον οποίο το Dolphin περιηγείται στους "
+"απομακρυσμένους χώρους του Rclone."
+
+#: app/dialogs/settingsdialog.cpp:70
+#, kde-format
+msgid "Folder listings"
+msgstr "Λίστες φακέλων"
+
+#: app/dialogs/settingsdialog.cpp:85
+#, kde-format
+msgid "Use recent listings (recommended)"
+msgstr "Χρήση πρόσφατων λιστών (συνιστάται)"
+
+#: app/dialogs/settingsdialog.cpp:89
+#, kde-format
+msgid "Always check the remote"
+msgstr "Πάντα έλεγχος του απομακρυσμένου χώρου"
+
+#: app/dialogs/settingsdialog.cpp:96
+#, kde-format
+msgid ""
+"Choose whether Dolphin may reuse a recently saved folder listing or requests "
+"a new listing from the remote each time."
+msgstr ""
+"Επιλέξτε αν το Dolphin μπορεί να επαναχρησιμοποιεί μια πρόσφατα αποθηκευμένη "
+"λίστα φακέλου ή αν ζητά νέα λίστα από τον απομακρυσμένο χώρο κάθε φορά."
+
+#: app/dialogs/settingsdialog.cpp:100
+#, kde-format
+msgid "How to open folders"
+msgstr "Πώς να ανοίγουν οι φάκελοι"
+
+#: app/dialogs/settingsdialog.cpp:103
+#, kde-format
+msgid "How to open folders:"
+msgstr "Πώς να ανοίγουν οι φάκελοι:"
+
+#: app/dialogs/settingsdialog.cpp:118 app/dialogs/settingsdialog.cpp:210
+#, kde-format
+msgid " second"
+msgid_plural " seconds"
+msgstr[0] " δευτερόλεπτο"
+msgstr[1] " δευτερόλεπτα"
+
+#: app/dialogs/settingsdialog.cpp:121
+#, kde-format
+msgid ""
+"How long Dolphin may reuse a saved folder listing before requesting a new "
+"one from the remote."
+msgstr ""
+"Για πόσο χρόνο το Dolphin μπορεί να επαναχρησιμοποιεί μια αποθηκευμένη λίστα "
+"φακέλου προτού ζητήσει νέα από τον απομακρυσμένο χώρο."
+
+#: app/dialogs/settingsdialog.cpp:125
+#, kde-format
+msgid "Keep listings for"
+msgstr "Διατήρηση λιστών για"
+
+#: app/dialogs/settingsdialog.cpp:128
+#, kde-format
+msgid "Keep listings for:"
+msgstr "Διατήρηση λιστών για:"
+
+#: app/dialogs/settingsdialog.cpp:146
+#, kde-format
+msgid "Saved listings"
+msgstr "Αποθηκευμένες λίστες"
+
+#: app/dialogs/settingsdialog.cpp:150 app/dialogs/settingsdialog.cpp:159
+#, kde-format
+msgid "Clear saved listings when saving"
+msgstr "Εκκαθάριση αποθηκευμένων λιστών κατά την αποθήκευση"
+
+#: app/dialogs/settingsdialog.cpp:154
+#, kde-format
+msgid ""
+"Removes locally saved folder listings when these settings are saved. Remote "
+"files and folders are not affected."
+msgstr ""
+"Αφαιρεί τις τοπικά αποθηκευμένες λίστες φακέλων όταν αποθηκεύονται αυτές οι "
+"ρυθμίσεις. Τα απομακρυσμένα αρχεία και οι φάκελοι δεν επηρεάζονται."
+
+#: app/dialogs/settingsdialog.cpp:165
+#, kde-format
+msgid "Useful when a folder appears outdated. Remote files are never deleted."
+msgstr ""
+"Χρήσιμο όταν ένας φάκελος φαίνεται παρωχημένος. Τα απομακρυσμένα αρχεία δεν "
+"διαγράφονται ποτέ."
+
+#: app/dialogs/settingsdialog.cpp:253
+#, kde-format
+msgid ""
+"Recently visited folders can open faster. Changes made through Dolphin still "
+"check the remote."
+msgstr ""
+"Οι φάκελοι που επισκεφθήκατε πρόσφατα μπορούν να ανοίγουν γρηγορότερα. Οι "
+"αλλαγές που γίνονται μέσω του Dolphin εξακολουθούν να ελέγχουν τον "
+"απομακρυσμένο χώρο."
+
+#: app/dialogs/settingsdialog.cpp:257
+#, kde-format
+msgid ""
+"Opening a folder always requests a new listing from rclone and the remote "
+"provider."
+msgstr ""
+"Το άνοιγμα φακέλου ζητά πάντα νέα λίστα από το rclone και τον απομακρυσμένο "
+"πάροχο."
 
 #: app/configwindow.cpp:105
 #, kde-format
@@ -450,7 +672,7 @@ msgstr "Ένας απομακρυσμένος φάκελος με όνομα “
 #: app/configwindow.cpp:532 app/configwindow.cpp:681 app/configwindow.cpp:687
 #: app/configwindow.cpp:695 app/configwindow.cpp:760 app/configwindow.cpp:804
 #: app/configwindow.cpp:812 app/configwindow.cpp:832 app/configwindow.cpp:1002
-#: app/configwindow.cpp:1056 app/configwindow.cpp:1065
+#: app/configwindow.cpp:1057 app/configwindow.cpp:1064
 #, kde-format
 msgid "Rclone Error"
 msgstr "Σφάλμα rclone"
@@ -650,145 +872,13 @@ msgstr ""
 "\n"
 "%1 config"
 
-#: app/directorylistingsettingsdialog.cpp:48
 #, kde-format
-msgid "Rclone Settings"
-msgstr "Ρυθμίσεις Rclone"
+#~ msgid "Trash"
+#~ msgstr "Κάδος"
 
-#: app/directorylistingsettingsdialog.cpp:61
 #, kde-format
-msgid "Configure how Dolphin browses Rclone remotes."
-msgstr "Διαμορφώστε τον τρόπο με τον οποίο το Dolphin περιηγείται στους απομακρυσμένους χώρους του Rclone."
-
-#: app/directorylistingsettingsdialog.cpp:70
-#, kde-format
-msgid "Folder listings"
-msgstr "Λίστες φακέλων"
-
-#: app/directorylistingsettingsdialog.cpp:85
-#, kde-format
-msgid "Use recent listings (recommended)"
-msgstr "Χρήση πρόσφατων λιστών (συνιστάται)"
-
-#: app/directorylistingsettingsdialog.cpp:89
-#, kde-format
-msgid "Always check the remote"
-msgstr "Πάντα έλεγχος του απομακρυσμένου χώρου"
-
-#: app/directorylistingsettingsdialog.cpp:96
-#, kde-format
-msgid ""
-"Choose whether Dolphin may reuse a recently saved folder listing or requests "
-"a new listing from the remote each time."
-msgstr ""
-"Επιλέξτε αν το Dolphin μπορεί να επαναχρησιμοποιεί μια πρόσφατα αποθηκευμένη "
-"λίστα φακέλου ή αν ζητά νέα λίστα από τον απομακρυσμένο χώρο κάθε φορά."
-
-#: app/directorylistingsettingsdialog.cpp:100
-#, kde-format
-msgid "How to open folders"
-msgstr "Πώς να ανοίγουν οι φάκελοι"
-
-#: app/directorylistingsettingsdialog.cpp:103
-#, kde-format
-msgid "How to open folders:"
-msgstr "Πώς να ανοίγουν οι φάκελοι:"
-
-#: app/directorylistingsettingsdialog.cpp:118
-#: app/directorylistingsettingsdialog.cpp:210
-#, kde-format
-msgid " second"
-msgid_plural " seconds"
-msgstr[0] " δευτερόλεπτο"
-msgstr[1] " δευτερόλεπτα"
-
-#: app/directorylistingsettingsdialog.cpp:121
-#, kde-format
-msgid ""
-"How long Dolphin may reuse a saved folder listing before requesting a new "
-"one from the remote."
-msgstr ""
-"Για πόσο χρόνο το Dolphin μπορεί να επαναχρησιμοποιεί μια αποθηκευμένη λίστα "
-"φακέλου προτού ζητήσει νέα από τον απομακρυσμένο χώρο."
-
-#: app/directorylistingsettingsdialog.cpp:125
-#, kde-format
-msgid "Keep listings for"
-msgstr "Διατήρηση λιστών για"
-
-#: app/directorylistingsettingsdialog.cpp:128
-#, kde-format
-msgid "Keep listings for:"
-msgstr "Διατήρηση λιστών για:"
-
-#: app/directorylistingsettingsdialog.cpp:146
-#, kde-format
-msgid "Saved listings"
-msgstr "Αποθηκευμένες λίστες"
-
-#: app/directorylistingsettingsdialog.cpp:150
-#: app/directorylistingsettingsdialog.cpp:159
-#, kde-format
-msgid "Clear saved listings when saving"
-msgstr "Εκκαθάριση αποθηκευμένων λιστών κατά την αποθήκευση"
-
-#: app/directorylistingsettingsdialog.cpp:154
-#, kde-format
-msgid ""
-"Removes locally saved folder listings when these settings are saved. Remote "
-"files and folders are not affected."
-msgstr ""
-"Αφαιρεί τις τοπικά αποθηκευμένες λίστες φακέλων όταν αποθηκεύονται αυτές οι "
-"ρυθμίσεις. Τα απομακρυσμένα αρχεία και οι φάκελοι δεν επηρεάζονται."
-
-#: app/directorylistingsettingsdialog.cpp:165
-#, kde-format
-msgid "Useful when a folder appears outdated. Remote files are never deleted."
-msgstr "Χρήσιμο όταν ένας φάκελος φαίνεται παρωχημένος. Τα απομακρυσμένα αρχεία δεν διαγράφονται ποτέ."
-
-#: app/directorylistingsettingsdialog.cpp:253
-#, kde-format
-msgid ""
-"Recently visited folders can open faster. Changes made through Dolphin still "
-"check the remote."
-msgstr ""
-"Οι φάκελοι που επισκεφθήκατε πρόσφατα μπορούν να ανοίγουν γρηγορότερα. Οι "
-"αλλαγές που γίνονται μέσω του Dolphin εξακολουθούν να ελέγχουν τον "
-"απομακρυσμένο χώρο."
-
-#: app/directorylistingsettingsdialog.cpp:257
-#, kde-format
-msgid ""
-"Opening a folder always requests a new listing from rclone and the remote "
-"provider."
-msgstr ""
-"Το άνοιγμα φακέλου ζητά πάντα νέα λίστα από το rclone και τον απομακρυσμένο "
-"πάροχο."
-
-#: app/interactiverclonedialog.cpp:45
-#, kde-format
-msgid "rclone output:"
-msgstr "Έξοδος rclone:"
-
-#: app/interactiverclonedialog.cpp:51
-#, kde-format
-msgid "rclone output"
-msgstr "Έξοδος rclone"
-
-#: app/interactiverclonedialog.cpp:57
-#, kde-format
-msgid "Type a response and press Enter"
-msgstr "Πληκτρολογήστε μια απάντηση και πατήστε Enter"
-
-#: app/interactiverclonedialog.cpp:58
-#, kde-format
-msgid "Sends your response to the question shown by rclone."
-msgstr "Στέλνει την απάντησή σας στην ερώτηση που εμφανίζει το rclone."
-
-#: app/interactiverclonedialog.cpp:59
-#, kde-format
-msgid "Response:"
-msgstr "Απάντηση:"
+#~ msgid "This Google Drive location is not valid."
+#~ msgstr "Αυτή η τοποθεσία του Google Drive δεν είναι έγκυρη."
 
 #, kde-format
 #~ msgid "Waiting for rclone…"

@@ -40,6 +40,8 @@ constexpr auto LogicalItemsEnvironment = "KIO_RCLONE_TEST_LOGICAL_ITEMS";
 constexpr auto ListingChunkSizeEnvironment = "KIO_RCLONE_TEST_LIST_CHUNK_SIZE";
 constexpr auto ListingChunkDelayEnvironment = "KIO_RCLONE_TEST_LIST_CHUNK_DELAY_MS";
 constexpr auto ListingCounterEnvironment = "KIO_RCLONE_TEST_LIST_COUNTER";
+constexpr auto ListingSpecEnvironment = "KIO_RCLONE_TEST_LISTING_SPEC";
+constexpr auto RemoteTypeEnvironment = "KIO_RCLONE_TEST_REMOTE_TYPE";
 constexpr auto ListingFailureFile = ".kio-rclone-test-fail-listing";
 
 struct RemotePath {
@@ -257,15 +259,46 @@ int writeLegacyListing(const QString &remoteSpec)
     return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
 }
 
+QString remoteNameForSpec(const QString &remoteSpec)
+{
+    // Connection strings decorate a remote before its final colon, for
+    // example `test,team_drive=ID,root_folder_id=:documents`. The fake maps
+    // every view of that test remote to the same local fixture tree.
+    const qsizetype separator = remoteSpec.lastIndexOf(QLatin1Char(':'));
+    if (separator <= 0) {
+        return {};
+    }
+    return remoteSpec.left(separator).section(QLatin1Char(','), 0, 0);
+}
+
+QString configuredRemoteType()
+{
+    const QString configured = qEnvironmentVariable(RemoteTypeEnvironment).trimmed();
+    return configured.isEmpty() ? QStringLiteral("local") : configured;
+}
+
+void captureListingSpec(const QString &remoteSpec)
+{
+    const QString capturePath = qEnvironmentVariable(ListingSpecEnvironment);
+    if (capturePath.isEmpty()) {
+        return;
+    }
+
+    QFile capture(capturePath);
+    if (capture.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        capture.write(remoteSpec.toUtf8());
+    }
+}
+
 RemotePath resolveRemotePath(const QString &root, const QString &remoteSpec)
 {
     RemotePath result;
-    const qsizetype separator = remoteSpec.indexOf(QLatin1Char(':'));
+    const qsizetype separator = remoteSpec.lastIndexOf(QLatin1Char(':'));
     if (separator <= 0) {
         return result;
     }
 
-    result.remote = remoteSpec.left(separator);
+    result.remote = remoteNameForSpec(remoteSpec);
     const QString rawPath = remoteSpec.mid(separator + 1);
     if (result.remote.contains(QLatin1Char('/')) || result.remote == QLatin1String(".") || result.remote == QLatin1String("..")
         || rawPath.startsWith(QLatin1Char('/'))) {
@@ -443,6 +476,7 @@ int writePersistentStat(const QString &root, const QString &remoteSpec, const QL
 int writePersistentListing(const QString &root, const QString &remoteSpec, const QList<LogicalItem> &logicalItems)
 {
     incrementListingCounter();
+    captureListingSpec(remoteSpec);
     if (QFileInfo::exists(QDir(root).filePath(QString::fromLatin1(ListingFailureFile)))) {
         return writeError(QByteArrayLiteral("listing intentionally failed"));
     }
@@ -642,9 +676,7 @@ int copyPersistentFileById(const QStringList &arguments, const QList<LogicalItem
         return writeError(QByteArrayLiteral("invalid backend command"));
     }
 
-    const QString remoteSpec = arguments.at(3);
-    const qsizetype separator = remoteSpec.indexOf(QLatin1Char(':'));
-    const QString remote = separator > 0 ? remoteSpec.left(separator) : QString();
+    const QString remote = remoteNameForSpec(arguments.at(3));
     const QString id = arguments.at(4);
     for (const LogicalItem &item : logicalItems) {
         if (item.remote == remote && item.id == id) {
@@ -790,11 +822,24 @@ int writePersistentRemotes(const QString &root)
     for (const QFileInfo &entry : entries) {
         remotes.append(QJsonObject{
             {QStringLiteral("name"), entry.fileName()},
-            {QStringLiteral("type"), QStringLiteral("local")},
+            {QStringLiteral("type"), configuredRemoteType()},
             {QStringLiteral("source"), QStringLiteral("file")},
         });
     }
     const QByteArray json = QJsonDocument(remotes).toJson(QJsonDocument::Compact);
+    return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
+}
+
+int writePersistentSharedDrives()
+{
+    const QJsonArray drives{
+        QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("0A-team")},
+            {QStringLiteral("kind"), QStringLiteral("drive#drive")},
+            {QStringLiteral("name"), QStringLiteral("Team Files")},
+        },
+    };
+    const QByteArray json = QJsonDocument(drives).toJson(QJsonDocument::Compact);
     return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
 }
 
@@ -833,6 +878,9 @@ int runPersistent(const QString &root, const QStringList &arguments)
     }
     if (command == QLatin1String("backend") && arguments.size() >= 3 && arguments.at(2) == QLatin1String("features")) {
         return writePersistentFeatures(logicalItems);
+    }
+    if (command == QLatin1String("backend") && arguments.size() >= 3 && arguments.at(2) == QLatin1String("drives")) {
+        return writePersistentSharedDrives();
     }
     if (command == QLatin1String("backend")) {
         return copyPersistentFileById(arguments, logicalItems);
@@ -885,8 +933,15 @@ int main(int argc, char **argv)
         return 0;
     }
     if (command == QLatin1String("listremotes")) {
-        const QByteArray remotes(R"([{"name":"test","type":"drive","source":"file"}])");
-        return writeAll(STDOUT_FILENO, remotes.constData(), remotes.size()) ? 0 : 1;
+        const QJsonArray remotes{
+            QJsonObject{
+                {QStringLiteral("name"), QStringLiteral("test")},
+                {QStringLiteral("type"), configuredRemoteType()},
+                {QStringLiteral("source"), QStringLiteral("file")},
+            },
+        };
+        const QByteArray json = QJsonDocument(remotes).toJson(QJsonDocument::Compact);
+        return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
     }
     if (command == QLatin1String("backend") && arguments.size() >= 3 && arguments.at(2) == QLatin1String("features")) {
         const QByteArray features(R"({"Features":{"DuplicateFiles":false,"MergeDirs":false}})");

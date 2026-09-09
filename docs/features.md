@@ -50,6 +50,18 @@ There is deliberately no background tree walk, `ListR`, or cache-first
 correction pass in this path. Those would add network activity and surprising
 view changes without solving the common close-and-reopen delay as directly.
 
+## Google Drive is a small hub, not one flat root
+
+For a Google Drive remote, its root in Dolphin is organized into **My Drive**,
+**Shared With Me**, **Shared Drives**, **Trash**, and **Starred**. That keeps
+the main tree predictable and delegates each provider-specific query to rclone.
+My Drive and a selected Shared Drive can be changed when the provider permits
+it; the filtered views are deliberately read-only. Known Drive folder IDs can
+also be opened through the location bar without a second account database.
+
+See [Google Drive and GCP](/google-drive#drive-views-in-dolphin) for the exact
+paths and the intentionally conservative limits.
+
 ## What makes transfers special
 
 Transfers between locations pass through KIO, preserving Dolphin's controls:

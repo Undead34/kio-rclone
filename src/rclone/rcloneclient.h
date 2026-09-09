@@ -56,6 +56,11 @@ struct RcloneRemote {
     QString type;
 };
 
+struct RcloneSharedDrive {
+    QString id;
+    QString name;
+};
+
 class RcloneClient
 {
 public:
@@ -70,6 +75,10 @@ public:
     [[nodiscard]] RcloneResult run(const QStringList &arguments, int timeoutMs = 120000, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QList<RcloneRemote> remoteList(QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] QStringList remotes(QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
+    /// Decodes `rclone backend drives remote:` output; see
+    /// https://rclone.org/drive/#backend-commands.
+    [[nodiscard]] QList<RcloneSharedDrive>
+    sharedDrives(const QString &remoteSpec, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     [[nodiscard]] std::optional<RcloneRemoteInfo>
     remoteInfo(const QString &remote, QString *error = nullptr, const CancellationCallback &isCancelled = {}) const;
     /// Returns whether rclone declares that this remote can expose duplicate
@@ -91,6 +100,7 @@ public:
     [[nodiscard]] static std::optional<RcloneItem> parseItem(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static QList<RcloneRemote> parseRemoteListWithTypes(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static QStringList parseRemoteList(const QByteArray &json, QString *error = nullptr);
+    [[nodiscard]] static QList<RcloneSharedDrive> parseSharedDriveList(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static std::optional<bool> parseDuplicateNameSupport(const QByteArray &json, QString *error = nullptr);
     [[nodiscard]] static std::optional<RcloneRemoteInfo> parseRemoteInfo(const QByteArray &config, QString *error = nullptr);
     [[nodiscard]] static bool isNotFoundError(const QString &error);

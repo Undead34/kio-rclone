@@ -3,6 +3,7 @@ add_library(kio_rclone_common STATIC
     cache/directorysnapshotcache.cpp
     rclone/rcloneclient.cpp
     rclone/entryformat.cpp
+    rclone/location.cpp
     rclone/process.cpp
     rclone/url.cpp
 )

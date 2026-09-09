@@ -44,6 +44,7 @@ private Q_SLOTS:
     void freshListingSkipsRclone();
     void remoteOnlyPolicySkipsSnapshot();
     void explicitReloadInvalidatesSnapshot();
+    void rootReloadInvalidatesSnapshot();
     void statAndMimetypeReuseListingSnapshot();
     void successfulPutInvalidatesSnapshot();
 
@@ -126,6 +127,23 @@ void RcloneDirectoryCacheTest::explicitReloadInvalidatesSnapshot()
     // reviving the successful listing from before the reload.
     static_cast<void>(listDirectory());
     QVERIFY(listingCount() > afterFailedReload);
+}
+
+void RcloneDirectoryCacheTest::rootReloadInvalidatesSnapshot()
+{
+    static_cast<void>(listDirectory());
+    const qint64 afterInitialListing = listingCount();
+    QVERIFY(afterInitialListing > 0);
+
+    auto *rootJob = KIO::listDir(QUrl(QStringLiteral("rclone:/")), KIO::HideProgressInfo);
+    rootJob->setUiDelegate(nullptr);
+    rootJob->setAutoDelete(false);
+    rootJob->addMetaData(QStringLiteral("cache"), QStringLiteral("reload"));
+    QVERIFY2(rootJob->exec(), qPrintable(rootJob->errorString()));
+    delete rootJob;
+
+    static_cast<void>(listDirectory());
+    QVERIFY(listingCount() > afterInitialListing);
 }
 
 void RcloneDirectoryCacheTest::statAndMimetypeReuseListingSnapshot()
