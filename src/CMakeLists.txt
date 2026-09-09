@@ -4,6 +4,7 @@ add_library(kio_rclone_common STATIC
   rclone/models.cpp
   rclone/navigation.cpp
   rclone/navigationentry.cpp
+  rclone/remotefile.cpp
   rclone/url.cpp
 )
 

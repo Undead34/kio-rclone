@@ -5,38 +5,121 @@
  */
 
 #include "client.h"
+#include "remotefile.h"
 
+#include <cmath>
 #include <utility>
+#include <memory>
 
 #include <QFileInfo>
 #include <QElapsedTimer>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QJsonObject>
+#include <QJsonValue>
 
 namespace {
 
-RcloneError notImplementedError()
+RcloneErrorCode classifyProcessFailure(
+    int exitCode,
+    const QString &diagnostic)
 {
-    return {
-        RcloneErrorCode::Unsupported,
-        QStringLiteral("Operation not implemented"),
-        -1,
-    };
+    // rclone documents these as the two not-found exit statuses. They are
+    // stable across backends and do not depend on a localized error string.
+    if (exitCode == 3 || exitCode == 4) {
+        return RcloneErrorCode::NotFound;
+    }
+
+    const QString normalized = diagnostic.trimmed().toCaseFolded();
+
+    if (normalized.contains(QStringLiteral("permission denied"))
+        || normalized.contains(QStringLiteral("access denied"))
+        || normalized.contains(QStringLiteral("unauthorized"))
+        || normalized.contains(QStringLiteral("forbidden"))) {
+        return RcloneErrorCode::PermissionDenied;
+    }
+
+    if (normalized.contains(QStringLiteral("already exists"))
+        || normalized.contains(QStringLiteral("alreadyexists"))) {
+        return RcloneErrorCode::AlreadyExists;
+    }
+
+    return RcloneErrorCode::ProcessFailure;
 }
 
-RcloneStatus notImplementedStatus()
+std::optional<qint64> jsonNonNegativeInteger(
+    const QJsonObject &object,
+    const QString &key)
 {
-    return {false, notImplementedError()};
+    const QJsonValue value = object.value(key);
+
+    if (!value.isDouble()) {
+        return std::nullopt;
+    }
+
+    const qint64 number = value.toInteger(-1);
+
+    if (number < 0) {
+        return std::nullopt;
+    }
+
+    return number;
 }
 
-template <typename T>
-RcloneResponse<T> notImplementedResponse()
+std::optional<qint64> jsonNonNegativeNumber(
+    const QJsonObject &object,
+    const QString &key)
 {
-    return {std::nullopt, notImplementedError()};
+    const QJsonValue value = object.value(key);
+
+    if (!value.isDouble()) {
+        return std::nullopt;
+    }
+
+    const double number = value.toDouble();
+
+    if (!std::isfinite(number)
+        || number < 0
+        || number >= 0x1p63) {
+        return std::nullopt;
+    }
+
+    return static_cast<qint64>(number);
+}
+
+void updateTransferStats(const QJsonObject &stats,
+                         qint64 fileSize,
+                         RcloneClient::TransferStats &progress)
+{
+    if (const auto bytes =
+            jsonNonNegativeInteger(stats, QStringLiteral("bytes"))) {
+        // El tamaño local es el total lógico del archivo.
+        progress.bytes = fileSize >= 0
+            ? qMin(*bytes, fileSize)
+            : *bytes;
+    }
+
+    if (const auto speed =
+            jsonNonNegativeNumber(stats, QStringLiteral("speed"))) {
+        progress.speed = *speed;
+    }
+
+    if (const auto eta =
+            jsonNonNegativeNumber(stats, QStringLiteral("eta"))) {
+        progress.etaSeconds = *eta;
+    }
+
+    if (fileSize > 0) {
+        progress.percentage = qBound(
+            0,
+            static_cast<int>(
+                100.0 * progress.bytes / fileSize),
+            100);
+    }
 }
 
 } // namespace
@@ -217,13 +300,22 @@ RcloneResponse<RcloneItem>
 RcloneClient::stat(const QString &remoteSpec,
                    const RcloneContext &ctx) const
 {
-    const auto result = runCommand(
-        {
-            QStringLiteral("lsjson"),
-            remoteSpec,
-            QStringLiteral("--stat"),
-        },
-        ctx);
+    return stat(remoteSpec, RcloneListOptions{}, ctx);
+}
+
+RcloneResponse<RcloneItem>
+RcloneClient::stat(const QString &remoteSpec,
+                   const RcloneListOptions &options,
+                   const RcloneContext &ctx) const
+{
+    QStringList arguments{
+        QStringLiteral("lsjson"),
+        remoteSpec,
+        QStringLiteral("--stat"),
+    };
+    arguments.append(options.extraArguments);
+
+    const auto result = runCommand(arguments, ctx);
 
     if (!result.success()) {
         return {
@@ -439,11 +531,52 @@ RcloneStatus
 RcloneClient::mkdir(const QString &remoteSpec,
                     const RcloneContext &ctx) const
 {
-    Q_UNUSED(remoteSpec)
-    Q_UNUSED(ctx)
+    return runStreamingCommand(
+        {
+            QStringLiteral("mkdir"),
+            remoteSpec,
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
+}
 
-    // TODO: Crear el directorio remoto.
-    return notImplementedStatus();
+RcloneStatus
+RcloneClient::setModificationTime(const QString &remoteSpec,
+                                  const QDateTime &mtime,
+                                  const RcloneContext &ctx) const
+{
+    if (!mtime.isValid()) {
+        return {
+            false,
+            {
+                RcloneErrorCode::InvalidResponse,
+                QStringLiteral("Invalid modification time"),
+                -1,
+            },
+        };
+    }
+
+    /*
+     * rclone interpreta --timestamp como UTC. --no-create evita que una
+     * petición de KIO para un objeto que ya desapareció cree un archivo vacío.
+     */
+    const QString timestamp = mtime.toUTC().toString(
+        QStringLiteral("yyyy-MM-ddTHH:mm:ss.zzz"));
+
+    return runStreamingCommand(
+        {
+            QStringLiteral("touch"),
+            QStringLiteral("--no-create"),
+            QStringLiteral("--timestamp"),
+            timestamp,
+            remoteSpec,
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
 }
 
 RcloneStatus
@@ -451,12 +584,31 @@ RcloneClient::remove(const QString &remoteSpec,
                      RcloneRemovalMode mode,
                      const RcloneContext &ctx) const
 {
-    Q_UNUSED(remoteSpec)
-    Q_UNUSED(mode)
-    Q_UNUSED(ctx)
+    QString command;
 
-    // TODO: Eliminar el elemento respetando la política de recursividad.
-    return notImplementedStatus();
+    switch (mode) {
+    case RcloneRemovalMode::File:
+        command = QStringLiteral("deletefile");
+        break;
+
+    case RcloneRemovalMode::EmptyDirectory:
+        command = QStringLiteral("rmdir");
+        break;
+
+    case RcloneRemovalMode::Recursive:
+        command = QStringLiteral("purge");
+        break;
+    }
+
+    return runStreamingCommand(
+        {
+            command,
+            remoteSpec,
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
 }
 
 RcloneStatus
@@ -465,13 +617,63 @@ RcloneClient::move(const QString &srcSpec,
                    const RcloneWriteOptions &options,
                    const RcloneContext &ctx) const
 {
-    Q_UNUSED(srcSpec)
-    Q_UNUSED(destSpec)
-    Q_UNUSED(options)
-    Q_UNUSED(ctx)
+    auto failure = [](RcloneErrorCode code,
+                      const QString &message) -> RcloneStatus {
+        return {false, {code, message, -1}};
+    };
 
-    // TODO: Mover o renombrar respetando la política de sobrescritura.
-    return notImplementedStatus();
+    if (ctx.isCancelled()) {
+        return failure(
+            RcloneErrorCode::Cancelled,
+            QStringLiteral("Operation cancelled"));
+    }
+
+    if (srcSpec == destSpec) {
+        return {true, {RcloneErrorCode::None, {}, 0}};
+    }
+
+    // No usamos --no-check-dest: necesitamos respetar replaceExisting.
+    const auto destination = stat(destSpec, ctx);
+
+    if (destination.success()) {
+        if (!options.replaceExisting) {
+            return failure(
+                RcloneErrorCode::AlreadyExists,
+                QStringLiteral("Destination already exists"));
+        }
+
+        // moveto sobre un directorio existente puede combinar contenido.
+        // No lo tratamos como un reemplazo simple.
+        const auto source = stat(srcSpec, ctx);
+
+        if (!source.success()) {
+            return {false, source.error};
+        }
+
+        if (source.data->isDirectory
+            || destination.data->isDirectory) {
+            return failure(
+                RcloneErrorCode::Unsupported,
+                QStringLiteral(
+                    "Replacing an existing directory is not supported"));
+        }
+    } else if (destination.error.code != RcloneErrorCode::NotFound) {
+        // Un error de red, permisos o parsing NO significa que el
+        // destino esté libre.
+        return {false, destination.error};
+    }
+
+    return runStreamingCommand(
+        {
+            QStringLiteral("moveto"),
+            srcSpec,
+            destSpec,
+            QStringLiteral("--no-traverse"),
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
 }
 
 RcloneStatus
@@ -480,43 +682,242 @@ RcloneClient::copy(const QString &srcSpec,
                    const RcloneWriteOptions &options,
                    const RcloneContext &ctx) const
 {
-    Q_UNUSED(srcSpec)
-    Q_UNUSED(destSpec)
-    Q_UNUSED(options)
-    Q_UNUSED(ctx)
+    auto failure = [](RcloneErrorCode code,
+                      const QString &message) -> RcloneStatus {
+        return {false, {code, message, -1}};
+    };
 
-    // TODO: Copiar respetando la política de sobrescritura.
-    return notImplementedStatus();
+    if (ctx.isCancelled()) {
+        return failure(
+            RcloneErrorCode::Cancelled,
+            QStringLiteral("Operation cancelled"));
+    }
+
+    // Copiar un elemento sobre sí mismo no es una operación válida.
+    if (srcSpec == destSpec) {
+        return failure(
+            RcloneErrorCode::AlreadyExists,
+            QStringLiteral("Source and destination are the same"));
+    }
+
+    const auto destination = stat(destSpec, ctx);
+
+    if (destination.success()) {
+        if (!options.replaceExisting) {
+            return failure(
+                RcloneErrorCode::AlreadyExists,
+                QStringLiteral("Destination already exists"));
+        }
+
+        // copyto puede combinar directorios. No lo tratamos como
+        // un reemplazo simple.
+        const auto source = stat(srcSpec, ctx);
+
+        if (!source.success()) {
+            return {false, source.error};
+        }
+
+        if (source.data->isDirectory
+            || destination.data->isDirectory) {
+            return failure(
+                RcloneErrorCode::Unsupported,
+                QStringLiteral(
+                    "Replacing an existing directory is not supported"));
+        }
+    } else if (destination.error.code != RcloneErrorCode::NotFound) {
+        // Un error de permisos, red o parsing no significa que
+        // el destino esté libre.
+        return {false, destination.error};
+    }
+
+    return runStreamingCommand(
+        {
+            QStringLiteral("copyto"),
+            srcSpec,
+            destSpec,
+            QStringLiteral("--no-traverse"),
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
 }
 
 RcloneStatus
-RcloneClient::read(const QString &remoteSpec,
-                   const DownloadCallback &onChunk,
-                   const RcloneContext &ctx) const
+RcloneClient::download(const QString &remoteSpec,
+                       const DownloadCallback &onChunk,
+                       const RcloneContext &ctx) const
 {
-    Q_UNUSED(remoteSpec)
-    Q_UNUSED(onChunk)
-    Q_UNUSED(ctx)
-
-    // TODO: Descargar mediante streaming y entregar bloques al callback.
-    return notImplementedStatus();
+    return runStreamingCommand(
+        {
+            QStringLiteral("cat"),
+            remoteSpec,
+        },
+        onChunk,
+        ctx);
 }
 
 RcloneStatus
-RcloneClient::write(const QString &localSrc,
-                    const QString &remoteDest,
-                    const UploadCallback &onProgress,
-                    const RcloneWriteOptions &options,
-                    const RcloneContext &ctx) const
+RcloneClient::downloadRange(const QString &remoteSpec,
+                            qint64 offset,
+                            qint64 size,
+                            const DownloadCallback &onChunk,
+                            const RcloneContext &ctx) const
 {
-    Q_UNUSED(localSrc)
-    Q_UNUSED(remoteDest)
-    Q_UNUSED(onProgress)
-    Q_UNUSED(options)
-    Q_UNUSED(ctx)
+    return runStreamingCommand(
+        {
+            QStringLiteral("cat"),
+            remoteSpec,
+            QStringLiteral("--offset"),
+            QString::number(offset),
+            QStringLiteral("--count"),
+            QString::number(size),
+        },
+        onChunk,
+        ctx);
+}
 
-    // TODO: Subir el archivo local y emitir telemetría de progreso.
-    return notImplementedStatus();
+RcloneStatus
+RcloneClient::upload(const QString &localSrc,
+                     const QString &remoteDest,
+                     const UploadCallback &onProgress,
+                     const RcloneWriteOptions &options,
+                     const RcloneContext &ctx) const
+{
+    auto failure = [](RcloneErrorCode code,
+                      const QString &message) -> RcloneStatus {
+        return {false, {code, message, -1}};
+    };
+
+    if (ctx.isCancelled()) {
+        return failure(
+            RcloneErrorCode::Cancelled,
+            QStringLiteral("Operation cancelled"));
+    }
+
+    const QFileInfo source(localSrc);
+
+    if (!source.isFile()) {
+        return failure(
+            RcloneErrorCode::NotFound,
+            QStringLiteral("Local source is not a regular file"));
+    }
+
+    if (!source.isReadable()) {
+        return failure(
+            RcloneErrorCode::PermissionDenied,
+            QStringLiteral("Local source is not readable"));
+    }
+
+    const qint64 fileSize = source.size();
+
+    // No confundimos un error de stat con un destino inexistente.
+    const auto destination = stat(remoteDest, ctx);
+
+    if (destination.success()) {
+        if (!options.replaceExisting) {
+            return failure(
+                RcloneErrorCode::AlreadyExists,
+                QStringLiteral("Destination already exists"));
+        }
+
+        if (destination.data->isDirectory) {
+            return failure(
+                RcloneErrorCode::Unsupported,
+                QStringLiteral(
+                    "Replacing an existing directory is not supported"));
+        }
+    } else if (destination.error.code != RcloneErrorCode::NotFound) {
+        return {false, destination.error};
+    }
+
+    TransferStats progress;
+
+    if (onProgress) {
+        onProgress(progress);
+    }
+
+    QByteArray pendingError;
+
+    const RcloneStatus status = runStreamingCommand(
+        {
+            QStringLiteral("copyto"),
+            localSrc,
+            remoteDest,
+            QStringLiteral("--no-traverse"),
+            QStringLiteral("--use-json-log"),
+            QStringLiteral("--stats"),
+            QStringLiteral("1s"),
+            QStringLiteral("--stats-log-level"),
+            QStringLiteral("NOTICE"),
+            QStringLiteral("--log-level"),
+            QStringLiteral("NOTICE"),
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx,
+        [&](const QByteArray &chunk) {
+            pendingError += chunk;
+
+            while (true) {
+                const qsizetype newline =
+                    pendingError.indexOf('\n');
+
+                if (newline < 0) {
+                    break;
+                }
+
+                QByteArray line = pendingError.left(newline);
+                pendingError.remove(0, newline + 1);
+
+                QJsonParseError parseError;
+                const QJsonDocument document =
+                    QJsonDocument::fromJson(line, &parseError);
+
+                if (parseError.error != QJsonParseError::NoError
+                    || !document.isObject()) {
+                    // Puede ser un diagnóstico que no sea JSON.
+                    continue;
+                }
+
+                const QJsonValue statsValue =
+                    document.object().value(QStringLiteral("stats"));
+
+                if (!statsValue.isObject()) {
+                    continue;
+                }
+
+                updateTransferStats(
+                    statsValue.toObject(),
+                    fileSize,
+                    progress);
+
+                if (onProgress) {
+                    onProgress(progress);
+                }
+            }
+
+            return true;
+        },
+        -1);
+
+    if (!status.success()) {
+        return status;
+    }
+
+    // El proceso terminó correctamente. La transferencia está completa,
+    // aunque el último intervalo de estadísticas no haya llegado.
+    progress.bytes = fileSize;
+    progress.percentage = 100;
+    progress.speed = 0;
+    progress.etaSeconds = 0;
+
+    if (onProgress) {
+        onProgress(progress);
+    }
+
+    return status;
 }
 
 QString RcloneClient::locateExecutable()
@@ -536,38 +937,40 @@ QString RcloneClient::locateExecutable()
 RcloneStatus
 RcloneClient::runStreamingCommand(const QStringList &arguments,
                                   const OutputCallback &onOutput,
-                                  const RcloneContext &ctx) const
+                                  const RcloneContext &ctx,
+                                  const OutputCallback &onError,
+                                  int timeoutMs) const
 {
+    auto fail = [](RcloneErrorCode code,
+                   const QString &message,
+                   int exitCode = -1) -> RcloneStatus {
+        return {false, {code, message, exitCode}};
+    };
+
     if (m_executable.isEmpty()) {
-        return {
-            false,
-            {
-                RcloneErrorCode::ProcessFailure,
-                QStringLiteral("Rclone executable not found"),
-                -1,
-            },
-        };
+        return fail(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral("Rclone executable not found"));
     }
 
     if (ctx.isCancelled()) {
-        return {
-            false,
-            {
-                RcloneErrorCode::Cancelled,
-                QStringLiteral("Operation cancelled"),
-                -1,
-            },
-        };
+        return fail(
+            RcloneErrorCode::Cancelled,
+            QStringLiteral("Operation cancelled"));
     }
 
     constexpr int pollIntervalMs = 100;
     constexpr int startupTimeoutMs = 5000;
-    constexpr int timeoutMs = 120000;
+    constexpr qsizetype maxErrorBytes = 64 * 1024;
 
     QProcess process;
     process.setProgram(m_executable);
     process.setArguments(arguments);
     process.setProcessChannelMode(QProcess::SeparateChannels);
+
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    process.setProcessEnvironment(environment);
 
     QByteArray standardError;
 
@@ -578,29 +981,25 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
         }
     };
 
-    auto fail = [](RcloneErrorCode code,
-                   const QString &message,
-                   int exitCode = -1) -> RcloneStatus {
-        return {
-            false,
-            {
-                code,
-                message,
-                exitCode,
-            },
-        };
-    };
-
     auto drainOutput = [&]() -> bool {
         const QByteArray output = process.readAllStandardOutput();
+        const QByteArray error = process.readAllStandardError();
 
-        if (!output.isEmpty()) {
-            if (!onOutput(output)) {
+        if (!error.isEmpty()) {
+            // Conservamos solamente una cantidad acotada para diagnóstico.
+            if (standardError.size() < maxErrorBytes) {
+                standardError += error.left(
+                    maxErrorBytes - standardError.size());
+            }
+
+            if (onError && !onError(error)) {
                 return false;
             }
         }
 
-        standardError += process.readAllStandardError();
+        if (!output.isEmpty() && !onOutput(output)) {
+            return false;
+        }
 
         return true;
     };
@@ -610,14 +1009,9 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
 
     process.start();
 
-    /*
-     * Espera a que el proceso arranque sin bloquear durante todo el
-     * startup timeout, de modo que podamos observar la cancelación.
-     */
     while (process.state() == QProcess::Starting) {
         if (ctx.isCancelled()) {
             stopProcess();
-
             return fail(
                 RcloneErrorCode::Cancelled,
                 QStringLiteral("Operation cancelled"));
@@ -625,7 +1019,6 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
 
         if (timer.elapsed() >= startupTimeoutMs) {
             stopProcess();
-
             return fail(
                 RcloneErrorCode::TimedOut,
                 QStringLiteral("Rclone startup timed out"));
@@ -641,16 +1034,9 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
             process.errorString());
     }
 
-    /*
-     * Consume stdout mientras rclone continúa ejecutándose.
-     *
-     * No esperamos a que el proceso termine para entregar los datos:
-     * cada bloque disponible se propaga inmediatamente a onOutput().
-     */
-    while (process.state() != QProcess::NotRunning) {
+    while (true) {
         if (!drainOutput()) {
             stopProcess();
-
             return fail(
                 RcloneErrorCode::Aborted,
                 QStringLiteral("Operation aborted by consumer"));
@@ -658,32 +1044,26 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
 
         if (ctx.isCancelled()) {
             stopProcess();
-
             return fail(
                 RcloneErrorCode::Cancelled,
                 QStringLiteral("Operation cancelled"));
         }
 
-        if (timer.elapsed() >= timeoutMs) {
-            stopProcess();
+        if (process.state() == QProcess::NotRunning) {
+            break;
+        }
 
+        if (timeoutMs >= 0 && timer.elapsed() >= timeoutMs) {
+            stopProcess();
             return fail(
                 RcloneErrorCode::TimedOut,
                 QStringLiteral("Operation timed out"));
         }
 
-        /*
-         * Esperamos un intervalo corto. QProcess continúa llenando sus
-         * buffers internos y en la siguiente iteración drenamos stdout
-         * y stderr nuevamente.
-         */
-        process.waitForReadyRead(pollIntervalMs);
+        // No dependemos de que stdout produzca datos.
+        process.waitForFinished(pollIntervalMs);
     }
 
-    /*
-     * QProcess puede conservar bytes después de que el proceso ya haya
-     * terminado. Hay que entregarlos antes de evaluar el exit code.
-     */
     if (!drainOutput()) {
         return fail(
             RcloneErrorCode::Aborted,
@@ -699,10 +1079,13 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
             message = process.errorString();
         }
 
-        return fail(
-            RcloneErrorCode::ProcessFailure,
-            message,
-            process.exitCode());
+        const int exitCode = process.exitCode();
+        const RcloneErrorCode errorCode =
+            process.exitStatus() == QProcess::NormalExit
+            ? classifyProcessFailure(exitCode, message)
+            : RcloneErrorCode::ProcessFailure;
+
+        return fail(errorCode, message, exitCode);
     }
 
     return {

@@ -9,6 +9,7 @@
 #include "models.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -91,7 +92,8 @@ public:
  * @brief Política de eliminación.
  */
 enum class RcloneRemovalMode {
-    FileOrEmptyDirectory,
+    File,
+    EmptyDirectory,
     Recursive,
 };
 
@@ -169,6 +171,14 @@ public:
     stat(const QString &remoteSpec,
          const RcloneContext &ctx) const;
 
+    /**
+     * @brief Obtiene metadatos respetando los filtros de una vista de rclone.
+     */
+    [[nodiscard]] RcloneResponse<RcloneItem>
+    stat(const QString &remoteSpec,
+         const RcloneListOptions &options,
+         const RcloneContext &ctx) const;
+
     using ItemCallback = std::function<bool(const RcloneItem &)>;
 
     /**
@@ -200,10 +210,20 @@ public:
           const RcloneContext &ctx) const;
 
     /**
+     * @brief Cambia la fecha de modificación de un archivo o directorio remoto.
+     *
+     * La operación no crea el destino cuando no existe.
+     */
+    [[nodiscard]] RcloneStatus
+    setModificationTime(const QString &remoteSpec,
+                        const QDateTime &mtime,
+                        const RcloneContext &ctx) const;
+
+    /**
      * @brief Elimina un archivo o directorio.
      *
-     * FileOrEmptyDirectory no elimina recursivamente un directorio
-     * que contiene elementos.
+     * EmptyDirectory no elimina recursivamente un directorio que contiene
+     * elementos.
      */
     [[nodiscard]] RcloneStatus
     remove(const QString &remoteSpec,
@@ -235,17 +255,22 @@ public:
     using DownloadCallback = std::function<bool(const QByteArray &chunk)>;
 
     /**
-     * @brief Descarga un archivo mediante streaming.
+     * @brief Descarga un archivo remoto mediante streaming.
      *
-     * @param onChunk Recibe bloques mientras el proceso produce datos.
-     *                 Devolver false aborta la transferencia.
-     * @return Aborted si el consumidor detiene la transferencia;
-     *         Cancelled si lo hace el contexto.
+     * Entrega bloques conforme rclone los produce. No proporciona
+     * lectura aleatoria ni crea una copia local por sí mismo.
      */
     [[nodiscard]] RcloneStatus
-    read(const QString &remoteSpec,
-         const DownloadCallback &onChunk,
-         const RcloneContext &ctx) const;
+    download(const QString &remoteSpec,
+             const DownloadCallback &onChunk,
+             const RcloneContext &ctx) const;
+
+    [[nodiscard]] RcloneStatus
+    downloadRange(const QString &remoteSpec,
+                  qint64 offset,
+                  qint64 size,
+                  const DownloadCallback &onChunk,
+                  const RcloneContext &ctx) const;
 
     /**
      * @brief Telemetría de una transferencia.
@@ -269,11 +294,11 @@ public:
      * progreso mediante onProgress. No recibe datos directamente de KIO.
      */
     [[nodiscard]] RcloneStatus
-    write(const QString &localSrc,
-          const QString &remoteDest,
-          const UploadCallback &onProgress,
-          const RcloneWriteOptions &options,
-          const RcloneContext &ctx) const;
+    upload(const QString &localSrc,
+           const QString &remoteDest,
+           const UploadCallback &onProgress,
+           const RcloneWriteOptions &options,
+           const RcloneContext &ctx) const;
 
     /**
      * @brief Ejecuta una consulta nativa específica de un backend.
@@ -301,7 +326,9 @@ private:
     [[nodiscard]] RcloneStatus
     runStreamingCommand(const QStringList &arguments,
                         const OutputCallback &onOutput,
-                        const RcloneContext &ctx) const;
+                        const RcloneContext &ctx,
+                        const OutputCallback &onError = {},
+                        int timeoutMs = 120000) const;
 
     [[nodiscard]] RcloneResponse<QByteArray>
     runCommand(const QStringList &arguments,
