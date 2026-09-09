@@ -5,7 +5,7 @@
  */
 
 #include "appid.h"
-#include "configwindow.h"
+// #include "configwindow.h"
 
 #include <KDBusService>
 #include <KLocalizedString>
@@ -31,29 +31,29 @@ int main(int argc, char **argv)
     // is needed here.
     KDBusService service(KDBusService::Unique);
 
-    ConfigWindow window;
+    // ConfigWindow window;
 
-    QObject::connect(&service, &KDBusService::activateRequested, &window, [&window](const QStringList &, const QString &) {
-        if (window.isMinimized()) {
-            window.showNormal();
-        } else {
-            window.show();
-        }
+    // QObject::connect(&service, &KDBusService::activateRequested, &window, [&window](const QStringList &, const QString &) {
+    //     if (window.isMinimized()) {
+    //         window.showNormal();
+    //     } else {
+    //         window.show();
+    //     }
 
-        // KDBusService exposes the startup/activation token while handling this
-        // signal. Passing it to KWindowSystem makes activation work on both
-        // Wayland and X11.
-        if (auto *windowHandle = window.windowHandle()) {
-            KWindowSystem::updateStartupId(windowHandle);
-            window.raise();
-            KWindowSystem::activateWindow(windowHandle);
-        } else {
-            window.raise();
-            window.activateWindow();
-        }
-    });
+    //     // KDBusService exposes the startup/activation token while handling this
+    //     // signal. Passing it to KWindowSystem makes activation work on both
+    //     // Wayland and X11.
+    //     if (auto *windowHandle = window.windowHandle()) {
+    //         KWindowSystem::updateStartupId(windowHandle);
+    //         window.raise();
+    //         KWindowSystem::activateWindow(windowHandle);
+    //     } else {
+    //         window.raise();
+    //         window.activateWindow();
+    //     }
+    // });
 
-    window.show();
+    // window.show();
 
     return application.exec();
 }

@@ -7,7 +7,6 @@
 #include "rclonepromptdialog.h"
 
 #include "appid.h"
-#include "rclone/process.h"
 
 #include <KLocalizedString>
 
@@ -63,7 +62,9 @@ RclonePromptDialog::RclonePromptDialog(const QString &program,
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     layout->addWidget(buttons);
 
-    RcloneProcess::configureProcess(*m_process, program, arguments);
+    // RcloneProcess::configureProcess(*m_process, program, arguments);
+    m_process->setProgram(program);
+    m_process->setArguments(arguments);
     m_process->setProcessChannelMode(QProcess::MergedChannels);
 
     connect(m_process, &QProcess::readyReadStandardOutput, this, [this]() {
@@ -123,7 +124,7 @@ void RclonePromptDialog::reject()
 {
     if (m_process->state() != QProcess::NotRunning) {
         m_cancelled = true;
-        RcloneProcess::stopProcess(*m_process);
+        // RcloneProcess::stopProcess(*m_process);
     }
     QDialog::reject();
 }
@@ -134,7 +135,7 @@ void RclonePromptDialog::appendOutput(const QByteArray &output)
         return;
     }
 
-    RcloneProcess::appendLimited(m_diagnostic, output);
+    // RcloneProcess::appendLimited(m_diagnostic, output);
 
     QTextCursor cursor = m_transcript->textCursor();
     cursor.movePosition(QTextCursor::End);

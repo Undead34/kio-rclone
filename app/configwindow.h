@@ -6,7 +6,8 @@
 
 #pragma once
 
-#include "rclone/rcloneclient.h"
+#include "rclone/client.h"
+#include "rclone/models.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -40,7 +41,7 @@ public:
     explicit ConfigWindow(QWidget *parent = nullptr);
 
 private:
-    void refreshRemotes();
+    // void refreshRemotes();
     void showSettings();
     void addRemote();
     [[nodiscard]] QList<ProviderFieldOption> providerOptions(const QString &type);
@@ -51,7 +52,7 @@ private:
     void reconnectSelected();
     void editSelected();
     [[nodiscard]] bool renameRemote(const QString &oldName, const QString &newName);
-    [[nodiscard]] RcloneResult runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs = 30000);
+    // [[nodiscard]] RcloneResult runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs = 30000);
     [[nodiscard]] bool isConfigPasswordError(const QString &diagnostic) const;
     [[nodiscard]] bool promptConfigPassword();
     void removeSelected();
@@ -63,7 +64,7 @@ private:
     [[nodiscard]] bool validateRemoteName(const QString &name) const;
 
     RcloneClient m_rclone;
-    QHash<QString, RcloneRemoteInfo> m_remoteInfo;
+    // QHash<QString, RcloneRemoteInfo> m_remoteInfo;
     std::optional<QJsonArray> m_providersCache;
     QLabel *m_statusLabel = nullptr;
     QListWidget *m_remoteList = nullptr;

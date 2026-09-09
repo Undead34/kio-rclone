@@ -264,69 +264,69 @@ bool ConfigWindow::promptConfigPassword()
     return true;
 }
 
-RcloneResult ConfigWindow::runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs)
-{
-    RcloneResult result = m_rclone.run(arguments, timeoutMs);
-    if (!result.success() && isConfigPasswordError(result.errorMessage()) && promptConfigPassword()) {
-        return m_rclone.run(arguments, timeoutMs);
-    }
-    return result;
-}
+// RcloneResult ConfigWindow::runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs)
+// {
+//     RcloneResult result = m_rclone.run(arguments, timeoutMs);
+//     if (!result.success() && isConfigPasswordError(result.errorMessage()) && promptConfigPassword()) {
+//         return m_rclone.run(arguments, timeoutMs);
+//     }
+//     return result;
+// }
 
-void ConfigWindow::refreshRemotes()
-{
-    m_remoteList->clear();
-    m_remoteInfo.clear();
-    if (!m_rclone.isAvailable()) {
-        m_statusLabel->setText(
-            i18n("rclone was not found. Install it or set "
-                 "KIO_RCLONE_EXECUTABLE to its full path."));
-        updateActions();
-        return;
-    }
+// void ConfigWindow::refreshRemotes()
+// {
+//     m_remoteList->clear();
+//     m_remoteInfo.clear();
+//     if (!m_rclone.isAvailable()) {
+//         m_statusLabel->setText(
+//             i18n("rclone was not found. Install it or set "
+//                  "KIO_RCLONE_EXECUTABLE to its full path."));
+//         updateActions();
+//         return;
+//     }
 
-    QString error;
-    QStringList remotes = m_rclone.remotes(&error);
-    if (remotes.isEmpty() && isConfigPasswordError(error) && promptConfigPassword()) {
-        error.clear();
-        remotes = m_rclone.remotes(&error);
-    }
-    int sharedGoogleClients = 0;
-    for (const QString &remote : remotes) {
-        QString infoError;
-        const auto info = m_rclone.remoteInfo(remote, &infoError);
-        if (info) {
-            m_remoteInfo.insert(remote, *info);
-        }
+//     QString error;
+//     QStringList remotes = m_rclone.remotes(&error);
+//     if (remotes.isEmpty() && isConfigPasswordError(error) && promptConfigPassword()) {
+//         error.clear();
+//         remotes = m_rclone.remotes(&error);
+//     }
+//     int sharedGoogleClients = 0;
+//     for (const QString &remote : remotes) {
+//         QString infoError;
+//         const auto info = m_rclone.remoteInfo(remote, &infoError);
+//         if (info) {
+//             m_remoteInfo.insert(remote, *info);
+//         }
 
-        const bool sharedGoogleClient = info && info->type == QLatin1String("drive") && !info->hasClientId;
-        auto *item =
-            new QListWidgetItem(QIcon::fromTheme(sharedGoogleClient ? QStringLiteral("dialog-warning") : QStringLiteral("folder-cloud")), remote, m_remoteList);
-        item->setData(Qt::UserRole, remote);
-        if (sharedGoogleClient) {
-            ++sharedGoogleClients;
-            item->setToolTip(i18n("This Google Drive remote uses rclone's shared OAuth client. "
-                                  "It is quota-limited and is being retired during 2026."));
-        } else if (!infoError.isEmpty()) {
-            item->setToolTip(infoError);
-        }
-    }
+//         const bool sharedGoogleClient = info && info->type == QLatin1String("drive") && !info->hasClientId;
+//         auto *item =
+//             new QListWidgetItem(QIcon::fromTheme(sharedGoogleClient ? QStringLiteral("dialog-warning") : QStringLiteral("folder-cloud")), remote, m_remoteList);
+//         item->setData(Qt::UserRole, remote);
+//         if (sharedGoogleClient) {
+//             ++sharedGoogleClients;
+//             item->setToolTip(i18n("This Google Drive remote uses rclone's shared OAuth client. "
+//                                   "It is quota-limited and is being retired during 2026."));
+//         } else if (!infoError.isEmpty()) {
+//             item->setToolTip(infoError);
+//         }
+//     }
 
-    if (!error.isEmpty()) {
-        m_statusLabel->setText(error);
-    } else if (remotes.isEmpty()) {
-        m_statusLabel->setText(i18n("No remotes yet. Use “Add Remote…” to connect your first cloud provider."));
-    } else if (sharedGoogleClients > 0) {
-        m_statusLabel->setText(
-            i18np("One Google Drive remote uses rclone's shared OAuth client. Configure your own client to avoid quota delays and service interruption.",
-                  "%1 Google Drive remotes use rclone's shared OAuth client. Configure your own clients to avoid quota delays and service interruption.",
-                  sharedGoogleClients));
-    } else {
-        m_statusLabel->setText(i18np("One remote configured.", "%1 remotes configured.", remotes.size()));
-        m_remoteList->setCurrentRow(0);
-    }
-    updateActions();
-}
+//     if (!error.isEmpty()) {
+//         m_statusLabel->setText(error);
+//     } else if (remotes.isEmpty()) {
+//         m_statusLabel->setText(i18n("No remotes yet. Use “Add Remote…” to connect your first cloud provider."));
+//     } else if (sharedGoogleClients > 0) {
+//         m_statusLabel->setText(
+//             i18np("One Google Drive remote uses rclone's shared OAuth client. Configure your own client to avoid quota delays and service interruption.",
+//                   "%1 Google Drive remotes use rclone's shared OAuth client. Configure your own clients to avoid quota delays and service interruption.",
+//                   sharedGoogleClients));
+//     } else {
+//         m_statusLabel->setText(i18np("One remote configured.", "%1 remotes configured.", remotes.size()));
+//         m_remoteList->setCurrentRow(0);
+//     }
+//     updateActions();
+// }
 
 void ConfigWindow::addRemote()
 {
