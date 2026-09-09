@@ -62,6 +62,38 @@ also be opened through the location bar without a second account database.
 See [Google Drive and GCP](/google-drive#drive-views-in-dolphin) for the exact
 paths and the intentionally conservative limits.
 
+## Google Drive actions in Dolphin
+
+Right-clicking a Google Drive item adds native Dolphin menus. In **My Drive**
+and an individual **Shared Drive**, it also adds a folder-only creation menu:
+
+- **Google Drive** opens the selected item in Drive, copies its Drive link, or
+  opens its containing folder in the browser.
+- **New Google Drive files** creates a blank Google Doc, Sheet, Slide, or
+  Drawing in the selected folder.
+
+The helper uses the namespaced `rclone-id` in the KIO item's `UDS_URL` when it
+is present (`rclone-orig-id` is a safe fallback), so opening and copying work
+in **Shared With Me**, **Starred**, and **Trash** too, without a Google API
+request. Workspace creation and a path-based fallback remain limited to My
+Drive and individual Shared Drives. Older physical-view URLs retain a
+read-only rclone metadata fallback; neither path uses `rclone link` or changes
+an item's sharing settings. The browser uses its existing Google session and
+KIO Rclone never reads browser cookies or OAuth tokens for these actions.
+
+The menus come from a category-2 native Dolphin action plugin. Before it adds
+anything to a contextual menu, it checks the selected URL for exactly one
+`rclone-remote-type=drive` query item. Non-Drive rclone remotes receive no
+Google Drive menu at all. This visibility decision is local URL parsing only:
+it does not launch rclone or make a network request. The action helper still
+verifies the configured remote when an action is invoked, so a stale or forged
+URL cannot make it operate on a non-Drive remote.
+
+**Offline access** is not offered here: its equivalent in the reference
+FUSE-based workflow only warms an rclone mount's VFS cache. `rclone:/` is a
+KIO protocol rather than a persistent offline mount; use `rclone mount` when
+that is required.
+
 ## What makes transfers special
 
 Transfers between locations pass through KIO, preserving Dolphin's controls:

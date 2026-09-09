@@ -31,8 +31,10 @@ ctest --test-dir build/test --output-on-failure
 | `rclonedirectorycachetest` | Worker cache hits for listings/stat/MIME, remote-only mode, explicit reload bypass, and mutation invalidation. |
 | `rclonedrivehubtest` | Drive hub labels, Shared Drive IDs, connection strings, filtered-view write protection, and My Drive writes. |
 | `appstreamtest` | Installed AppStream metadata. |
-| `desktopfiletest` | Absolute launcher path plus MIME and URI-handler registration. |
+| `dolphin-actions-plugin-metadata` | Native Dolphin action-plugin metadata and MIME registration. |
 | `mimefiletest` | Installed shared MIME definition for the launcher. |
+| `driveactiontargettest` | Google Drive service-menu URL parsing, `rclone-id` handling, Shared Drive mapping, and browser URL construction. |
+| `dolphinactionplugintest` | Native plugin loading plus Drive-only visibility and menu composition. |
 
 ## Localization
 
@@ -77,15 +79,21 @@ the rclone, Plasma, and KDE Frameworks versions with the result.
 4. For Google Drive, confirm the remote root is the hub, **My Drive** opens
    the ordinary root, **Shared Drives** uses stable IDs behind its display
    names, and the filtered views reject writes.
-5. Create a directory and refresh it once.
-6. Upload a small file, download it, compare its checksum, and verify pause,
+5. In **My Drive**, right-click a disposable file and folder. Confirm that
+   **Google Drive** opens/copies the expected browser URL and that **New Google
+   Drive files** opens a blank Workspace editor for the selected folder. In
+   **Shared With Me**, **Starred**, and **Trash**, verify that items with
+   `rclone-id` can still open and copy their Drive URL. On a non-Google
+   `rclone:` remote, confirm that no **Google Drive** menu appears at all.
+6. Create a directory and refresh it once.
+7. Upload a small file, download it, compare its checksum, and verify pause,
    resume, cancellation, and overwrite handling.
-7. Rename and delete the disposable file.
-8. Restart Dolphin and confirm that the remote remains available.
-9. Open a TXT and one ODT/DOCX file, then verify the saved content after
+8. Rename and delete the disposable file.
+9. Restart Dolphin and confirm that the remote remains available.
+10. Open a TXT and one ODT/DOCX file, then verify the saved content after
    reopening it. Treat Google-native exports and duplicate remote names as
    read-only cases.
-10. If the release changes a translation, run its visual locale check before
+11. If the release changes a translation, run its visual locale check before
    accepting the release.
 
 Never include tokens, client secrets, unredacted configuration, or personal

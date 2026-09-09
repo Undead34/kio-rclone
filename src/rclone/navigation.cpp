@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 #include <QSet>
+#include <QUrlQuery>
 
 namespace {
 
@@ -154,6 +155,40 @@ void markAncestorDirectoriesWithContent(const QString &path,
     }
 }
 
+
+QUrl withItemIdentity(QUrl url, const RcloneItem &item)
+{
+    QUrlQuery query(url);
+
+    if (!item.id.isEmpty()) {
+        query.removeAllQueryItems(QStringLiteral("rclone-id"));
+        query.addQueryItem(QStringLiteral("rclone-id"), item.id);
+    }
+
+    if (!item.originalId.isEmpty()) {
+        query.removeAllQueryItems(QStringLiteral("rclone-orig-id"));
+        query.addQueryItem(QStringLiteral("rclone-orig-id"), item.originalId);
+    }
+
+    url.setQuery(query);
+    return url;
+}
+
+QUrl withRemoteType(QUrl url, const QString &remoteType)
+{
+    if (remoteType.isEmpty()) {
+        return url;
+    }
+
+    QUrlQuery query(url);
+
+    query.removeAllQueryItems(QStringLiteral("rclone-remote-type"));
+    query.addQueryItem(QStringLiteral("rclone-remote-type"), remoteType);
+
+    url.setQuery(query);
+    return url;
+}
+
 } // namespace
 
 RcloneNavigation::RcloneNavigation(RcloneClient &client)
@@ -175,7 +210,8 @@ RcloneNavigation::listRoot(const EntryCallback &onEntry,
             RcloneUrl::ConfigureEntry,
             RcloneUrlBuilder::createConfigLauncher(),
             RcloneUrl::ConfigurationLauncherMimeType,
-            QStringLiteral("configure")))) {
+            QStringLiteral("configure"),
+            i18n("Configure Remotes…")))) {
         return failure(
             RcloneErrorCode::Aborted,
             QStringLiteral("Listing aborted by consumer"));
@@ -185,9 +221,11 @@ RcloneNavigation::listRoot(const EntryCallback &onEntry,
         const bool isDrive =
             remote.type == QStringLiteral("drive");
 
-        const QUrl url = isDrive
+        QUrl url = isDrive
             ? RcloneLocation::driveHubUrl(remote.name)
             : RcloneLocation::standardUrl(remote.name);
+
+        url = withRemoteType(url, remote.type);
 
         const QString icon = isDrive
             ? QStringLiteral("folder-gdrive")
@@ -233,7 +271,7 @@ RcloneNavigation::list(const RcloneLocation &location,
             return listDriveHub(location, onEntry);
         }
 
-        return listStandard(location, onEntry, ctx);
+        return listStandard(location, *type.data, onEntry, ctx);
     }
 
     if (location.kind() == RcloneLocation::Kind::DriveHub) {
@@ -282,6 +320,7 @@ RcloneNavigation::remoteType(const QString &remoteName,
 
 RcloneStatus
 RcloneNavigation::listStandard(const RcloneLocation &location,
+                               const QString &remoteType,
                                const EntryCallback &onEntry,
                                const RcloneContext &ctx) const
 {
@@ -291,7 +330,9 @@ RcloneNavigation::listStandard(const RcloneLocation &location,
         [&](const RcloneItem &item) {
             return onEntry(RcloneNavigationEntry::fromItem(
                 item,
-                childUrlFor(location, item)));
+                withRemoteType(
+                    withItemIdentity(childUrlFor(location, item), item),
+                    remoteType)));
         },
         ctx);
 }
@@ -305,37 +346,39 @@ RcloneNavigation::listDriveHub(const RcloneLocation &location,
     const QList<RcloneNavigationEntry> entries{
         RcloneNavigationEntry::virtualDirectory(
             i18n("My Drive"),
-            RcloneLocation::driveViewUrl(
-                remoteName,
-                RcloneLocation::Kind::DriveMyDrive),
+            withRemoteType(
+                RcloneLocation::driveViewUrl(
+                    remoteName,
+                    RcloneLocation::Kind::DriveMyDrive),
+                QStringLiteral("drive")),
             QStringLiteral("user-home")),
 
         RcloneNavigationEntry::virtualDirectory(
             i18n("Shared With Me"),
-            RcloneLocation::driveViewUrl(
+            withRemoteType(RcloneLocation::driveViewUrl(
                 remoteName,
-                RcloneLocation::Kind::DriveSharedWithMe),
+                RcloneLocation::Kind::DriveSharedWithMe), QStringLiteral("drive")),
             QStringLiteral("folder-publicshare")),
 
         RcloneNavigationEntry::virtualDirectory(
             i18n("Shared Drives"),
-            RcloneLocation::driveViewUrl(
+            withRemoteType(RcloneLocation::driveViewUrl(
                 remoteName,
-                RcloneLocation::Kind::DriveSharedDrives),
+                RcloneLocation::Kind::DriveSharedDrives), QStringLiteral("drive")),
             QStringLiteral("folder-cloud")),
 
         RcloneNavigationEntry::virtualDirectory(
             i18n("Trash"),
-            RcloneLocation::driveViewUrl(
+            withRemoteType(RcloneLocation::driveViewUrl(
                 remoteName,
-                RcloneLocation::Kind::DriveTrash),
+                RcloneLocation::Kind::DriveTrash), QStringLiteral("drive")),
             QStringLiteral("user-trash-full")),
 
         RcloneNavigationEntry::virtualDirectory(
             i18n("Starred"),
-            RcloneLocation::driveViewUrl(
+            withRemoteType(RcloneLocation::driveViewUrl(
                 remoteName,
-                RcloneLocation::Kind::DriveStarred),
+                RcloneLocation::Kind::DriveStarred), QStringLiteral("drive")),
             QStringLiteral("folder-favorites")),
     };
 
@@ -361,7 +404,9 @@ RcloneNavigation::listDriveView(const RcloneLocation &location,
         [&](const RcloneItem &item) {
             return onEntry(RcloneNavigationEntry::fromItem(
                 item,
-                childUrlFor(location, item)));
+                withRemoteType(
+                    withItemIdentity(childUrlFor(location, item), item),
+                    QStringLiteral("drive"))));
         },
         ctx);
 }
@@ -416,10 +461,12 @@ RcloneNavigation::listSharedDrives(const RcloneLocation &location,
 
         if (!onEntry(RcloneNavigationEntry::virtualDirectory(
                 drive->name,
-                RcloneLocation::driveSharedDriveUrl(
-                    location.remoteName(),
-                    drive->id,
-                    drive->name),
+                withRemoteType(
+                    RcloneLocation::driveSharedDriveUrl(
+                        location.remoteName(),
+                        drive->id,
+                        drive->name),
+                    QStringLiteral("drive")),
                 QStringLiteral("folder-cloud")))) {
             return failure(
                 RcloneErrorCode::Aborted,
@@ -488,7 +535,9 @@ RcloneNavigation::listDriveTrash(const RcloneLocation &location,
 
         if (!onEntry(RcloneNavigationEntry::fromItem(
                 item,
-                childUrlFor(location, item)))) {
+                withRemoteType(
+                    withItemIdentity(childUrlFor(location, item), item),
+                    QStringLiteral("drive"))))) {
             return failure(
                 RcloneErrorCode::Aborted,
                 QStringLiteral("Listing aborted by consumer"));

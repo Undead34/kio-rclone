@@ -67,6 +67,42 @@ ID conocido desde la barra de ubicación sin crear otra base de cuentas.
 Consulta [Google Drive y GCP](/es/google-drive#vistas-de-drive-en-dolphin)
 para ver las rutas exactas y los límites conservadores intencionales.
 
+## Acciones de Google Drive en Dolphin
+
+Al pulsar con el botón derecho sobre un elemento de Google Drive aparecen los
+menús nativos de Dolphin. En **Mi unidad** y en una **unidad compartida**
+concreta aparece además el menú de creación, limitado a carpetas:
+
+- **Google Drive** abre el elemento en Drive, copia su enlace de Drive o abre
+  en el navegador la carpeta que lo contiene.
+- **Nuevos archivos de Google Drive** crea en la carpeta seleccionada un
+  Documento, una Hoja de cálculo, una Presentación o un Dibujo de Google.
+
+El ayudante usa `rclone-id`, con espacio de nombres propio, dentro de
+`UDS_URL` del elemento KIO cuando está disponible (`rclone-orig-id` es un
+fallback seguro). Así abrir y copiar también funciona en **Compartido
+conmigo**, **Favoritos** y **Papelera**, sin una petición a la API de Google.
+La creación de Workspace y el fallback basado en rutas quedan limitados a Mi
+unidad y a unidades compartidas concretas. Las URLs antiguas de vistas físicas
+conservan un fallback de metadatos de rclone de solo lectura; ninguna de las
+dos rutas usa `rclone link` ni cambia los permisos de compartición. El
+navegador usa su sesión de Google existente y KIO Rclone no lee cookies ni
+tokens OAuth del navegador para estas acciones.
+
+Los menús los proporciona un plugin nativo de acciones de Dolphin de categoría
+2. Antes de añadir una sola acción al menú contextual, comprueba que la URL
+seleccionada contiene exactamente un query `rclone-remote-type=drive`. Un
+remoto rclone que no sea Drive no ve ningún menú de Google Drive. Esta decisión
+de visibilidad solo analiza la URL localmente: no inicia rclone ni hace una
+petición de red. Al ejecutar una acción, el ayudante sigue verificando el
+remoto configurado, así que una URL antigua o manipulada no puede operar sobre
+un remoto que no sea Drive.
+
+No se ofrece **acceso sin conexión**: el equivalente del flujo de referencia
+basado en FUSE solo calienta la caché VFS de un montaje rclone. `rclone:/` es
+un protocolo KIO, no un montaje offline persistente; usa `rclone mount` si lo
+necesitas.
+
 ## Lo que hace especial a las transferencias
 
 Las operaciones entre ubicaciones se transmiten por KIO en vez de delegarse en

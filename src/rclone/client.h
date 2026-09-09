@@ -125,6 +125,11 @@ public:
     explicit RcloneClient(QString executable = {});
 
     /**
+     * @brief Ruta del ejecutable de rclone que utilizará el cliente.
+     */
+    [[nodiscard]] QString executable() const;
+
+    /**
      * @brief Comprueba si el ejecutable de rclone está disponible.
      *
      * No comprueba la conectividad de ningún remoto.
@@ -136,6 +141,17 @@ public:
      */
     [[nodiscard]] RcloneResponse<QList<RcloneRemote>>
     listRemotes(const RcloneContext &ctx) const;
+
+    /**
+     * @brief Ejecuta un subcomando de `rclone config`.
+     *
+     * La aplicación de configuración utiliza esta entrada para consultas y
+     * cambios no interactivos. Las operaciones de archivos del worker deben
+     * usar los métodos tipados del cliente.
+     */
+    [[nodiscard]] RcloneResponse<QByteArray>
+    runConfigCommand(const QStringList &arguments,
+                     const RcloneContext &ctx) const;
 
     /**
      * @brief Obtiene las métricas de espacio de un remoto.

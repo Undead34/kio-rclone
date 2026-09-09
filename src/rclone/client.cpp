@@ -49,6 +49,11 @@ RcloneClient::RcloneClient(QString executable)
 {
 }
 
+QString RcloneClient::executable() const
+{
+    return m_executable;
+}
+
 bool RcloneClient::isAvailable() const
 {
     if (m_executable.isEmpty()) {
@@ -142,6 +147,18 @@ RcloneClient::listRemotes(const RcloneContext &ctx) const
         std::move(remotes),
         {RcloneErrorCode::None, {}, 0},
     };
+}
+
+RcloneResponse<QByteArray>
+RcloneClient::runConfigCommand(const QStringList &arguments,
+                               const RcloneContext &ctx) const
+{
+    QStringList command{
+        QStringLiteral("config"),
+    };
+    command.append(arguments);
+
+    return runCommand(command, ctx);
 }
 
 RcloneResponse<RcloneSpace>
@@ -502,14 +519,19 @@ RcloneClient::write(const QString &localSrc,
     return notImplementedStatus();
 }
 
-
 QString RcloneClient::locateExecutable()
 {
+    const QByteArray configuredPath = qgetenv("KIO_RCLONE_EXECUTABLE");
+    if (!configuredPath.isEmpty()) {
+        const QString configured = QString::fromLocal8Bit(configuredPath);
+        const QString resolved = QStandardPaths::findExecutable(configured);
+        if (!resolved.isEmpty()) {
+            return resolved;
+        }
+    }
+
     return QStandardPaths::findExecutable(QStringLiteral("rclone"));
 }
-
-#include <QElapsedTimer>
-#include <QProcess>
 
 RcloneStatus
 RcloneClient::runStreamingCommand(const QStringList &arguments,

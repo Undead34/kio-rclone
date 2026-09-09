@@ -6,7 +6,6 @@
 
 #include "appid.h"
 #include "configwindow.h"
-#include "dialogs/settingsdialog.h"
 #include "dialogs/rclonepromptdialog.h"
 #include "rclone/url.h"
 
@@ -19,11 +18,11 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFile>
-#include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QIcon>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -37,14 +36,37 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QStandardPaths>
-#include <QSpinBox>
-#include <QStyle>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QXmlStreamReader>
 
 namespace
 {
+class ConfigRcloneContext final : public RcloneContext
+{
+public:
+    [[nodiscard]] bool isCancelled() const override
+    {
+        return false;
+    }
+};
+
+const RcloneContext &configRcloneContext()
+{
+    static const ConfigRcloneContext context;
+    return context;
+}
+
+QString iconForRemoteType(const QString &type)
+{
+    static const QHash<QString, QString> icons = {
+        {QStringLiteral("drive"), QStringLiteral("folder-gdrive")},
+        {QStringLiteral("dropbox"), QStringLiteral("folder-dropbox")},
+        {QStringLiteral("onedrive"), QStringLiteral("folder-onedrive")},
+    };
+    return icons.value(type, QStringLiteral("folder-cloud"));
+}
+
 std::optional<QPair<QString, QString>> existingGoogleOAuthOverride()
 {
     QFile file(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/accounts/providers/google.provider"));
@@ -177,11 +199,8 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     globalButtons->setSpacing(8);
     auto *addRemoteButton = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), i18n("Add Remote…"), this);
     auto *refreshButton = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")), i18n("Refresh"), this);
-    auto *settingsButton = new QPushButton(QIcon::fromTheme(QStringLiteral("configure")), i18n("Settings…"), this);
-    settingsButton->setToolTip(i18n("Directory listing settings"));
     globalButtons->addWidget(addRemoteButton);
     globalButtons->addWidget(refreshButton);
-    globalButtons->addWidget(settingsButton);
     globalButtons->addStretch();
     layout->addLayout(globalButtons);
 
@@ -219,9 +238,6 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     connect(refreshButton, &QPushButton::clicked, this, [this]() {
         refreshRemotes();
     });
-    connect(settingsButton, &QPushButton::clicked, this, [this]() {
-        showSettings();
-    });
     connect(m_remoteList, &QListWidget::itemSelectionChanged, this, [this]() {
         updateActions();
     });
@@ -230,12 +246,6 @@ ConfigWindow::ConfigWindow(QWidget *parent)
     });
 
     refreshRemotes();
-}
-
-void ConfigWindow::showSettings()
-{
-    SettingsDialog dialog(this);
-    dialog.exec();
 }
 
 bool ConfigWindow::isConfigPasswordError(const QString &diagnostic) const
@@ -264,69 +274,71 @@ bool ConfigWindow::promptConfigPassword()
     return true;
 }
 
-// RcloneResult ConfigWindow::runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs)
-// {
-//     RcloneResult result = m_rclone.run(arguments, timeoutMs);
-//     if (!result.success() && isConfigPasswordError(result.errorMessage()) && promptConfigPassword()) {
-//         return m_rclone.run(arguments, timeoutMs);
-//     }
-//     return result;
-// }
+RcloneResponse<QByteArray>
+ConfigWindow::runBackendWithPasswordRetry(const QStringList &arguments)
+{
+    auto result = m_rclone.runConfigCommand(arguments, configRcloneContext());
+    if (!result.success()
+        && isConfigPasswordError(result.error.message)
+        && promptConfigPassword()) {
+        result = m_rclone.runConfigCommand(arguments, configRcloneContext());
+    }
+    return result;
+}
 
-// void ConfigWindow::refreshRemotes()
-// {
-//     m_remoteList->clear();
-//     m_remoteInfo.clear();
-//     if (!m_rclone.isAvailable()) {
-//         m_statusLabel->setText(
-//             i18n("rclone was not found. Install it or set "
-//                  "KIO_RCLONE_EXECUTABLE to its full path."));
-//         updateActions();
-//         return;
-//     }
+void ConfigWindow::refreshRemotes()
+{
+    m_remoteList->clear();
+    m_remoteTypes.clear();
 
-//     QString error;
-//     QStringList remotes = m_rclone.remotes(&error);
-//     if (remotes.isEmpty() && isConfigPasswordError(error) && promptConfigPassword()) {
-//         error.clear();
-//         remotes = m_rclone.remotes(&error);
-//     }
-//     int sharedGoogleClients = 0;
-//     for (const QString &remote : remotes) {
-//         QString infoError;
-//         const auto info = m_rclone.remoteInfo(remote, &infoError);
-//         if (info) {
-//             m_remoteInfo.insert(remote, *info);
-//         }
+    if (!m_rclone.isAvailable()) {
+        m_statusLabel->setText(
+            i18n("rclone was not found. Install it or set "
+                 "KIO_RCLONE_EXECUTABLE to its full path."));
+        updateActions();
+        return;
+    }
 
-//         const bool sharedGoogleClient = info && info->type == QLatin1String("drive") && !info->hasClientId;
-//         auto *item =
-//             new QListWidgetItem(QIcon::fromTheme(sharedGoogleClient ? QStringLiteral("dialog-warning") : QStringLiteral("folder-cloud")), remote, m_remoteList);
-//         item->setData(Qt::UserRole, remote);
-//         if (sharedGoogleClient) {
-//             ++sharedGoogleClients;
-//             item->setToolTip(i18n("This Google Drive remote uses rclone's shared OAuth client. "
-//                                   "It is quota-limited and is being retired during 2026."));
-//         } else if (!infoError.isEmpty()) {
-//             item->setToolTip(infoError);
-//         }
-//     }
+    auto remotes = m_rclone.listRemotes(configRcloneContext());
+    if (!remotes.success()
+        && isConfigPasswordError(remotes.error.message)
+        && promptConfigPassword()) {
+        remotes = m_rclone.listRemotes(configRcloneContext());
+    }
 
-//     if (!error.isEmpty()) {
-//         m_statusLabel->setText(error);
-//     } else if (remotes.isEmpty()) {
-//         m_statusLabel->setText(i18n("No remotes yet. Use “Add Remote…” to connect your first cloud provider."));
-//     } else if (sharedGoogleClients > 0) {
-//         m_statusLabel->setText(
-//             i18np("One Google Drive remote uses rclone's shared OAuth client. Configure your own client to avoid quota delays and service interruption.",
-//                   "%1 Google Drive remotes use rclone's shared OAuth client. Configure your own clients to avoid quota delays and service interruption.",
-//                   sharedGoogleClients));
-//     } else {
-//         m_statusLabel->setText(i18np("One remote configured.", "%1 remotes configured.", remotes.size()));
-//         m_remoteList->setCurrentRow(0);
-//     }
-//     updateActions();
-// }
+    if (!remotes.success()) {
+        m_statusLabel->setText(
+            remotes.error.message.isEmpty()
+                ? i18n("Could not read the rclone configuration.")
+                : remotes.error.message);
+        updateActions();
+        return;
+    }
+
+    for (const RcloneRemote &remote : *remotes.data) {
+        m_remoteTypes.insert(remote.name, remote.type);
+
+        auto *item = new QListWidgetItem(
+            QIcon::fromTheme(iconForRemoteType(remote.type)),
+            remote.name,
+            m_remoteList);
+        item->setData(Qt::UserRole, remote.name);
+        item->setData(Qt::UserRole + 1, remote.type);
+    }
+
+    if (remotes.data->isEmpty()) {
+        m_statusLabel->setText(
+            i18n("No remotes yet. Use “Add Remote…” to connect your first cloud provider."));
+    } else {
+        m_statusLabel->setText(
+            i18np("One remote configured.",
+                  "%1 remotes configured.",
+                  remotes.data->size()));
+        m_remoteList->setCurrentRow(0);
+    }
+
+    updateActions();
+}
 
 void ConfigWindow::addRemote()
 {
@@ -523,13 +535,31 @@ void ConfigWindow::addRemote()
         return;
     }
 
-    QString error;
-    if (m_rclone.remotes(&error).contains(name)) {
-        QMessageBox::warning(this, i18n("Remote Exists"), i18n("A remote named “%1” already exists.", name));
+    auto remotes = m_rclone.listRemotes(configRcloneContext());
+    if (!remotes.success()
+        && isConfigPasswordError(remotes.error.message)
+        && promptConfigPassword()) {
+        remotes = m_rclone.listRemotes(configRcloneContext());
+    }
+    if (!remotes.success()) {
+        QMessageBox::critical(
+            this,
+            i18n("Rclone Error"),
+            remotes.error.message.isEmpty()
+                ? i18n("Could not read the rclone configuration.")
+                : remotes.error.message);
         return;
     }
-    if (!error.isEmpty()) {
-        QMessageBox::critical(this, i18n("Rclone Error"), error);
+
+    bool remoteExists = false;
+    for (const RcloneRemote &remote : *remotes.data) {
+        if (remote.name == name) {
+            remoteExists = true;
+            break;
+        }
+    }
+    if (remoteExists) {
+        QMessageBox::warning(this, i18n("Remote Exists"), i18n("A remote named “%1” already exists.", name));
         return;
     }
 
@@ -562,11 +592,11 @@ void ConfigWindow::addRemote()
 QList<ProviderFieldOption> ConfigWindow::providerOptions(const QString &type)
 {
     if (!m_providersCache) {
-        const RcloneResult result = runBackendWithPasswordRetry({QStringLiteral("config"), QStringLiteral("providers")});
+        const auto result = runBackendWithPasswordRetry({QStringLiteral("providers")});
         if (!result.success()) {
             return {};
         }
-        const QJsonDocument document = QJsonDocument::fromJson(result.standardOutput);
+        const QJsonDocument document = QJsonDocument::fromJson(*result.data);
         if (!document.isArray()) {
             return {};
         }
@@ -798,15 +828,15 @@ void ConfigWindow::reconnectSelected()
 bool ConfigWindow::renameRemote(const QString &oldName, const QString &newName)
 {
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const RcloneResult dumpResult = runBackendWithPasswordRetry({QStringLiteral("config"), QStringLiteral("dump")});
+    const auto dumpResult = runBackendWithPasswordRetry({QStringLiteral("dump")});
     if (!dumpResult.success()) {
         QApplication::restoreOverrideCursor();
-        QMessageBox::critical(this, i18n("Rclone Error"), dumpResult.errorMessage());
+        QMessageBox::critical(this, i18n("Rclone Error"), dumpResult.error.message);
         return false;
     }
 
     QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(dumpResult.standardOutput, &parseError);
+    const QJsonDocument document = QJsonDocument::fromJson(*dumpResult.data, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject() || !document.object().contains(oldName)) {
         QApplication::restoreOverrideCursor();
         QMessageBox::critical(this, i18n("Rclone Error"), i18n("Could not read the current remote configuration."));
@@ -817,7 +847,7 @@ bool ConfigWindow::renameRemote(const QString &oldName, const QString &newName)
     // already-obscured token) needs no re-authorization: rclone never touches
     // the browser for this, unlike a client_id/secret change further below.
     const QJsonObject remoteConfig = document.object().value(oldName).toObject();
-    QStringList arguments = {QStringLiteral("config"), QStringLiteral("create"), newName, remoteConfig.value(QStringLiteral("type")).toString()};
+    QStringList arguments = {QStringLiteral("create"), newName, remoteConfig.value(QStringLiteral("type")).toString()};
     for (auto it = remoteConfig.constBegin(); it != remoteConfig.constEnd(); ++it) {
         if (it.key() == QLatin1String("type")) {
             continue;
@@ -826,14 +856,14 @@ bool ConfigWindow::renameRemote(const QString &oldName, const QString &newName)
     }
     arguments << QStringLiteral("--no-obscure") << QStringLiteral("--no-output");
 
-    const RcloneResult createResult = runBackendWithPasswordRetry(arguments);
+    const auto createResult = runBackendWithPasswordRetry(arguments);
     if (!createResult.success()) {
         QApplication::restoreOverrideCursor();
-        QMessageBox::critical(this, i18n("Rclone Error"), createResult.errorMessage());
+        QMessageBox::critical(this, i18n("Rclone Error"), createResult.error.message);
         return false;
     }
 
-    const RcloneResult deleteResult = runBackendWithPasswordRetry({QStringLiteral("config"), QStringLiteral("delete"), oldName});
+    const auto deleteResult = runBackendWithPasswordRetry({QStringLiteral("delete"), oldName});
     QApplication::restoreOverrideCursor();
     if (!deleteResult.success()) {
         QMessageBox::warning(
@@ -842,7 +872,7 @@ bool ConfigWindow::renameRemote(const QString &oldName, const QString &newName)
             i18n("“%1” was created as a copy of “%2”, but the old entry could not be removed automatically: %3\nRemove it manually to finish the rename.",
                  newName,
                  oldName,
-                 deleteResult.errorMessage()));
+                 deleteResult.error.message));
     }
     return true;
 }
@@ -853,7 +883,11 @@ void ConfigWindow::editSelected()
     if (remote.isEmpty()) {
         return;
     }
-    const QString type = m_remoteInfo.value(remote).type;
+    const QString type = m_remoteTypes.value(
+        remote,
+        m_remoteList->currentItem()
+            ? m_remoteList->currentItem()->data(Qt::UserRole + 1).toString()
+            : QString());
     const bool supportsCustomOAuth = customOAuthProviders().contains(type);
 
     QDialog dialog(this);
@@ -938,8 +972,30 @@ void ConfigWindow::editSelected()
             QMessageBox::warning(this, i18n("Invalid Name"), i18n("Remote names cannot contain ':', '/', or '\\'."));
             return;
         }
-        QString error;
-        if (m_rclone.remotes(&error).contains(newName)) {
+        auto remotes = m_rclone.listRemotes(configRcloneContext());
+        if (!remotes.success()
+            && isConfigPasswordError(remotes.error.message)
+            && promptConfigPassword()) {
+            remotes = m_rclone.listRemotes(configRcloneContext());
+        }
+        if (!remotes.success()) {
+            QMessageBox::critical(
+                this,
+                i18n("Rclone Error"),
+                remotes.error.message.isEmpty()
+                    ? i18n("Could not read the rclone configuration.")
+                    : remotes.error.message);
+            return;
+        }
+
+        bool remoteExists = false;
+        for (const RcloneRemote &configured : *remotes.data) {
+            if (configured.name == newName) {
+                remoteExists = true;
+                break;
+            }
+        }
+        if (remoteExists) {
             QMessageBox::warning(this, i18n("Remote Exists"), i18n("A remote named “%1” already exists.", newName));
             return;
         }
@@ -996,10 +1052,10 @@ void ConfigWindow::removeSelected()
     }
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const RcloneResult result = runBackendWithPasswordRetry({QStringLiteral("config"), QStringLiteral("delete"), remote});
+    const auto result = runBackendWithPasswordRetry({QStringLiteral("delete"), remote});
     QApplication::restoreOverrideCursor();
     if (!result.success()) {
-        QMessageBox::critical(this, i18n("Rclone Error"), result.errorMessage());
+        QMessageBox::critical(this, i18n("Rclone Error"), result.error.message);
     }
     refreshRemotes();
 }
@@ -1008,7 +1064,7 @@ void ConfigWindow::openSelected()
 {
     const QString remote = selectedRemote();
     if (!remote.isEmpty()) {
-        QDesktopServices::openUrl(RcloneUrl::remoteUrl(remote));
+        QDesktopServices::openUrl(RcloneUrlBuilder::createForRemote(remote));
     }
 }
 

@@ -48,3 +48,5 @@ target_link_libraries(kio_rclone
 set_target_properties(kio_rclone PROPERTIES
     OUTPUT_NAME rclone
 )
+
+add_subdirectory(dolphin-actions)

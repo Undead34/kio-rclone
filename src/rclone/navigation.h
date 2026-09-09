@@ -31,6 +31,7 @@ private:
                                                      const RcloneContext &ctx) const;
 
     [[nodiscard]] RcloneStatus listStandard(const RcloneLocation &location,
+                                            const QString &remoteType,
                                             const EntryCallback &onEntry,
                                             const RcloneContext &ctx) const;
 

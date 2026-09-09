@@ -1,0 +1,18 @@
+{
+    "KPlugin": {
+        "Name": "KIO Rclone Google Drive actions",
+        "Name[es]": "Acciones de Google Drive de KIO Rclone",
+        "Description": "Shows Google Drive actions only for Google Drive rclone entries",
+        "Description[es]": "Muestra acciones de Google Drive solo para entradas rclone de Google Drive",
+        "Icon": "folder-gdrive",
+        "License": "GPL-2.0-or-later",
+        "EnabledByDefault": true,
+        "MimeTypes": [
+            "application/octet-stream",
+            "inode/directory"
+        ],
+        "ServiceTypes": [
+            "KFileItemAction/Plugin"
+        ]
+    }
+}

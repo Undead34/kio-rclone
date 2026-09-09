@@ -41,8 +41,7 @@ public:
     explicit ConfigWindow(QWidget *parent = nullptr);
 
 private:
-    // void refreshRemotes();
-    void showSettings();
+    void refreshRemotes();
     void addRemote();
     [[nodiscard]] QList<ProviderFieldOption> providerOptions(const QString &type);
     bool submitDriveLikeRemote(const QString &name, const QString &type, const QList<QPair<QString, QString>> &options = {});
@@ -52,7 +51,7 @@ private:
     void reconnectSelected();
     void editSelected();
     [[nodiscard]] bool renameRemote(const QString &oldName, const QString &newName);
-    // [[nodiscard]] RcloneResult runBackendWithPasswordRetry(const QStringList &arguments, int timeoutMs = 30000);
+    [[nodiscard]] RcloneResponse<QByteArray> runBackendWithPasswordRetry(const QStringList &arguments);
     [[nodiscard]] bool isConfigPasswordError(const QString &diagnostic) const;
     [[nodiscard]] bool promptConfigPassword();
     void removeSelected();
@@ -64,7 +63,7 @@ private:
     [[nodiscard]] bool validateRemoteName(const QString &name) const;
 
     RcloneClient m_rclone;
-    // QHash<QString, RcloneRemoteInfo> m_remoteInfo;
+    QHash<QString, QString> m_remoteTypes;
     std::optional<QJsonArray> m_providersCache;
     QLabel *m_statusLabel = nullptr;
     QListWidget *m_remoteList = nullptr;

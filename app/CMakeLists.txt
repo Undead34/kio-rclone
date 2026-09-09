@@ -1,5 +1,7 @@
 add_executable(kio-rclone-config
     main.cpp
+    configwindow.cpp
+    dialogs/rclonepromptdialog.cpp
 )
 
 target_include_directories(kio-rclone-config

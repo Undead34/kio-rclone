@@ -65,16 +65,6 @@ private:
     const KIO::WorkerBase &m_worker;
 };
 
-void reserveEntry(KIO::UDSEntry &entry, int strings, int numbers)
-{
-#if KIO_VERSION >= QT_VERSION_CHECK(6, 29, 0)
-    entry.reserveStrings(strings);
-    entry.reserveNumbers(numbers);
-#else
-    entry.reserve(strings + numbers);
-#endif
-}
-
 KIO::WorkerResult notImplemented(const QString &operation)
 {
     return KIO::WorkerResult::fail(
@@ -159,28 +149,16 @@ KIO::UDSEntry makeRemoteEntry(const QString &name, const QString &type)
     return entry;
 }
 
-KIO::UDSEntry makeConfigLauncherEntry()
-{
-    KIO::UDSEntry entry;
-    reserveEntry(entry, 5, 3);
-
-    entry.fastInsert(KIO::UDSEntry::UDS_NAME, RcloneUrl::ConfigureEntry);
-    entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, i18n("Configure Remotes…"));
-    entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, QStringLiteral("configure"));
-    entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFREG);
-    entry.fastInsert(KIO::UDSEntry::UDS_TARGET_URL, RcloneUrl::ConfigureEntry);
-    entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, RcloneUrl::ConfigurationLauncherMimeType);
-    entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, 0500);
-    entry.fastInsert(KIO::UDSEntry::UDS_HIDDEN, 0);
-
-    return entry;
-}
-
 KIO::UDSEntry makeEntry(const RcloneNavigationEntry &entry)
 {
     KIO::UDSEntry uds;
 
     uds.fastInsert(KIO::UDSEntry::UDS_NAME, entry.name);
+
+    if (!entry.displayName.isEmpty()) {
+        uds.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, entry.displayName);
+    }
+
     uds.fastInsert(
         KIO::UDSEntry::UDS_FILE_TYPE,
         entry.isDirectory ? S_IFDIR : S_IFREG);
@@ -209,10 +187,20 @@ KIO::UDSEntry makeEntry(const RcloneNavigationEntry &entry)
             entry.modificationTime.toSecsSinceEpoch());
     }
 
+    if (entry.hidden.has_value()) {
+        uds.fastInsert(KIO::UDSEntry::UDS_HIDDEN, *entry.hidden);
+    }
+
     if (entry.url.isValid()) {
         uds.fastInsert(
             KIO::UDSEntry::UDS_URL,
             entry.url.toString());
+    }
+
+    if (entry.targetUrl.isValid()) {
+        uds.fastInsert(
+            KIO::UDSEntry::UDS_TARGET_URL,
+            entry.targetUrl.toString());
     }
 
     return uds;
@@ -228,6 +216,193 @@ RcloneWorker::RcloneWorker(const QByteArray &protocol,
     , m_navigation(m_client)
 {
 }
+
+
+// KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
+// {
+//     const auto directory = RcloneUrl::parse(url);
+
+//     if (!directory.has_value()) {
+//         return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
+//     }
+
+//     if (directory->isConfigureEntry()) {
+//         return KIO::WorkerResult::fail(KIO::ERR_IS_FILE, url.toDisplayString());
+//     }
+
+//     if (const auto result = ensureRcloneClient(); !result.success()) {
+//         return result;
+//     }
+
+//     const bool reloadRequested = bypassesDirectorySnapshot(metaData(QStringLiteral("cache")));
+
+//     if (directory.isRoot()) {
+//         if (reloadRequested) {
+//             invalidateDirectorySnapshots();
+//         }
+//         return listRoot(url);
+//     }
+
+//     QString locationError;
+//     const std::optional<RcloneLocation> location = resolveLocation(directory, &locationError);
+//     if (wasKilled()) {
+//         return KIO::WorkerResult::pass();
+//     }
+//     if (!location) {
+//         return errorResult(locationError, KIO::ERR_MALFORMED_URL, url);
+//     }
+
+//     if (reloadRequested) {
+//         // F5/reload deliberately has stronger freshness semantics. Clear the
+//         // shared snapshots before doing any virtual or physical listing, so
+//         // an unsuccessful refresh cannot revive data the user rejected.
+//         invalidateDirectorySnapshots();
+//     }
+//     if (location->isDriveHub()) {
+//         return listDriveHub(*location);
+//     }
+//     if (location->isSharedDrivesRoot()) {
+//         return listSharedDrives(url, *location);
+//     }
+//     if (location->isFoldersRoot()) {
+//         return listFoldersIndex(*location);
+//     }
+
+//     const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
+//     if (location->isDriveTrash()) {
+//         return listDriveTrash(url, *location, policy);
+//     }
+//     if (!reloadRequested) {
+//         if (const auto cachedItems = cachedDirectory(*location, policy)) {
+//             publishDirectoryEntries(*location, *cachedItems);
+//             return KIO::WorkerResult::pass();
+//         }
+//     }
+
+//     return listRemoteDirectory(url, *location, policy);
+// }
+
+// KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
+// {
+//     QString error;
+//     const QList<RcloneRemote> remotes = m_rclone.remoteList(&error, [this]() {
+//         return wasKilled();
+//     });
+//     if (wasKilled()) {
+//         return KIO::WorkerResult::pass();
+//     }
+//     if (!error.isEmpty()) {
+//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+//     }
+
+//     // Current rclone versions report a backend type here. If an older version
+//     // omits it, preserve the generic remote-path behavior instead of reading
+//     // the full config or guessing a provider from its name.
+//     m_remoteDuplicateNameSupport.clear();
+//     m_remoteTypes.clear();
+//     m_sharedDriveNames.clear();
+//     listEntry(KioEntryBuilder::root());
+//     for (const RcloneRemote &remote : remotes) {
+//         m_remoteTypes.insert(remote.name, remote.type);
+//         listEntry(KioEntryBuilder::remote(remote.name, false, remote.type));
+//     }
+//     listEntry(KioEntryBuilder::configure());
+//     return KIO::WorkerResult::pass();
+// }
+
+// KIO::WorkerResult RcloneWorker::listDriveHub(const RcloneLocation &location)
+// {
+//     listEntry(currentDirectoryEntry(location));
+//     for (const RcloneLocation::HubEntry &entry : RcloneLocation::driveHubEntries()) {
+//         listEntry(KioEntryBuilder::directory(entry.name, driveDisplayName(entry.kind), entry.iconName, entry.writable));
+//     }
+//     return KIO::WorkerResult::pass();
+// }
+
+// KIO::WorkerResult RcloneWorker::listDriveTrash(const QUrl &requestUrl,
+//                                                const RcloneLocation &directory,
+//                                                const DirectoryListingPolicy &policy)
+// {
+//     if (const auto cachedItems = cachedDirectory(directory, policy)) {
+//         publishDirectoryEntries(directory, *cachedItems);
+//         return KIO::WorkerResult::pass();
+//     }
+
+//     // `--drive-trashed-only` can supply ordinary parent folders when listing
+//     // one level at a time. Ask rclone for the whole filtered result once, then
+//     // reconstruct only branches which lead to a trashed item. rclone documents
+//     // --recursive for lsjson at https://rclone.org/commands/rclone_lsjson/.
+//     QList<RcloneItem> recursiveItems;
+//     QString error;
+//     const bool listed = m_rclone.listStreaming(
+//         directory.rcloneRootSpec(),
+//         [&recursiveItems](const RcloneItem &item) {
+//             recursiveItems.append(item);
+//             return true;
+//         },
+//         &error,
+//         [this]() {
+//             return wasKilled();
+//         },
+//         RcloneListingDepth::Recursive);
+//     if (wasKilled()) {
+//         return KIO::WorkerResult::pass();
+//     }
+//     if (!listed) {
+//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+//     }
+
+//     const auto listing = RcloneRecursiveListing::fromItems(recursiveItems, &error);
+//     if (!listing) {
+//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+//     }
+
+//     rememberSyntheticTrashItems(directory, *listing);
+//     for (auto snapshot = listing->directories().cbegin(); snapshot != listing->directories().cend(); ++snapshot) {
+//         if (!policy.allowsSnapshots()) {
+//             break;
+//         }
+//         const RcloneLocation snapshotDirectory = directory.withRelativePath(snapshot.key());
+//         static_cast<void>(m_directorySnapshots.store(snapshotDirectory.remote(), snapshotDirectory.cachePath(), snapshot.value()));
+//     }
+
+//     const auto entries = listing->entries(directory.relativePath());
+//     if (!entries) {
+//         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl.toDisplayString());
+//     }
+//     publishDirectoryEntries(directory, *entries);
+//     return KIO::WorkerResult::pass();
+// }
+
+// KIO::WorkerResult RcloneWorker::listSharedDrives(const QUrl &requestUrl, const RcloneLocation &location)
+// {
+//     QString error;
+//     const QList<RcloneSharedDrive> drives = m_rclone.sharedDrives(location.remote() + QLatin1Char(':'), &error, [this]() {
+//         return wasKilled();
+//     });
+//     if (wasKilled()) {
+//         return KIO::WorkerResult::pass();
+//     }
+//     if (!error.isEmpty()) {
+//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+//     }
+
+//     listEntry(currentDirectoryEntry(location));
+//     for (const RcloneSharedDrive &drive : drives) {
+//         m_sharedDriveNames.insert(location.remote() + QLatin1Char('\n') + drive.id, drive.name);
+//         listEntry(KioEntryBuilder::directory(drive.id, drive.name, QStringLiteral("folder-cloud"), true));
+//     }
+//     return KIO::WorkerResult::pass();
+// }
+
+// KIO::WorkerResult RcloneWorker::listFoldersIndex(const RcloneLocation &location)
+// {
+//     // Folder IDs are not enumerable through rclone. This expert route exists
+//     // for a known ID (for example a Drive URL), not as a misleading empty
+//     // representation of the user's My Drive.
+//     listEntry(currentDirectoryEntry(location));
+//     return KIO::WorkerResult::pass();
+// }
 
 KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 {
@@ -518,191 +693,6 @@ KIO::WorkerResult RcloneWorker::fileSystemFreeSpace(const QUrl &url)
 // {
 // }
 
-// KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
-// {
-//     const auto directory = RcloneUrl::parse(url);
-
-//     if (!directory.has_value()) {
-//         return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
-//     }
-
-//     if (directory->isConfigureEntry()) {
-//         return KIO::WorkerResult::fail(KIO::ERR_IS_FILE, url.toDisplayString());
-//     }
-
-//     if (const auto result = ensureRcloneClient(); !result.success()) {
-//         return result;
-//     }
-
-//     const bool reloadRequested = bypassesDirectorySnapshot(metaData(QStringLiteral("cache")));
-
-//     if (directory.isRoot()) {
-//         if (reloadRequested) {
-//             invalidateDirectorySnapshots();
-//         }
-//         return listRoot(url);
-//     }
-
-//     QString locationError;
-//     const std::optional<RcloneLocation> location = resolveLocation(directory, &locationError);
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!location) {
-//         return errorResult(locationError, KIO::ERR_MALFORMED_URL, url);
-//     }
-
-//     if (reloadRequested) {
-//         // F5/reload deliberately has stronger freshness semantics. Clear the
-//         // shared snapshots before doing any virtual or physical listing, so
-//         // an unsuccessful refresh cannot revive data the user rejected.
-//         invalidateDirectorySnapshots();
-//     }
-//     if (location->isDriveHub()) {
-//         return listDriveHub(*location);
-//     }
-//     if (location->isSharedDrivesRoot()) {
-//         return listSharedDrives(url, *location);
-//     }
-//     if (location->isFoldersRoot()) {
-//         return listFoldersIndex(*location);
-//     }
-
-//     const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
-//     if (location->isDriveTrash()) {
-//         return listDriveTrash(url, *location, policy);
-//     }
-//     if (!reloadRequested) {
-//         if (const auto cachedItems = cachedDirectory(*location, policy)) {
-//             publishDirectoryEntries(*location, *cachedItems);
-//             return KIO::WorkerResult::pass();
-//         }
-//     }
-
-//     return listRemoteDirectory(url, *location, policy);
-// }
-
-// KIO::WorkerResult RcloneWorker::listRoot(const QUrl &requestUrl)
-// {
-//     QString error;
-//     const QList<RcloneRemote> remotes = m_rclone.remoteList(&error, [this]() {
-//         return wasKilled();
-//     });
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!error.isEmpty()) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     // Current rclone versions report a backend type here. If an older version
-//     // omits it, preserve the generic remote-path behavior instead of reading
-//     // the full config or guessing a provider from its name.
-//     m_remoteDuplicateNameSupport.clear();
-//     m_remoteTypes.clear();
-//     m_sharedDriveNames.clear();
-//     listEntry(KioEntryBuilder::root());
-//     for (const RcloneRemote &remote : remotes) {
-//         m_remoteTypes.insert(remote.name, remote.type);
-//         listEntry(KioEntryBuilder::remote(remote.name, false, remote.type));
-//     }
-//     listEntry(KioEntryBuilder::configure());
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listDriveHub(const RcloneLocation &location)
-// {
-//     listEntry(currentDirectoryEntry(location));
-//     for (const RcloneLocation::HubEntry &entry : RcloneLocation::driveHubEntries()) {
-//         listEntry(KioEntryBuilder::directory(entry.name, driveDisplayName(entry.kind), entry.iconName, entry.writable));
-//     }
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listDriveTrash(const QUrl &requestUrl,
-//                                                const RcloneLocation &directory,
-//                                                const DirectoryListingPolicy &policy)
-// {
-//     if (const auto cachedItems = cachedDirectory(directory, policy)) {
-//         publishDirectoryEntries(directory, *cachedItems);
-//         return KIO::WorkerResult::pass();
-//     }
-
-//     // `--drive-trashed-only` can supply ordinary parent folders when listing
-//     // one level at a time. Ask rclone for the whole filtered result once, then
-//     // reconstruct only branches which lead to a trashed item. rclone documents
-//     // --recursive for lsjson at https://rclone.org/commands/rclone_lsjson/.
-//     QList<RcloneItem> recursiveItems;
-//     QString error;
-//     const bool listed = m_rclone.listStreaming(
-//         directory.rcloneRootSpec(),
-//         [&recursiveItems](const RcloneItem &item) {
-//             recursiveItems.append(item);
-//             return true;
-//         },
-//         &error,
-//         [this]() {
-//             return wasKilled();
-//         },
-//         RcloneListingDepth::Recursive);
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!listed) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     const auto listing = RcloneRecursiveListing::fromItems(recursiveItems, &error);
-//     if (!listing) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     rememberSyntheticTrashItems(directory, *listing);
-//     for (auto snapshot = listing->directories().cbegin(); snapshot != listing->directories().cend(); ++snapshot) {
-//         if (!policy.allowsSnapshots()) {
-//             break;
-//         }
-//         const RcloneLocation snapshotDirectory = directory.withRelativePath(snapshot.key());
-//         static_cast<void>(m_directorySnapshots.store(snapshotDirectory.remote(), snapshotDirectory.cachePath(), snapshot.value()));
-//     }
-
-//     const auto entries = listing->entries(directory.relativePath());
-//     if (!entries) {
-//         return KIO::WorkerResult::fail(KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl.toDisplayString());
-//     }
-//     publishDirectoryEntries(directory, *entries);
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listSharedDrives(const QUrl &requestUrl, const RcloneLocation &location)
-// {
-//     QString error;
-//     const QList<RcloneSharedDrive> drives = m_rclone.sharedDrives(location.remote() + QLatin1Char(':'), &error, [this]() {
-//         return wasKilled();
-//     });
-//     if (wasKilled()) {
-//         return KIO::WorkerResult::pass();
-//     }
-//     if (!error.isEmpty()) {
-//         return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
-//     }
-
-//     listEntry(currentDirectoryEntry(location));
-//     for (const RcloneSharedDrive &drive : drives) {
-//         m_sharedDriveNames.insert(location.remote() + QLatin1Char('\n') + drive.id, drive.name);
-//         listEntry(KioEntryBuilder::directory(drive.id, drive.name, QStringLiteral("folder-cloud"), true));
-//     }
-//     return KIO::WorkerResult::pass();
-// }
-
-// KIO::WorkerResult RcloneWorker::listFoldersIndex(const RcloneLocation &location)
-// {
-//     // Folder IDs are not enumerable through rclone. This expert route exists
-//     // for a known ID (for example a Drive URL), not as a misleading empty
-//     // representation of the user's My Drive.
-//     listEntry(currentDirectoryEntry(location));
-//     return KIO::WorkerResult::pass();
-// }
 
 // std::optional<RcloneLocation> RcloneWorker::resolveLocation(const RcloneUrl &url, QString *error)
 // {

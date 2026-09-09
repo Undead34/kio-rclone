@@ -18,10 +18,16 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QTextCursor>
 #include <QTimer>
 #include <QVBoxLayout>
+
+namespace
+{
+constexpr qsizetype MaximumDiagnosticSize = 64 * 1024;
+}
 
 RclonePromptDialog::RclonePromptDialog(const QString &program,
                                                  const QStringList &arguments,
@@ -62,7 +68,9 @@ RclonePromptDialog::RclonePromptDialog(const QString &program,
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     layout->addWidget(buttons);
 
-    // RcloneProcess::configureProcess(*m_process, program, arguments);
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
+    m_process->setProcessEnvironment(environment);
     m_process->setProgram(program);
     m_process->setArguments(arguments);
     m_process->setProcessChannelMode(QProcess::MergedChannels);
@@ -124,7 +132,11 @@ void RclonePromptDialog::reject()
 {
     if (m_process->state() != QProcess::NotRunning) {
         m_cancelled = true;
-        // RcloneProcess::stopProcess(*m_process);
+        m_process->terminate();
+        if (!m_process->waitForFinished(1000)) {
+            m_process->kill();
+            m_process->waitForFinished(1000);
+        }
     }
     QDialog::reject();
 }
@@ -135,7 +147,10 @@ void RclonePromptDialog::appendOutput(const QByteArray &output)
         return;
     }
 
-    // RcloneProcess::appendLimited(m_diagnostic, output);
+    const qsizetype remaining = MaximumDiagnosticSize - m_diagnostic.size();
+    if (remaining > 0) {
+        m_diagnostic.append(output.left(remaining));
+    }
 
     QTextCursor cursor = m_transcript->textCursor();
     cursor.movePosition(QTextCursor::End);

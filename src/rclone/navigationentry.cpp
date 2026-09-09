@@ -24,17 +24,20 @@ RcloneNavigationEntry::virtualDirectory(const QString &name,
 
 RcloneNavigationEntry
 RcloneNavigationEntry::virtualFile(const QString &name,
-                                   const QUrl &url,
+                                   const QUrl &targetUrl,
                                    const QString &mimeType,
-                                   const QString &iconName)
+                                   const QString &iconName,
+                                   const QString &displayName)
 {
     RcloneNavigationEntry entry;
     entry.name = name;
-    entry.url = url;
+    entry.displayName = displayName;
+    entry.targetUrl = targetUrl;
     entry.mimeType = mimeType;
     entry.iconName = iconName;
     entry.isDirectory = false;
     entry.readOnly = true;
+    entry.hidden = false;
 
     return entry;
 }
@@ -49,7 +52,12 @@ RcloneNavigationEntry::fromItem(const RcloneItem &item,
         ? item.path.section(QLatin1Char('/'), -1)
         : item.name;
 
+    entry.displayName = entry.name;
     entry.url = url;
+
+    entry.id = item.id;
+    entry.originalId = item.originalId;
+
     entry.mimeType = item.isDirectory
         ? QStringLiteral("inode/directory")
         : item.mimeType;
