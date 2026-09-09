@@ -57,6 +57,7 @@ private:
     void removeSelected();
     void openSelected();
     void openAdvancedConfiguration();
+    [[nodiscard]] bool startRcloneInTerminal(const QStringList &arguments) const;
     void updateActions();
     [[nodiscard]] QString selectedRemote() const;
     [[nodiscard]] bool runInteractiveRclone(const QStringList &arguments, const QString &title, const QString &description);

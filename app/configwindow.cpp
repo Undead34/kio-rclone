@@ -816,13 +816,21 @@ void ConfigWindow::reconnectSelected()
         return;
     }
 
-    if (!runInteractiveRclone({QStringLiteral("config"), QStringLiteral("reconnect"), remote + QLatin1Char(':')},
-                              i18n("Reconnect %1", remote),
-                              i18n("Answer any questions from rclone below, then complete authorization in the browser window it opens."))) {
-        refreshRemotes();
+    if (startRcloneInTerminal(
+            {
+                QStringLiteral("config"),
+                QStringLiteral("reconnect"),
+                remote + QLatin1Char(':'),
+            })) {
         return;
     }
-    refreshRemotes();
+
+    QMessageBox::information(
+        this,
+        i18n("Reconnect %1", remote),
+        i18n("No supported terminal was found. Run this command manually:\n\n%1 config reconnect %2:",
+             m_rclone.executable(),
+             remote));
 }
 
 bool ConfigWindow::renameRemote(const QString &oldName, const QString &newName)
@@ -1070,15 +1078,7 @@ void ConfigWindow::openSelected()
 
 void ConfigWindow::openAdvancedConfiguration()
 {
-    const QString konsole = QStandardPaths::findExecutable(QStringLiteral("konsole"));
-    if (!konsole.isEmpty()) {
-        QProcess::startDetached(konsole, {QStringLiteral("-e"), m_rclone.executable(), QStringLiteral("config")});
-        return;
-    }
-
-    const QString xterm = QStandardPaths::findExecutable(QStringLiteral("xterm"));
-    if (!xterm.isEmpty()) {
-        QProcess::startDetached(xterm, {QStringLiteral("-e"), m_rclone.executable(), QStringLiteral("config")});
+    if (startRcloneInTerminal({QStringLiteral("config")})) {
         return;
     }
 
@@ -1087,6 +1087,30 @@ void ConfigWindow::openAdvancedConfiguration()
                              i18n("No supported terminal was found. Run this "
                                   "command manually:\n\n%1 config",
                                   m_rclone.executable()));
+}
+
+bool ConfigWindow::startRcloneInTerminal(
+    const QStringList &arguments) const
+{
+    QStringList terminalArguments{
+        QStringLiteral("-e"),
+        m_rclone.executable(),
+    };
+    terminalArguments.append(arguments);
+
+    const QString konsole = QStandardPaths::findExecutable(QStringLiteral("konsole"));
+    if (!konsole.isEmpty()
+        && QProcess::startDetached(konsole, terminalArguments)) {
+        return true;
+    }
+
+    const QString xterm = QStandardPaths::findExecutable(QStringLiteral("xterm"));
+    if (!xterm.isEmpty()
+        && QProcess::startDetached(xterm, terminalArguments)) {
+        return true;
+    }
+
+    return false;
 }
 
 void ConfigWindow::updateActions()
