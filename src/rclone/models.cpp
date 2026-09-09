@@ -173,6 +173,13 @@ RcloneItem::fromJson(const QJsonObject &object)
     item.size = size;
     item.isDirectory = isDirValue.toBool();
 
+    // A file whose size is unknown is commonly a virtual export (for example
+    // a native Google Doc exposed as DOCX). Re-uploading that export through
+    // the same visible path can create or replace a different kind of object,
+    // so keep it read-only unless a future backend supplies a stronger import
+    // contract.
+    item.readOnly = !item.isDirectory && item.size < 0;
+
     if (!readOptionalString(
             object,
             QStringLiteral("ID"),

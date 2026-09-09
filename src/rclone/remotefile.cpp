@@ -72,6 +72,24 @@ bool canWrite(QIODevice::OpenMode mode)
     return mode.testFlag(QIODevice::WriteOnly);
 }
 
+bool seedMatches(const RcloneLocalFileSeed &seed,
+                 const QString &remoteSpec,
+                 const RcloneItem &item)
+{
+    if (seed.localPath.isEmpty()
+        || seed.remoteSpec != remoteSpec
+        || !seed.source.exists
+        || seed.source.id != item.id
+        || seed.source.modificationTime != item.modificationTime
+        || seed.source.size != item.size) {
+        return false;
+    }
+
+    // Reusing bytes without at least one remote version signal could serve a
+    // stale export indefinitely on a backend with unknown sizes.
+    return !item.id.isEmpty() || item.modificationTime.isValid();
+}
+
 } // namespace
 
 RcloneRemoteFile::RcloneRemoteFile(
@@ -90,7 +108,8 @@ RcloneRemoteFile::RcloneRemoteFile(
 RcloneStatus
 RcloneRemoteFile::open(const QString &remoteSpec,
                        QIODevice::OpenMode mode,
-                       const RcloneContext &ctx)
+                       const RcloneContext &ctx,
+                       const RcloneLocalFileSeed &localSeed)
 {
     if (isOpen()) {
         return failure(
@@ -136,6 +155,7 @@ RcloneRemoteFile::open(const QString &remoteSpec,
     m_dirty = false;
     m_hasLocalCopy = false;
     m_hasSparseCache = false;
+    m_usesLocalSeed = false;
     m_cachedBlocks.clear();
     m_originalTarget = {};
 
@@ -178,6 +198,20 @@ RcloneRemoteFile::open(const QString &remoteSpec,
             // Opening with Truncate must replace the remote file even when no
             // subsequent write() arrives before close().
             m_dirty = true;
+        } else if (!writable
+                   && m_size < 0
+                   && seedMatches(localSeed, remoteSpec, *item.data)) {
+            m_seedFile.setFileName(localSeed.localPath);
+
+            if (!m_seedFile.open(QIODevice::ReadOnly)) {
+                const QString error = m_seedFile.errorString();
+                reset();
+                return failure(RcloneErrorCode::ProcessFailure, error);
+            }
+
+            m_size = m_seedFile.size();
+            m_hasLocalCopy = true;
+            m_usesLocalSeed = true;
         } else if (writable
                    || m_size < 0
                    || m_size <= m_cachePolicy.wholeFileLimit) {
@@ -352,6 +386,18 @@ RcloneRemoteFile::seek(qint64 offset)
     }
 
     if (m_hasLocalCopy || m_hasSparseCache) {
+        if (m_usesLocalSeed) {
+            if (!m_seedFile.isOpen()
+                || !m_seedFile.seek(offset)) {
+                return failure(
+                    RcloneErrorCode::ProcessFailure,
+                    m_seedFile.errorString());
+            }
+
+            m_position = offset;
+            return success();
+        }
+
         if (!m_localFile.isOpen()
             && !m_localFile.open()) {
             return failure(
@@ -431,6 +477,10 @@ RcloneRemoteFile::flush(const RcloneContext &ctx)
     // FileJob writes are staged locally. A flush must never turn into a
     // network upload: applications such as LibreOffice may issue many flushes
     // while a document is still being edited.
+    if (m_usesLocalSeed) {
+        return success();
+    }
+
     if (!m_hasLocalCopy) {
         return success();
     }
@@ -524,6 +574,7 @@ RcloneRemoteFile::prepareEmptyLocalCopy()
     m_size = 0;
     m_hasLocalCopy = true;
     m_hasSparseCache = false;
+    m_usesLocalSeed = false;
     m_cachedBlocks.clear();
     return success();
 }
@@ -599,6 +650,7 @@ RcloneRemoteFile::ensureLocalCopy(const RcloneContext &ctx)
     m_size = downloadedSize;
     m_hasLocalCopy = true;
     m_hasSparseCache = false;
+    m_usesLocalSeed = false;
     m_cachedBlocks.clear();
 
     if (!m_localFile.seek(m_position)) {
@@ -637,6 +689,7 @@ RcloneRemoteFile::prepareSparseLocalCache()
 
     m_hasLocalCopy = false;
     m_hasSparseCache = true;
+    m_usesLocalSeed = false;
     m_cachedBlocks.clear();
     return success();
 }
@@ -746,6 +799,27 @@ RcloneRemoteFile::ensureSparseRange(
 RcloneResponse<QByteArray>
 RcloneRemoteFile::readLocal(qint64 size)
 {
+    if (m_usesLocalSeed) {
+        if (!m_seedFile.isOpen()
+            || !m_seedFile.seek(m_position)) {
+            return readFailure(
+                RcloneErrorCode::ProcessFailure,
+                m_seedFile.errorString());
+        }
+
+        const QByteArray data = m_seedFile.read(size);
+
+        if (data.isEmpty()
+            && m_seedFile.error() != QFileDevice::NoError) {
+            return readFailure(
+                RcloneErrorCode::ProcessFailure,
+                m_seedFile.errorString());
+        }
+
+        m_position = m_seedFile.pos();
+        return readSuccess(data);
+    }
+
     if (!m_localFile.isOpen()
         && !m_localFile.open()) {
         return readFailure(
@@ -774,6 +848,8 @@ RcloneRemoteFile::readLocal(qint64 size)
 
 void RcloneRemoteFile::reset()
 {
+    m_seedFile.close();
+    m_seedFile.setFileName({});
     m_localFile.close();
     m_localFile.remove();
 
@@ -784,6 +860,7 @@ void RcloneRemoteFile::reset()
     m_dirty = false;
     m_hasLocalCopy = false;
     m_hasSparseCache = false;
+    m_usesLocalSeed = false;
     m_cachedBlocks.clear();
     m_originalTarget = {};
 }

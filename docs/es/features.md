@@ -22,6 +22,14 @@ las decisiones específicas del proveedor a rclone.
 | Ver espacio libre | Usa `rclone about` si el backend lo soporta. |
 | Configurar | Abre el configurador pequeño de KIO Rclone. |
 
+Los documentos nativos que rclone exporta pueden devolver `Size: -1`. Para
+esos objetos KIO Rclone descarga la exportación a un temporal privado, mide sus
+bytes exactos y reutiliza esa materialización en la descarga o apertura
+aleatoria siguiente. Nunca sustituye el tamaño por `0`, `1` ni por el tamaño
+del metadato nativo del proveedor. Estas exportaciones virtuales se presentan
+como sólo lectura porque guardar el archivo Office exportado podría sustituir
+un objeto nativo de otro tipo.
+
 ## Reapertura rápida, con frescura acotada
 
 KIO Rclone guarda una caché privada y pequeña de listados completos que

@@ -21,6 +21,10 @@ user-visible protocol or packaging behavior.
 - Uploads retain the old remote object until a complete sibling upload has
   finished, validate the destination version immediately before publication,
   and avoid repeating a destination `stat` already performed by the caller.
+- Virtual exports reported with `Size: -1` are downloaded once for an exact
+  `stat()` size and reused by `get()` or `FileJob::open()` in the same worker.
+  Such objects remain read-only so saving an exported DOCX cannot replace a
+  native Google Doc.
 
 ## 0.4.4 — 2026-09-07
 

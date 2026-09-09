@@ -49,11 +49,30 @@ public:
                                           const QDateTime &mtime) override;
 
 private:
+    [[nodiscard]] RcloneStatus
+    materializeUnknownSizeFile(const QString &remoteSpec,
+                               RcloneItem &item);
+
+    [[nodiscard]] bool
+    cachedMaterializationMatches(const QString &remoteSpec,
+                                 const RcloneItem &item) const;
+
+    [[nodiscard]] KIO::WorkerResult
+    sendCachedMaterialization(const QUrl &url);
+
+    void clearMaterializationCache();
+
     RcloneClient m_client;
     RcloneNavigation m_navigation;
 
     std::unique_ptr<RcloneRemoteFile> m_openFile;
     QUrl m_openUrl;
+
+    // One fully materialized virtual export is enough to bridge the common
+    // stat() -> get() sequence without downloading it twice.
+    std::unique_ptr<QTemporaryFile> m_materializedFile;
+    QString m_materializedRemoteSpec;
+    RcloneTargetSnapshot m_materializedSource;
 };
 
 // /*

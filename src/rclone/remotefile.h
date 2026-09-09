@@ -3,6 +3,7 @@
 #include "client.h"
 
 #include <QByteArray>
+#include <QFile>
 #include <QIODevice>
 #include <QSet>
 #include <QTemporaryFile>
@@ -20,6 +21,18 @@ struct RcloneFileCachePolicy {
     qint64 readAheadBlockSize = 8LL * 1024 * 1024;
 };
 
+/**
+ * @brief A complete local file whose remote version was already observed.
+ *
+ * The seed is borrowed for the duration of a read-only FileJob. Its owner must
+ * keep localPath alive until close().
+ */
+struct RcloneLocalFileSeed {
+    QString remoteSpec;
+    RcloneTargetSnapshot source;
+    QString localPath;
+};
+
 class RcloneRemoteFile
 {
 public:
@@ -30,7 +43,8 @@ public:
     [[nodiscard]] RcloneStatus
     open(const QString &remoteSpec,
          QIODevice::OpenMode mode,
-         const RcloneContext &ctx);
+         const RcloneContext &ctx,
+         const RcloneLocalFileSeed &localSeed = {});
 
     [[nodiscard]] RcloneResponse<QByteArray>
     read(qint64 size,
@@ -87,10 +101,12 @@ private:
     bool m_dirty = false;
     bool m_hasLocalCopy = false;
     bool m_hasSparseCache = false;
+    bool m_usesLocalSeed = false;
 
     QSet<qint64> m_cachedBlocks;
 
     RcloneTargetSnapshot m_originalTarget;
 
     QTemporaryFile m_localFile;
+    QFile m_seedFile;
 };

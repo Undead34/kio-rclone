@@ -186,6 +186,13 @@ descriptor. Larger read-only files use a sparse local file populated in
 8 MiB blocks, so nearby reads share one rclone range request without forcing a
 large object to be downloaded in full.
 
+`Size: -1` is never converted to a placeholder. For a direct `stat` of an
+ordinary remote or My Drive path, the worker materializes the complete export,
+measures the resulting local file, and advertises that exact size. A one-entry
+versioned cache bridges the common `stat` then `get`/`open` sequence.
+Unknown-size objects stay read-only because an exported Office file is not
+necessarily the same object type as its native provider source.
+
 Every writable mode uses a complete local copy. `write`, `seek`, `truncate`,
 and flush never publish intermediate state. On `close`, the client uploads a
 complete sibling object, checks the destination ID/time/size against the

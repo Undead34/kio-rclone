@@ -20,6 +20,13 @@ specific decisions to rclone.
 | View free space | Uses `rclone about` when supported by the backend. |
 | Configure | Opens KIO Rclone's small configurator. |
 
+Native provider documents exported by rclone can report `Size: -1`. For those
+objects KIO Rclone downloads the export to a private temporary file, measures
+the exact bytes, and reuses that materialization for the following download or
+random-access open. It never substitutes `0`, `1`, or the provider's native
+metadata size. These virtual exports are exposed read-only because saving the
+exported Office file could otherwise replace a different native object type.
+
 ## Fast folder reopening, with bounded freshness
 
 KIO Rclone keeps a small, private cache of complete successful directory

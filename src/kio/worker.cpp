@@ -29,6 +29,8 @@ Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 
 namespace {
 
+constexpr qsizetype MaterializedReadChunkSize = 256 * 1024;
+
 class KIOPluginForMetaData : public QObject
 {
     Q_OBJECT
@@ -464,14 +466,39 @@ KIO::WorkerResult RcloneWorker::stat(const QUrl &url)
         return KIO::WorkerResult::pass();
     }
 
-    QUrl itemUrl = withItemIdentity(url, *item.data);
+    RcloneItem resolvedItem = *item.data;
+
+    const bool canMaterialize =
+        location->kind() == RcloneLocation::Kind::Standard
+        || location->kind() == RcloneLocation::Kind::DriveMyDrive;
+
+    if (canMaterialize
+        && !resolvedItem.isDirectory
+        && resolvedItem.size < 0) {
+        const RcloneStatus materialized = materializeUnknownSizeFile(
+            location->toCliSpec(),
+            resolvedItem);
+
+        if (!materialized.success()) {
+            return rcloneFailure(
+                materialized.error,
+                url,
+                KIO::ERR_CANNOT_STAT);
+        }
+
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+    }
+
+    QUrl itemUrl = withItemIdentity(url, resolvedItem);
 
     if (location->isDriveVirtual()) {
         itemUrl = withRemoteType(itemUrl, QStringLiteral("drive"));
     }
 
     statEntry(makeEntry(RcloneNavigationEntry::fromItem(
-        *item.data,
+        resolvedItem,
         itemUrl)));
 
     return KIO::WorkerResult::pass();
@@ -589,12 +616,37 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return KIO::WorkerResult::pass();
     }
 
-    mimeType(item.data->mimeType.isEmpty()
-                 ? QStringLiteral("application/octet-stream")
-                 : item.data->mimeType);
+    RcloneItem resolvedItem = *item.data;
+    const bool requiresMaterialization =
+        resolvedItem.size < 0;
 
-    if (item.data->size >= 0) {
-        totalSize(item.data->size);
+    if (requiresMaterialization) {
+        const RcloneStatus materialized = materializeUnknownSizeFile(
+            location->toCliSpec(),
+            resolvedItem);
+
+        if (!materialized.success()) {
+            return rcloneFailure(
+                materialized.error,
+                url,
+                KIO::ERR_CANNOT_READ);
+        }
+
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+    }
+
+    mimeType(resolvedItem.mimeType.isEmpty()
+                 ? QStringLiteral("application/octet-stream")
+                 : resolvedItem.mimeType);
+
+    if (requiresMaterialization) {
+        return sendCachedMaterialization(url);
+    }
+
+    if (resolvedItem.size >= 0) {
+        totalSize(resolvedItem.size);
     }
 
     qint64 processed = 0;
@@ -616,7 +668,7 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
         return rcloneFailure(status.error, url, KIO::ERR_CANNOT_READ);
     }
 
-    if (item.data->size >= 0 && processed != item.data->size) {
+    if (resolvedItem.size >= 0 && processed != resolvedItem.size) {
         return KIO::WorkerResult::fail(
             KIO::ERR_CANNOT_READ,
             i18n("The remote file changed while it was being read."));
@@ -1261,10 +1313,19 @@ RcloneWorker::open(const QUrl &url,
 
     WorkerRcloneContext ctx(*this);
     auto file = std::make_unique<RcloneRemoteFile>(m_client);
+    RcloneLocalFileSeed localSeed;
+
+    if (m_materializedFile) {
+        localSeed.remoteSpec = m_materializedRemoteSpec;
+        localSeed.source = m_materializedSource;
+        localSeed.localPath = m_materializedFile->fileName();
+    }
+
     const RcloneStatus status = file->open(
         location->toCliSpec(),
         mode,
-        ctx);
+        ctx,
+        localSeed);
 
     if (!status.success()) {
         if (status.error.code == RcloneErrorCode::AlreadyExists) {
@@ -1491,6 +1552,176 @@ RcloneWorker::setModificationTime(const QUrl &url,
 }
 
 /// Privates
+
+RcloneStatus
+RcloneWorker::materializeUnknownSizeFile(
+    const QString &remoteSpec,
+    RcloneItem &item)
+{
+    if (cachedMaterializationMatches(remoteSpec, item)) {
+        item.size = m_materializedFile->size();
+        return {
+            true,
+            {RcloneErrorCode::None, {}, 0},
+        };
+    }
+
+    clearMaterializationCache();
+
+    const RcloneTargetSnapshot sourceSnapshot =
+        RcloneTargetSnapshot::fromItem(item);
+    const QString suffix = QFileInfo(item.name).completeSuffix();
+    const QString extension = suffix.isEmpty()
+        ? QString()
+        : QLatin1Char('.') + suffix;
+    auto temporaryFile = std::make_unique<QTemporaryFile>(
+        QDir::tempPath()
+        + QStringLiteral("/kio-rclone-materialized-XXXXXX")
+        + extension);
+
+    if (!temporaryFile->open()) {
+        return {
+            false,
+            {
+                RcloneErrorCode::ProcessFailure,
+                temporaryFile->errorString(),
+                -1,
+            },
+        };
+    }
+
+    bool localWriteFailed = false;
+    QString localError;
+    WorkerRcloneContext ctx(*this);
+
+    const RcloneStatus downloaded = m_client.download(
+        remoteSpec,
+        [this, &temporaryFile, &localWriteFailed, &localError](
+            const QByteArray &chunk) {
+            if (wasKilled()) {
+                return false;
+            }
+
+            if (temporaryFile->write(chunk) != chunk.size()) {
+                localWriteFailed = true;
+                localError = temporaryFile->errorString();
+                return false;
+            }
+
+            return true;
+        },
+        ctx);
+
+    if (localWriteFailed) {
+        return {
+            false,
+            {
+                RcloneErrorCode::ProcessFailure,
+                localError,
+                -1,
+            },
+        };
+    }
+
+    if (!downloaded.success()) {
+        return downloaded;
+    }
+
+    if (!temporaryFile->flush()
+        || !temporaryFile->seek(0)) {
+        return {
+            false,
+            {
+                RcloneErrorCode::ProcessFailure,
+                temporaryFile->errorString(),
+                -1,
+            },
+        };
+    }
+
+    item.size = temporaryFile->size();
+    m_materializedRemoteSpec = remoteSpec;
+    m_materializedSource = sourceSnapshot;
+    m_materializedFile = std::move(temporaryFile);
+
+    return {
+        true,
+        {RcloneErrorCode::None, {}, 0},
+    };
+}
+
+bool
+RcloneWorker::cachedMaterializationMatches(
+    const QString &remoteSpec,
+    const RcloneItem &item) const
+{
+    if (!m_materializedFile
+        || m_materializedRemoteSpec != remoteSpec
+        || m_materializedSource.id != item.id
+        || m_materializedSource.modificationTime != item.modificationTime
+        || m_materializedSource.size != item.size) {
+        return false;
+    }
+
+    // Without an ID or timestamp there is no version signal with which to
+    // distinguish a fresh export from a stale cached one.
+    return !item.id.isEmpty() || item.modificationTime.isValid();
+}
+
+KIO::WorkerResult
+RcloneWorker::sendCachedMaterialization(const QUrl &url)
+{
+    if (!m_materializedFile
+        || !m_materializedFile->seek(0)) {
+        const QString error = m_materializedFile
+            ? m_materializedFile->errorString()
+            : url.toDisplayString();
+        clearMaterializationCache();
+        return KIO::WorkerResult::fail(
+            KIO::ERR_CANNOT_READ,
+            error);
+    }
+
+    totalSize(m_materializedFile->size());
+    qint64 processed = 0;
+
+    while (true) {
+        if (wasKilled()) {
+            return KIO::WorkerResult::pass();
+        }
+
+        const QByteArray chunk =
+            m_materializedFile->read(MaterializedReadChunkSize);
+
+        if (chunk.isEmpty()) {
+            if (m_materializedFile->error()
+                != QFileDevice::NoError) {
+                const QString error =
+                    m_materializedFile->errorString();
+                clearMaterializationCache();
+                return KIO::WorkerResult::fail(
+                    KIO::ERR_CANNOT_READ,
+                    error);
+            }
+
+            break;
+        }
+
+        data(chunk);
+        processed += chunk.size();
+        processedSize(processed);
+    }
+
+    data(QByteArray());
+    return KIO::WorkerResult::pass();
+}
+
+void RcloneWorker::clearMaterializationCache()
+{
+    m_materializedFile.reset();
+    m_materializedRemoteSpec.clear();
+    m_materializedSource = {};
+}
 
 
 
