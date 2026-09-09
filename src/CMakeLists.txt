@@ -31,6 +31,10 @@ kcoreaddons_add_plugin(kio_rclone
     INSTALL_NAMESPACE kf6/kio
 )
 
+install(FILES rclone.json
+    DESTINATION ${KDE_INSTALL_DATADIR}/kservices6/kio
+)
+
 target_link_libraries(kio_rclone
     PRIVATE
         kio_rclone_common
