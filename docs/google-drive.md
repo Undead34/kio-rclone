@@ -84,7 +84,7 @@ grows:
 | `rclone:/Google%20Drive/my-drive/` | Your normal Drive root | Allowed when Drive permits it. |
 | `rclone:/Google%20Drive/shared-with-me/` | Files shared with you | Read-only. |
 | `rclone:/Google%20Drive/shared-drives/` | Shared Drives available to the account | Open a named drive; its URL uses the stable Drive ID. |
-| `rclone:/Google%20Drive/trash/` | Trashed items in their original folder structure | Read-only. |
+| `rclone:/Google%20Drive/trash/` | Items currently in Trash | Read-only. |
 | `rclone:/Google%20Drive/starred/` | Starred files | Read-only. |
 | `rclone:/Google%20Drive/folders/<FOLDER_ID>/` | A known folder ID as a temporary root | Allowed when Drive permits it. |
 
@@ -92,14 +92,6 @@ The `folders/<FOLDER_ID>/` route is intentionally entered in Dolphin's
 location bar; it is not listed as an empty folder because rclone cannot
 enumerate every useful folder ID. It is useful for a folder URL or an ID you
 already know, including a supported Computer folder.
-
-**Trash is not a flat Google Drive web view.** rclone deliberately preserves
-each trashed item's original path, so Dolphin can show ordinary parent folders
-that only provide navigation to a trashed child. Those folders are contextual
-scaffolding, not a second listing of your live Drive. The worker labels the
-view **Trash (original folder structure)** and keeps it read-only rather than
-inventing an ID-based flat view that could not safely support normal KIO file
-operations.
 
 If you already bookmarked a raw Drive path, insert `my-drive/`: for example,
 `rclone:/Google%20Drive/Projects/` becomes

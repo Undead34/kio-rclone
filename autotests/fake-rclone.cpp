@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -41,6 +42,7 @@ constexpr auto ListingChunkSizeEnvironment = "KIO_RCLONE_TEST_LIST_CHUNK_SIZE";
 constexpr auto ListingChunkDelayEnvironment = "KIO_RCLONE_TEST_LIST_CHUNK_DELAY_MS";
 constexpr auto ListingCounterEnvironment = "KIO_RCLONE_TEST_LIST_COUNTER";
 constexpr auto ListingSpecEnvironment = "KIO_RCLONE_TEST_LISTING_SPEC";
+constexpr auto ListingRecursiveEnvironment = "KIO_RCLONE_TEST_LISTING_RECURSIVE";
 constexpr auto RemoteTypeEnvironment = "KIO_RCLONE_TEST_REMOTE_TYPE";
 constexpr auto ListingFailureFile = ".kio-rclone-test-fail-listing";
 
@@ -61,6 +63,7 @@ struct LogicalItem {
     qint64 size = -1;
     QDateTime modificationTime;
     bool isDirectory = false;
+    bool trashed = false;
 };
 
 bool writeAll(int descriptor, const char *data, qsizetype size)
@@ -290,6 +293,29 @@ void captureListingSpec(const QString &remoteSpec)
     }
 }
 
+void captureRecursiveListing(bool recursive)
+{
+    const QString capturePath = qEnvironmentVariable(ListingRecursiveEnvironment);
+    if (capturePath.isEmpty()) {
+        return;
+    }
+
+    QFile capture(capturePath);
+    if (capture.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        capture.write(recursive ? QByteArrayLiteral("1") : QByteArrayLiteral("0"));
+    }
+}
+
+bool isTrashView(const QString &remoteSpec)
+{
+    return remoteSpec.contains(QStringLiteral(",trashed_only:"));
+}
+
+bool isPathBelow(const QString &path, const QString &directory)
+{
+    return directory.isEmpty() || path.startsWith(directory + QLatin1Char('/'));
+}
+
 RemotePath resolveRemotePath(const QString &root, const QString &remoteSpec)
 {
     RemotePath result;
@@ -368,6 +394,7 @@ QList<LogicalItem> readLogicalItems(QString *error)
             item.modificationTime = QDateTime::fromString(object.value(QStringLiteral("ModTime")).toString(), Qt::ISODate);
         }
         item.isDirectory = object.value(QStringLiteral("IsDir")).toBool();
+        item.trashed = object.value(QStringLiteral("Trashed")).toBool();
 
         if (item.name.isEmpty()) {
             item.name = item.path.section(QLatin1Char('/'), -1);
@@ -473,10 +500,11 @@ int writePersistentStat(const QString &root, const QString &remoteSpec, const QL
     return writeAll(STDOUT_FILENO, json.constData(), json.size()) ? 0 : 1;
 }
 
-int writePersistentListing(const QString &root, const QString &remoteSpec, const QList<LogicalItem> &logicalItems)
+int writePersistentListing(const QString &root, const QString &remoteSpec, const QList<LogicalItem> &logicalItems, bool recursive)
 {
     incrementListingCounter();
     captureListingSpec(remoteSpec);
+    captureRecursiveListing(recursive);
     if (QFileInfo::exists(QDir(root).filePath(QString::fromLatin1(ListingFailureFile)))) {
         return writeError(QByteArrayLiteral("listing intentionally failed"));
     }
@@ -491,15 +519,33 @@ int writePersistentListing(const QString &root, const QString &remoteSpec, const
     }
 
     QJsonArray items;
-    const QFileInfoList entries = QDir(directoryPath.localPath).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name | QDir::DirsFirst);
-    for (const QFileInfo &entry : entries) {
-        RemotePath entryPath = directoryPath;
-        entryPath.relativePath = directoryPath.relativePath.isEmpty() ? entry.fileName() : directoryPath.relativePath + QLatin1Char('/') + entry.fileName();
-        entryPath.localPath = entry.absoluteFilePath();
-        items.append(jsonItem(entryPath, entry));
+    const bool trashView = isTrashView(remoteSpec);
+    if (!trashView && recursive) {
+        QDirIterator entries(directoryPath.localPath, QDir::AllEntries | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+        while (entries.hasNext()) {
+            const QFileInfo entry(entries.next());
+            RemotePath entryPath = directoryPath;
+            const QString belowDirectory = QDir(directoryPath.localPath).relativeFilePath(entry.absoluteFilePath());
+            entryPath.relativePath = directoryPath.relativePath.isEmpty() ? belowDirectory
+                                                                          : directoryPath.relativePath + QLatin1Char('/') + belowDirectory;
+            entryPath.localPath = entry.absoluteFilePath();
+            items.append(jsonItem(entryPath, entry));
+        }
+    } else if (!trashView) {
+        const QFileInfoList entries = QDir(directoryPath.localPath).entryInfoList(QDir::AllEntries | QDir::NoDotAndDotDot, QDir::Name | QDir::DirsFirst);
+        for (const QFileInfo &entry : entries) {
+            RemotePath entryPath = directoryPath;
+            entryPath.relativePath = directoryPath.relativePath.isEmpty() ? entry.fileName()
+                                                                           : directoryPath.relativePath + QLatin1Char('/') + entry.fileName();
+            entryPath.localPath = entry.absoluteFilePath();
+            items.append(jsonItem(entryPath, entry));
+        }
     }
     for (const LogicalItem &item : logicalItems) {
-        if (item.remote == directoryPath.remote && parentPath(item.path) == directoryPath.relativePath) {
+        const bool selectedByTrash = !trashView || item.trashed;
+        const bool selectedByDepth = recursive ? isPathBelow(item.path, directoryPath.relativePath)
+                                               : parentPath(item.path) == directoryPath.relativePath;
+        if (item.remote == directoryPath.remote && selectedByTrash && selectedByDepth) {
             items.append(jsonItem(item));
         }
     }
@@ -868,7 +914,10 @@ int runPersistent(const QString &root, const QStringList &arguments)
     if (command == QLatin1String("lsjson")) {
         const QString remoteSpec = arguments.size() >= 3 ? arguments.at(2) : QString();
         return arguments.contains(QStringLiteral("--stat")) ? writePersistentStat(root, remoteSpec, logicalItems)
-                                                            : writePersistentListing(root, remoteSpec, logicalItems);
+                                                            : writePersistentListing(root,
+                                                                                     remoteSpec,
+                                                                                     logicalItems,
+                                                                                     arguments.contains(QStringLiteral("--recursive")));
     }
     if (command == QLatin1String("cat")) {
         return streamPersistentDownload(root, arguments, logicalItems);

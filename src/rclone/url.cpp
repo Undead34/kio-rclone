@@ -5,6 +5,7 @@
  */
 
 #include "url.h"
+#include <QStringList>
 
 namespace
 {
@@ -25,19 +26,22 @@ bool isValidRemoteName(const QString &name)
 }
 } // namespace
 
-// ':' is invalid in an rclone remote name, while KIO permits it in a path
-// component. Reserving it prevents the virtual launcher from shadowing user
-// data such as a remote literally named ".kio-rclone-config".
 const QString RcloneUrl::ConfigureEntry = QStringLiteral(".kio-rclone-config:");
 const QString RcloneUrl::ConfigurationLauncherScheme = QStringLiteral(KIO_RCLONE_CONFIG_LAUNCH_SCHEME);
 const QString RcloneUrl::ConfigurationLauncherMimeType = QStringLiteral(KIO_RCLONE_CONFIG_LAUNCH_MIME_TYPE);
 
-RcloneUrl::RcloneUrl(const QUrl &url)
+RcloneUrl::RcloneUrl(const QUrl &url, const QString &remote, const QString &remotePath)
+    : m_url(url)
+    , m_remote(remote)
+    , m_remotePath(remotePath)
+{
+}
+
+std::optional<RcloneUrl> RcloneUrl::parse(const QUrl &url)
 {
     if (url.scheme() != QLatin1String("rclone")) {
-        return;
+        return std::nullopt;
     }
-    m_url = url;
 
     QStringList parts;
     if (!url.host().isEmpty()) {
@@ -48,46 +52,44 @@ RcloneUrl::RcloneUrl(const QUrl &url)
     const auto pathParts = path.split(QLatin1Char('/'), Qt::SkipEmptyParts);
     parts.append(pathParts);
 
-    // A KIO URL is hierarchical, while some rclone backends (notably Google
-    // Drive) allow literal dot names. They cannot be represented safely here:
-    // accepting them would turn a remote object into traversal syntax.
+    // KIO procesa rutas jerárquicas, pero backends como Google Drive permiten
+    // nombres literales con puntos. Rechazamos esto para prevenir path traversal.
     for (const QString &part : parts) {
         if (part == QLatin1String(".") || part == QLatin1String("..") || part.contains(QChar::Null)) {
-            return;
+            return std::nullopt;
         }
     }
+
+    QString remote;
+    QString remotePath;
 
     if (!parts.isEmpty()) {
         if (parts.constFirst() != ConfigureEntry && !isValidRemoteName(parts.constFirst())) {
-            return;
+            return std::nullopt;
         }
-        m_remote = parts.takeFirst();
-        m_remotePath = parts.join(QLatin1Char('/'));
+        remote = parts.takeFirst();
+        remotePath = parts.join(QLatin1Char('/'));
     }
-    m_valid = true;
-}
 
-bool RcloneUrl::isValid() const
-{
-    return m_valid;
+    return RcloneUrl(url, remote, remotePath);
 }
 
 bool RcloneUrl::isRoot() const
 {
-    return m_valid && m_remote.isEmpty();
+    return m_remote.isEmpty();
 }
 
 bool RcloneUrl::isConfigureEntry() const
 {
-    return m_valid && m_remote == ConfigureEntry;
+    return m_remote == ConfigureEntry;
 }
 
 bool RcloneUrl::isRemoteRoot() const
 {
-    return m_valid && !m_remote.isEmpty() && m_remotePath.isEmpty();
+    return !m_remote.isEmpty() && m_remotePath.isEmpty();
 }
 
-QString RcloneUrl::remote() const
+QString RcloneUrl::remoteName() const
 {
     return m_remote;
 }
@@ -97,21 +99,22 @@ QString RcloneUrl::remotePath() const
     return m_remotePath;
 }
 
-QString RcloneUrl::remoteSpec() const
+QString RcloneUrl::toCliSpec() const
 {
     if (m_remote.isEmpty() || isConfigureEntry()) {
         return {};
     }
-
     return m_remote + QLatin1Char(':') + m_remotePath;
 }
 
-QUrl RcloneUrl::url() const
+QUrl RcloneUrl::toQUrl() const
 {
     return m_url;
 }
 
-QUrl RcloneUrl::rootUrl()
+namespace RcloneUrlBuilder
+{
+QUrl createRoot()
 {
     QUrl url;
     url.setScheme(QStringLiteral("rclone"));
@@ -119,17 +122,18 @@ QUrl RcloneUrl::rootUrl()
     return url;
 }
 
-QUrl RcloneUrl::remoteUrl(const QString &remote)
+QUrl createForRemote(const QString &remoteName)
 {
-    QUrl url = rootUrl();
-    url.setPath(QLatin1Char('/') + remote + QLatin1Char('/'));
+    QUrl url = createRoot();
+    url.setPath(QLatin1Char('/') + remoteName + QLatin1Char('/'));
     return url;
 }
 
-QUrl RcloneUrl::configurationLauncherUrl()
+QUrl createConfigLauncher()
 {
     QUrl url;
-    url.setScheme(ConfigurationLauncherScheme);
+    url.setScheme(RcloneUrl::ConfigurationLauncherScheme);
     url.setPath(QStringLiteral("/"));
     return url;
 }
+} // namespace RcloneUrlBuilder

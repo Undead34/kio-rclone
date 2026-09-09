@@ -4,6 +4,7 @@ add_library(kio_rclone_common STATIC
     rclone/rcloneclient.cpp
     rclone/entryformat.cpp
     rclone/location.cpp
+    rclone/recursivelisting.cpp
     rclone/process.cpp
     rclone/url.cpp
 )

@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "rclone/rcloneclient.h"
+#include "rclone/models.h"
 
 #include <QList>
 

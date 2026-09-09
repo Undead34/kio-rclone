@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "rcloneclient.h"
+#include "models.h"
 
 #include <QString>
 

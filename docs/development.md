@@ -157,6 +157,23 @@ Do not reuse a manifest after changing `CMAKE_INSTALL_PREFIX`; it only
 describes the files written by the configuration that created it. A logout/login
 removes the prefix paths from the graphical session.
 
+### Fast system-debug rebuild loop
+
+For repeated system-integration debugging, run the helper from the repository
+root:
+
+~~~bash
+scripts/rebuild-system-debug.sh
+~~~
+
+It configures `build/system-debug` as a `Debug` build, compiles it, runs CTest,
+removes the previous `/usr` install using that build's install manifest, and
+then runs the documented `sudo cmake --install build/system-debug` command.
+Finally it refreshes KDE's service cache as the desktop user. The script must
+not be invoked through `sudo`; it asks for privilege only for removing the
+manifest-listed files and installing them. It assumes the manual `/usr`
+install is not mixed with an AUR `kio-rclone` package.
+
 ## Install with sudo into `/usr`
 
 Use this only for system integration testing. A manual `/usr` install conflicts

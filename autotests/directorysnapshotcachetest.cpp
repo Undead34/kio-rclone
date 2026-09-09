@@ -53,6 +53,23 @@ private Q_SLOTS:
         QVERIFY(snapshot->at(1).isDirectory);
     }
 
+    void preservesSyntheticDirectories()
+    {
+        RcloneItem synthetic = item(QStringLiteral("path-to-trash"), -1, true);
+        synthetic.readOnly = true;
+        synthetic.syntheticDirectory = true;
+
+        DirectorySnapshotCache writer;
+        QVERIFY(writer.store(QStringLiteral("work"), QStringLiteral("drive/trash"), {synthetic}));
+
+        DirectorySnapshotCache reader;
+        const auto snapshot = reader.load(QStringLiteral("work"), QStringLiteral("drive/trash"), 20);
+        QVERIFY(snapshot);
+        QCOMPARE(snapshot->size(), 1);
+        QVERIFY(snapshot->constFirst().syntheticDirectory);
+        QVERIFY(snapshot->constFirst().isDirectory);
+    }
+
     void survivesAnotherProcess()
     {
         DirectorySnapshotCache cache;
@@ -114,7 +131,7 @@ private Q_SLOTS:
         DirectorySnapshotCache cache;
         QVERIFY(cache.store(QStringLiteral("work"), QStringLiteral("Documents"), {item(QStringLiteral("private.txt"), 1)}));
 
-        const QString cacheFile = qEnvironmentVariable("XDG_CACHE_HOME") + QStringLiteral("/kio-rclone/directory-snapshots-v1.kcache");
+        const QString cacheFile = qEnvironmentVariable("XDG_CACHE_HOME") + QStringLiteral("/kio-rclone/directory-snapshots-v2.kcache");
         const QFileDevice::Permissions permissions = QFile::permissions(cacheFile);
         QVERIFY(permissions & QFileDevice::ReadOwner);
         QVERIFY(permissions & QFileDevice::WriteOwner);

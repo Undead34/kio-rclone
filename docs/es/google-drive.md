@@ -165,7 +165,7 @@ se mantengan estables a medida que crece el worker:
 | `rclone:/Google%20Drive/my-drive/` | Tu raíz normal de Drive | Permitidos si Drive los permite. |
 | `rclone:/Google%20Drive/shared-with-me/` | Archivos compartidos contigo | Solo lectura. |
 | `rclone:/Google%20Drive/shared-drives/` | Unidades compartidas disponibles para la cuenta | Abre una unidad por nombre; su URL usa el ID estable de Drive. |
-| `rclone:/Google%20Drive/trash/` | Elementos en Papelera, con la estructura de sus carpetas originales | Solo lectura. |
+| `rclone:/Google%20Drive/trash/` | Elementos actualmente en Papelera | Solo lectura. |
 | `rclone:/Google%20Drive/starred/` | Archivos destacados | Solo lectura. |
 | `rclone:/Google%20Drive/folders/<FOLDER_ID>/` | Una carpeta de ID conocido como raíz temporal | Permitidos si Drive los permite. |
 
@@ -173,15 +173,6 @@ La ruta `folders/<FOLDER_ID>/` se escribe intencionalmente en la barra de
 ubicación de Dolphin; no aparece como una carpeta vacía porque rclone no puede
 enumerar todos los IDs de carpeta útiles. Sirve para una URL de carpeta o un
 ID que ya conoces, incluso una carpeta compatible de Computers.
-
-**Papelera no es una vista plana como la web de Google Drive.** rclone conserva
-deliberadamente la ruta original de cada elemento eliminado, así que Dolphin
-puede mostrar carpetas padre normales que solo permiten navegar hasta un hijo
-en la Papelera. Esas carpetas son contexto de navegación, no una segunda lista
-de tu unidad activa. El worker etiqueta la vista como **Papelera (estructura de
-carpetas original)** y la mantiene en solo lectura, en vez de inventar una
-vista plana basada en IDs que no podría soportar de forma segura las
-operaciones normales de archivo de KIO.
 
 Si ya tenías un marcador con una ruta cruda de Drive, inserta `my-drive/`: por
 ejemplo, `rclone:/Google%20Drive/Projects/` pasa a ser

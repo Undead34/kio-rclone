@@ -12,6 +12,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+
 class RcloneClientTest : public QObject
 {
     Q_OBJECT
@@ -24,6 +26,7 @@ private Q_SLOTS:
     void parsesListing();
     void listsLocalRemote();
     void streamsFragmentedListing();
+    void streamsRecursiveListing();
 };
 
 void RcloneClientTest::parsesRemoteLists()
@@ -247,6 +250,37 @@ void RcloneClientTest::streamsFragmentedListing()
     QVERIFY(firstItemAt >= 0);
     QVERIFY2(completedAt - firstItemAt >= 80,
              qPrintable(QStringLiteral("First item arrived only %1 ms before the listing completed").arg(completedAt - firstItemAt)));
+}
+
+void RcloneClientTest::streamsRecursiveListing()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString remoteRoot = directory.filePath(QStringLiteral("remote-root"));
+    const QString nestedDirectory = QDir(remoteRoot).filePath(QStringLiteral("test/nested"));
+    QVERIFY(QDir().mkpath(nestedDirectory));
+    QVERIFY(QFile(nestedDirectory + QStringLiteral("/trashed.txt")).open(QIODevice::WriteOnly));
+
+    qputenv("KIO_RCLONE_TEST_REMOTE_ROOT", QFile::encodeName(remoteRoot));
+
+    RcloneClient backend(QStringLiteral(FAKE_RCLONE_PATH));
+    QString error;
+    QStringList paths;
+    const bool listed = backend.listStreaming(
+        QStringLiteral("test:"),
+        [&paths](const RcloneItem &item) {
+            paths.append(item.path);
+            return true;
+        },
+        &error,
+        {},
+        RcloneListingDepth::Recursive);
+
+    qunsetenv("KIO_RCLONE_TEST_REMOTE_ROOT");
+
+    QVERIFY2(listed, qPrintable(error));
+    std::sort(paths.begin(), paths.end());
+    QCOMPARE(paths, QStringList({QStringLiteral("nested"), QStringLiteral("nested/trashed.txt")}));
 }
 
 QTEST_GUILESS_MAIN(RcloneClientTest)

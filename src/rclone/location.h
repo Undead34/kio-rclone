@@ -73,6 +73,7 @@ public:
     [[nodiscard]] bool isVirtualDirectory() const;
     [[nodiscard]] bool canWrite() const;
     [[nodiscard]] bool isDriveHub() const;
+    [[nodiscard]] bool isDriveTrash() const;
     [[nodiscard]] bool isSharedDrivesRoot() const;
     [[nodiscard]] bool isFoldersRoot() const;
     [[nodiscard]] bool isPhysicalRoot() const;

@@ -8,13 +8,14 @@
 
 #include <QString>
 #include <QUrl>
+#include <optional>
 
 /**
- * Canonical parser for the public rclone:/ URL space.
+ * @brief Parser canónico y seguro para el espacio de URLs rclone:/.
  *
- * This class is the transport boundary between QUrl/KIO and rclone path
- * strings. Code outside that boundary should not rebuild remote specs by
- * slicing QUrl paths independently.
+ * Actúa como frontera inmutable entre el ecosistema KIO (QUrl) y el backend de rclone.
+ * El diseño garantiza que cualquier instancia viva de esta clase es sintácticamente
+ * válida y está protegida contra ataques de path traversal.
  */
 class RcloneUrl
 {
@@ -23,28 +24,43 @@ public:
     static const QString ConfigurationLauncherScheme;
     static const QString ConfigurationLauncherMimeType;
 
-    explicit RcloneUrl(const QUrl &url);
+    /// Único punto de instanciación. Valida el esquema, los caracteres permitidos
+    /// en el remoto y bloquea rutas con '.' o '..' literales.
+    /// @return Un objeto inmutable listo para usar, o nullopt si la URL es inválida/insegura.
+    static std::optional<RcloneUrl> parse(const QUrl &url);
 
-    /// A valid URL is a safe, canonical representation of an rclone root,
-    /// remote root, remote path, or the virtual configuration launcher.
-    [[nodiscard]] bool isValid() const;
+    /// @return true si es la raíz absoluta del KIO slave (`rclone:/`).
     [[nodiscard]] bool isRoot() const;
-    [[nodiscard]] bool isConfigureEntry() const;
-    [[nodiscard]] bool isRemoteRoot() const;
-    [[nodiscard]] QString remote() const;
-    [[nodiscard]] QString remotePath() const;
-    /// rclone's `remote:path` form for backend commands. It is not a display
-    /// URL and must not be shown to users as a substitute for url().
-    [[nodiscard]] QString remoteSpec() const;
-    [[nodiscard]] QUrl url() const;
 
-    [[nodiscard]] static QUrl rootUrl();
-    [[nodiscard]] static QUrl remoteUrl(const QString &remote);
-    [[nodiscard]] static QUrl configurationLauncherUrl();
+    /// @return true si la URL invoca el módulo virtual de configuración.
+    [[nodiscard]] bool isConfigureEntry() const;
+
+    /// @return true si apunta a la raíz de un remoto (`rclone:/mi-remoto/`) sin subrutas.
+    [[nodiscard]] bool isRemoteRoot() const;
+
+    [[nodiscard]] QString remoteName() const;
+    [[nodiscard]] QString remotePath() const;
+
+    /// Formatea la ruta nativa que exige el binario de rclone (ej. `remoto:ruta/archivo`).
+    /// @warning Estrictamente para el backend. No mostrar en la interfaz de usuario.
+    [[nodiscard]] QString toCliSpec() const;
+
+    [[nodiscard]] QUrl toQUrl() const;
 
 private:
-    bool m_valid = false;
+    explicit RcloneUrl(const QUrl &url, const QString &remote, const QString &path);
+
     QUrl m_url;
     QString m_remote;
     QString m_remotePath;
 };
+
+/**
+ * @brief Fábrica pura para la generación de URLs estándar del KIO slave.
+ */
+namespace RcloneUrlBuilder
+{
+    [[nodiscard]] QUrl createRoot();
+    [[nodiscard]] QUrl createForRemote(const QString &remoteName);
+    [[nodiscard]] QUrl createConfigLauncher();
+}

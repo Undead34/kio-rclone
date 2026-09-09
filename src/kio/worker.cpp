@@ -10,6 +10,7 @@
 #include "entrybuilder.h"
 #include "rclone/entryformat.h"
 #include "rclone/process.h"
+#include "rclone/recursivelisting.h"
 #include "rclone/url.h"
 
 #include <KLocalizedString>
@@ -63,7 +64,7 @@ QString driveDisplayName(RcloneLocation::Kind kind, const QString &identifier = 
     case RcloneLocation::Kind::DriveSharedDrives:
         return i18n("Shared Drives");
     case RcloneLocation::Kind::DriveTrash:
-        return i18n("Trash (original folder structure)");
+        return i18n("Trash");
     case RcloneLocation::Kind::DriveStarred:
         return i18n("Starred");
     case RcloneLocation::Kind::DriveFolders:
@@ -75,19 +76,6 @@ QString driveDisplayName(RcloneLocation::Kind kind, const QString &identifier = 
     case RcloneLocation::Kind::DriveHub:
     case RcloneLocation::Kind::Standard:
         break;
-    }
-    return {};
-}
-
-QString driveComment(RcloneLocation::Kind kind)
-{
-    if (kind == RcloneLocation::Kind::DriveTrash) {
-        // rclone's --drive-trashed-only deliberately retains normal parent
-        // folders so that a trashed item can be reached at its original path.
-        // See https://rclone.org/drive/#drive-trashed-only.
-        // Keep that provider behaviour, but make it clear in Dolphin that a
-        // folder in this view is not necessarily itself trashed.
-        return i18n("Shows trashed items in their original folder structure. Some folders only provide the path to a trashed item.");
     }
     return {};
 }
@@ -132,6 +120,11 @@ bool bypassesDirectorySnapshot(const QString &cacheControl)
         || cacheControl.compare(QLatin1String("refresh"), Qt::CaseInsensitive) == 0;
 }
 
+QString syntheticTrashItemKey(const QString &remote, const QString &relativePath)
+{
+    return remote + QLatin1Char('\n') + relativePath;
+}
+
 class KIOPluginForMetaData : public QObject
 {
     Q_OBJECT
@@ -161,17 +154,22 @@ RcloneWorker::RcloneWorker(const QByteArray &protocol, const QByteArray &poolSoc
 
 KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
 {
-    const RcloneUrl directory(url);
-    if (!directory.isValid()) {
+    const auto directory = RcloneUrl::parse(url);
+
+    if (!directory.has_value()) {
         return KIO::WorkerResult::fail(KIO::ERR_MALFORMED_URL, url.toDisplayString());
     }
-    if (directory.isConfigureEntry()) {
+
+    if (directory->isConfigureEntry()) {
         return KIO::WorkerResult::fail(KIO::ERR_IS_FILE, url.toDisplayString());
     }
+
     if (const auto result = ensureRcloneClient(); !result.success()) {
         return result;
     }
+
     const bool reloadRequested = bypassesDirectorySnapshot(metaData(QStringLiteral("cache")));
+
     if (directory.isRoot()) {
         if (reloadRequested) {
             invalidateDirectorySnapshots();
@@ -205,6 +203,9 @@ KIO::WorkerResult RcloneWorker::listDir(const QUrl &url)
     }
 
     const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
+    if (location->isDriveTrash()) {
+        return listDriveTrash(url, *location, policy);
+    }
     if (!reloadRequested) {
         if (const auto cachedItems = cachedDirectory(*location, policy)) {
             publishDirectoryEntries(*location, *cachedItems);
@@ -247,12 +248,63 @@ KIO::WorkerResult RcloneWorker::listDriveHub(const RcloneLocation &location)
 {
     listEntry(currentDirectoryEntry(location));
     for (const RcloneLocation::HubEntry &entry : RcloneLocation::driveHubEntries()) {
-        listEntry(KioEntryBuilder::directory(entry.name,
-                                             driveDisplayName(entry.kind),
-                                             entry.iconName,
-                                             entry.writable,
-                                             driveComment(entry.kind)));
+        listEntry(KioEntryBuilder::directory(entry.name, driveDisplayName(entry.kind), entry.iconName, entry.writable));
     }
+    return KIO::WorkerResult::pass();
+}
+
+KIO::WorkerResult RcloneWorker::listDriveTrash(const QUrl &requestUrl,
+                                               const RcloneLocation &directory,
+                                               const DirectoryListingPolicy &policy)
+{
+    if (const auto cachedItems = cachedDirectory(directory, policy)) {
+        publishDirectoryEntries(directory, *cachedItems);
+        return KIO::WorkerResult::pass();
+    }
+
+    // `--drive-trashed-only` can supply ordinary parent folders when listing
+    // one level at a time. Ask rclone for the whole filtered result once, then
+    // reconstruct only branches which lead to a trashed item. rclone documents
+    // --recursive for lsjson at https://rclone.org/commands/rclone_lsjson/.
+    QList<RcloneItem> recursiveItems;
+    QString error;
+    const bool listed = m_rclone.listStreaming(
+        directory.rcloneRootSpec(),
+        [&recursiveItems](const RcloneItem &item) {
+            recursiveItems.append(item);
+            return true;
+        },
+        &error,
+        [this]() {
+            return wasKilled();
+        },
+        RcloneListingDepth::Recursive);
+    if (wasKilled()) {
+        return KIO::WorkerResult::pass();
+    }
+    if (!listed) {
+        return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+    }
+
+    const auto listing = RcloneRecursiveListing::fromItems(recursiveItems, &error);
+    if (!listing) {
+        return errorResult(error, KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl);
+    }
+
+    rememberSyntheticTrashItems(directory, *listing);
+    for (auto snapshot = listing->directories().cbegin(); snapshot != listing->directories().cend(); ++snapshot) {
+        if (!policy.allowsSnapshots()) {
+            break;
+        }
+        const RcloneLocation snapshotDirectory = directory.withRelativePath(snapshot.key());
+        static_cast<void>(m_directorySnapshots.store(snapshotDirectory.remote(), snapshotDirectory.cachePath(), snapshot.value()));
+    }
+
+    const auto entries = listing->entries(directory.relativePath());
+    if (!entries) {
+        return KIO::WorkerResult::fail(KIO::ERR_CANNOT_ENTER_DIRECTORY, requestUrl.toDisplayString());
+    }
+    publishDirectoryEntries(directory, *entries);
     return KIO::WorkerResult::pass();
 }
 
@@ -352,8 +404,7 @@ KIO::UDSEntry RcloneWorker::currentDirectoryEntry(const RcloneLocation &location
     return KioEntryBuilder::directory(entryName,
                                       displayName,
                                       driveIconName(location.kind()),
-                                      location.canWrite(),
-                                      driveComment(location.kind()));
+                                      location.canWrite());
 }
 
 KIO::WorkerResult RcloneWorker::listRemoteDirectory(const QUrl &requestUrl,
@@ -641,6 +692,11 @@ KIO::WorkerResult RcloneWorker::get(const QUrl &url)
     }
     if (location->isVirtualDirectory() || location->isPhysicalRoot()) {
         return KIO::WorkerResult::fail(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
+    }
+    if (location->isDriveTrash()) {
+        if (const auto cachedItem = cachedItemForReadOnlyRequest(*location); cachedItem && cachedItem->syntheticDirectory) {
+            return KIO::WorkerResult::fail(KIO::ERR_IS_DIRECTORY, url.toDisplayString());
+        }
     }
 
     QString error;
@@ -1486,6 +1542,10 @@ std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const Rclon
         return std::nullopt;
     }
 
+    if (const auto syntheticItem = rememberedSyntheticTrashItem(location)) {
+        return syntheticItem;
+    }
+
     const DirectoryListingPolicy policy = DirectoryListingPolicyStore::load();
     if (!policy.allowsSnapshots()) {
         return std::nullopt;
@@ -1508,9 +1568,37 @@ std::optional<RcloneItem> RcloneWorker::cachedItemForReadOnlyRequest(const Rclon
     return *item;
 }
 
+std::optional<RcloneItem> RcloneWorker::rememberedSyntheticTrashItem(const RcloneLocation &location) const
+{
+    if (!location.isDriveTrash() || location.relativePath().isEmpty()) {
+        return std::nullopt;
+    }
+    const auto item = m_syntheticTrashItems.constFind(syntheticTrashItemKey(location.remote(), location.relativePath()));
+    return item == m_syntheticTrashItems.cend() ? std::nullopt : std::optional<RcloneItem>(*item);
+}
+
+void RcloneWorker::rememberSyntheticTrashItems(const RcloneLocation &root, const RcloneRecursiveListing &listing)
+{
+    const QString prefix = root.remote() + QLatin1Char('\n');
+    for (auto item = m_syntheticTrashItems.begin(); item != m_syntheticTrashItems.end();) {
+        item = item.key().startsWith(prefix) ? m_syntheticTrashItems.erase(item) : std::next(item);
+    }
+
+    for (auto directory = listing.directories().cbegin(); directory != listing.directories().cend(); ++directory) {
+        for (const RcloneItem &item : directory.value()) {
+            if (!item.syntheticDirectory) {
+                continue;
+            }
+            const QString relativePath = directory.key().isEmpty() ? item.name : directory.key() + QLatin1Char('/') + item.name;
+            m_syntheticTrashItems.insert(syntheticTrashItemKey(root.remote(), relativePath), item);
+        }
+    }
+}
+
 void RcloneWorker::invalidateDirectorySnapshots()
 {
     m_directorySnapshots.clear();
+    m_syntheticTrashItems.clear();
 }
 
 KIO::WorkerResult RcloneWorker::cacheRemoteFile(const QUrl &url, const RcloneLocation &location, RcloneItem &item)

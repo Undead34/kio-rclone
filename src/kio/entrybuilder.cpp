@@ -83,11 +83,10 @@ KIO::UDSEntry remote(const QString &name, bool currentDirectory, const QString &
 KIO::UDSEntry directory(const QString &name,
                          const QString &displayName,
                          const QString &iconName,
-                         bool writable,
-                         const QString &comment)
+                         bool writable)
 {
     KIO::UDSEntry entry;
-    reserveEntry(entry, comment.isEmpty() ? 4 : 5, 2);
+    reserveEntry(entry, 4, 2);
     entry.fastInsert(KIO::UDSEntry::UDS_NAME, name);
     entry.fastInsert(KIO::UDSEntry::UDS_DISPLAY_NAME, displayName);
     entry.fastInsert(KIO::UDSEntry::UDS_FILE_TYPE, S_IFDIR);
@@ -96,9 +95,6 @@ KIO::UDSEntry directory(const QString &name,
     entry.fastInsert(KIO::UDSEntry::UDS_ACCESS, access);
     entry.fastInsert(KIO::UDSEntry::UDS_ICON_NAME, iconName);
     entry.fastInsert(KIO::UDSEntry::UDS_MIME_TYPE, QStringLiteral("inode/directory"));
-    if (!comment.isEmpty()) {
-        entry.fastInsert(KIO::UDSEntry::UDS_COMMENT, comment);
-    }
     return entry;
 }
 

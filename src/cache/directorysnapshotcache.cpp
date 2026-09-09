@@ -20,12 +20,12 @@
 
 namespace
 {
-constexpr auto CacheName = "kio-rclone/directory-snapshots-v1";
-constexpr unsigned CacheSchemaVersion = 1;
+constexpr auto CacheName = "kio-rclone/directory-snapshots-v2";
+constexpr unsigned CacheSchemaVersion = 2;
 constexpr unsigned CacheSizeBytes = 8U * 1024U * 1024U;
 constexpr unsigned ExpectedSnapshotSize = 8U * 1024U;
 constexpr quint32 SnapshotMagic = 0x4b524453; // "KRDS"
-constexpr quint16 SnapshotVersion = 1;
+constexpr quint16 SnapshotVersion = 2;
 constexpr qsizetype MaximumSnapshotBytes = 1024 * 1024;
 constexpr qint64 MaximumFutureClockSkewMs = 5 * 60 * 1000;
 
@@ -36,7 +36,7 @@ QString cacheDirectoryPath()
 
 QString cacheFilePath()
 {
-    return cacheDirectoryPath() + QStringLiteral("/directory-snapshots-v1.kcache");
+    return cacheDirectoryPath() + QStringLiteral("/directory-snapshots-v2.kcache");
 }
 
 void ensurePrivateCacheDirectory()
@@ -105,12 +105,14 @@ std::optional<QString> canonicalDirectoryPath(const QString &path)
 bool isCacheableItem(const RcloneItem &item)
 {
     return !item.name.isEmpty() && !item.name.contains(QLatin1Char('/')) && item.name != QLatin1String(".") && item.name != QLatin1String("..")
-        && !item.name.contains(QChar::Null) && (item.path.isEmpty() || item.path == item.name) && item.size >= -1;
+        && !item.name.contains(QChar::Null) && (item.path.isEmpty() || item.path == item.name) && item.size >= -1
+        && (!item.syntheticDirectory || (item.isDirectory && item.readOnly && item.id.isEmpty()));
 }
 
 QString cacheKey(const QString &remote, const QString &remotePath, const QByteArray &configIdentity)
 {
-    QByteArray material("directory-snapshot-v1\0", 22);
+    QByteArray material("directory-snapshot-v2");
+    material.append('\0');
     material.append(remote.toUtf8());
     material.append('\0');
     material.append(remotePath.toUtf8());
@@ -132,7 +134,8 @@ QByteArray encodeSnapshot(const QString &remote, const QString &remotePath, cons
            << quint32(items.size());
     for (const RcloneItem &item : items) {
         const qint64 modificationTime = item.modificationTime.isValid() ? item.modificationTime.toUTC().toMSecsSinceEpoch() : -1;
-        stream << item.name << item.id << item.mimeType << item.size << item.isDirectory << item.ambiguous << item.readOnly << modificationTime;
+        stream << item.name << item.id << item.mimeType << item.size << item.isDirectory << item.ambiguous << item.readOnly << item.syntheticDirectory
+               << modificationTime;
     }
 
     if (stream.status() != QDataStream::Ok || encoded.size() > MaximumSnapshotBytes) {
@@ -182,7 +185,8 @@ std::optional<QList<RcloneItem>> decodeSnapshot(const QByteArray &encoded,
     for (quint32 index = 0; index < itemCount; ++index) {
         RcloneItem item;
         qint64 modificationTime = -1;
-        stream >> item.name >> item.id >> item.mimeType >> item.size >> item.isDirectory >> item.ambiguous >> item.readOnly >> modificationTime;
+        stream >> item.name >> item.id >> item.mimeType >> item.size >> item.isDirectory >> item.ambiguous >> item.readOnly >> item.syntheticDirectory
+            >> modificationTime;
         item.path = item.name;
         if (stream.status() != QDataStream::Ok || !isCacheableItem(item)) {
             return std::nullopt;

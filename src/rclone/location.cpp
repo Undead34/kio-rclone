@@ -254,6 +254,11 @@ bool RcloneLocation::isDriveHub() const
     return m_kind == Kind::DriveHub;
 }
 
+bool RcloneLocation::isDriveTrash() const
+{
+    return m_kind == Kind::DriveTrash;
+}
+
 bool RcloneLocation::isSharedDrivesRoot() const
 {
     return m_kind == Kind::DriveSharedDrives;

@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "rclone/rcloneclient.h"
+#include "rclone/models.h"
 
 #include <KIO/UDSEntry>
 
@@ -27,10 +27,7 @@ namespace KioEntryBuilder
 [[nodiscard]] KIO::UDSEntry directory(const QString &name,
                                        const QString &displayName,
                                        const QString &iconName,
-                                       bool writable,
-                                       // Published as UDS_COMMENT when non-empty; see
-                                       // https://api.kde.org/kio-udsentry.html.
-                                       const QString &comment = {});
+                                       bool writable);
 [[nodiscard]] bool isRepresentable(const RcloneItem &item);
 [[nodiscard]] KIO::UDSEntry item(const RcloneItem &item);
 }

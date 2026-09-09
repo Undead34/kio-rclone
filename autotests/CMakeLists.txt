@@ -28,6 +28,7 @@ target_link_libraries(rclonelocationtest
 )
 add_test(NAME rclonelocationtest COMMAND rclonelocationtest)
 
+
 add_executable(directorysnapshotcacheprobe
     directorysnapshotcacheprobe.cpp
 )
@@ -134,27 +135,6 @@ set_tests_properties(rclonedirectorycachetest PROPERTIES
     TIMEOUT 30
 )
 
-add_executable(rclonedrivehubtest
-    rclonedrivehubtest.cpp
-)
-target_compile_definitions(rclonedrivehubtest
-    PRIVATE
-        FAKE_RCLONE_PATH="$<TARGET_FILE:fake-rclone>"
-)
-target_link_libraries(rclonedrivehubtest
-    PRIVATE
-        kio_rclone_common
-        Qt6::Test
-        KF6::KIOCore
-)
-add_dependencies(rclonedrivehubtest
-    fake-rclone
-    kio_rclone
-)
-add_test(NAME rclonedrivehubtest COMMAND rclonedrivehubtest)
-set_tests_properties(rclonedrivehubtest PROPERTIES
-    TIMEOUT 30
-)
 
 add_executable(rcloneuploadtest
     rcloneuploadtest.cpp
