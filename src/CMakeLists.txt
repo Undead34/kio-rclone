@@ -2,6 +2,7 @@ add_library(kio_rclone_common STATIC
   rclone/client.cpp
   rclone/location.cpp
   rclone/models.cpp
+  rclone/mountlayout.cpp
   rclone/navigation.cpp
   rclone/navigationentry.cpp
   rclone/remotefile.cpp
