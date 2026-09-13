@@ -22,28 +22,11 @@ las decisiones específicas del proveedor a rclone.
 | Ver espacio libre | Usa `rclone about` si el backend lo soporta. |
 | Configurar | Abre el configurador pequeño de KIO Rclone. |
 
-### Puente VFS local experimental
-
-Si ya tienes un `rclone mount` gestionado manualmente, puedes abrir desde
-Dolphin la ruta física del VFS de forma optativa:
-
-~~~bash
-export KIO_RCLONE_VFS_ROOT="$XDG_RUNTIME_DIR/rclone-vfs-test"
-dolphin
-~~~
-
-Para entradas directas `Standard` y **Mi unidad** de Google Drive, el worker
-publica `UDS_LOCAL_PATH` y Dolphin puede usar `mostLocalUrl()` en vez de caer a
-KIO-FUSE. Las vistas sintéticas de Drive siguen usando la URL KIO normal
-porque no tienen necesariamente una correspondencia uno a uno en el montaje.
-Quita `KIO_RCLONE_VFS_ROOT` para volver a la ruta habitual con caché local de
-KIO-FUSE.
-
 Los documentos nativos que rclone exporta pueden devolver `Size: -1`. Para
 esos objetos KIO Rclone descarga la exportación a un temporal privado, mide sus
-bytes exactos y reutiliza esa materialización en la descarga o apertura
-aleatoria siguiente. Nunca sustituye el tamaño por `0`, `1` ni por el tamaño
-del metadato nativo del proveedor. Estas exportaciones virtuales se presentan
+bytes exactos y reutiliza esa materialización en la descarga siguiente. Nunca
+sustituye el tamaño por `0`, `1` ni por el tamaño del metadato nativo del
+proveedor. Estas exportaciones virtuales se presentan
 como sólo lectura porque guardar el archivo Office exportado podría sustituir
 un objeto nativo de otro tipo.
 

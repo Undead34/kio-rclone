@@ -41,9 +41,10 @@ kbuildsycoca6 --noincremental
 systemctl --user restart kio-fuse.service
 ~~~
 
-The `rclone` worker intentionally leaves `opening` and `truncating` disabled;
-the supported path is KIO-FUSE's local cache followed by one complete
-`KIO::put()` on flush/close. The standalone KIO-FUSE diagnostic
+The `rclone` worker does not implement random-access `FileJob` operations;
+`opening` and `truncating` therefore stay disabled. The supported editor path
+is KIO-FUSE's local cache followed by one complete `KIO::put()` on flush/close.
+The standalone KIO-FUSE diagnostic
 `--disable-filejob-io` is useful for comparing another protocol, but is not
 needed for a current KIO Rclone install.
 

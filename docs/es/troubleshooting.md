@@ -55,11 +55,12 @@ kbuildsycoca6 --noincremental
 systemctl --user restart kio-fuse.service
 ~~~
 
-El worker de `rclone` deja `opening` y `truncating` desactivados a propósito: la
-ruta admitida es la caché local de KIO-FUSE seguida de un único `KIO::put()`
-completo al hacer flush/close. La opción de diagnóstico independiente de
-KIO-FUSE `--disable-filejob-io` sirve para comparar otro protocolo, pero no es
-necesaria con una instalación actual de KIO Rclone.
+El worker de `rclone` todavía no implementa las operaciones aleatorias de
+`FileJob`; por eso `opening` y `truncating` permanecen desactivados. La ruta
+admitida para editar es la caché local de KIO-FUSE seguida de un único
+`KIO::put()` completo al hacer flush/close. La opción de diagnóstico
+independiente de KIO-FUSE `--disable-filejob-io` sirve para comparar otro
+protocolo, pero no es necesaria con una instalación actual de KIO Rclone.
 
 ## Un TXT u otro archivo ordinario no conserva los cambios
 

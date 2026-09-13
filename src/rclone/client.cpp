@@ -5,222 +5,19 @@
  */
 
 #include "client.h"
+#include "clienthelpers.h"
 
-#include <cmath>
-#include <memory>
 #include <utility>
 
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QJsonObject>
 #include <QJsonParseError>
 #include <QJsonValue>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
-#include <QUuid>
-
-namespace {
-
-class CleanupContext final : public RcloneContext
-{
-public:
-    [[nodiscard]] bool isCancelled() const override
-    {
-        return false;
-    }
-};
-
-RcloneStatus clientSuccess()
-{
-    return {
-        true,
-        {RcloneErrorCode::None, {}, 0},
-    };
-}
-
-RcloneStatus clientFailure(RcloneErrorCode code,
-                           const QString &message)
-{
-    return {
-        false,
-        {code, message, -1},
-    };
-}
-
-QString uploadStagingSpec(const QString &remoteDest)
-{
-    const qsizetype nameStart =
-        remoteDest.lastIndexOf(QLatin1Char('/')) + 1;
-    const QString fileName = remoteDest.mid(nameStart);
-    const qsizetype extensionStart =
-        fileName.lastIndexOf(QLatin1Char('.'));
-    const QString extension = extensionStart > 0
-            && fileName.size() - extensionStart <= 32
-        ? fileName.mid(extensionStart)
-        : QString();
-    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString stagingName =
-        QStringLiteral(".kio-rclone-upload-%1%2")
-            .arg(token, extension);
-
-    return remoteDest.left(nameStart) + stagingName;
-}
-
-RcloneStatus targetStillMatches(
-    const RcloneTargetSnapshot &expected,
-    const RcloneResponse<RcloneItem> &current)
-{
-    if (!current.success()) {
-        if (current.error.code != RcloneErrorCode::NotFound) {
-            return {false, current.error};
-        }
-
-        if (!expected.exists) {
-            return clientSuccess();
-        }
-
-        return clientFailure(
-            RcloneErrorCode::ProcessFailure,
-            QStringLiteral(
-                "The remote file was deleted while local changes were being prepared"));
-    }
-
-    if (!expected.exists) {
-        return clientFailure(
-            RcloneErrorCode::AlreadyExists,
-            QStringLiteral(
-                "A remote file was created while local changes were being prepared"));
-    }
-
-    if (current.data->isDirectory != expected.isDirectory) {
-        return clientFailure(
-            RcloneErrorCode::ProcessFailure,
-            QStringLiteral(
-                "The remote destination changed type while local changes were being prepared"));
-    }
-
-    if ((!expected.id.isEmpty()
-         && !current.data->id.isEmpty()
-         && expected.id != current.data->id)
-        || (expected.modificationTime.isValid()
-            && current.data->modificationTime.isValid()
-            && expected.modificationTime
-                != current.data->modificationTime)
-        || (expected.size >= 0
-            && current.data->size >= 0
-            && expected.size != current.data->size)) {
-        return clientFailure(
-            RcloneErrorCode::ProcessFailure,
-            QStringLiteral(
-                "The remote file changed while local changes were being prepared"));
-    }
-
-    return clientSuccess();
-}
-
-RcloneErrorCode classifyProcessFailure(
-    int exitCode,
-    const QString &diagnostic)
-{
-    // rclone documents these as the two not-found exit statuses. They are
-    // stable across backends and do not depend on a localized error string.
-    if (exitCode == 3 || exitCode == 4) {
-        return RcloneErrorCode::NotFound;
-    }
-
-    const QString normalized = diagnostic.trimmed().toCaseFolded();
-
-    if (normalized.contains(QStringLiteral("permission denied"))
-        || normalized.contains(QStringLiteral("access denied"))
-        || normalized.contains(QStringLiteral("unauthorized"))
-        || normalized.contains(QStringLiteral("forbidden"))) {
-        return RcloneErrorCode::PermissionDenied;
-    }
-
-    if (normalized.contains(QStringLiteral("already exists"))
-        || normalized.contains(QStringLiteral("alreadyexists"))) {
-        return RcloneErrorCode::AlreadyExists;
-    }
-
-    return RcloneErrorCode::ProcessFailure;
-}
-
-std::optional<qint64> jsonNonNegativeInteger(
-    const QJsonObject &object,
-    const QString &key)
-{
-    const QJsonValue value = object.value(key);
-
-    if (!value.isDouble()) {
-        return std::nullopt;
-    }
-
-    const qint64 number = value.toInteger(-1);
-
-    if (number < 0) {
-        return std::nullopt;
-    }
-
-    return number;
-}
-
-std::optional<qint64> jsonNonNegativeNumber(
-    const QJsonObject &object,
-    const QString &key)
-{
-    const QJsonValue value = object.value(key);
-
-    if (!value.isDouble()) {
-        return std::nullopt;
-    }
-
-    const double number = value.toDouble();
-
-    if (!std::isfinite(number)
-        || number < 0
-        || number >= 0x1p63) {
-        return std::nullopt;
-    }
-
-    return static_cast<qint64>(number);
-}
-
-void updateTransferStats(const QJsonObject &stats,
-                         qint64 fileSize,
-                         RcloneClient::TransferStats &progress)
-{
-    if (const auto bytes =
-            jsonNonNegativeInteger(stats, QStringLiteral("bytes"))) {
-        // El tamaño local es el total lógico del archivo.
-        progress.bytes = fileSize >= 0
-            ? qMin(*bytes, fileSize)
-            : *bytes;
-    }
-
-    if (const auto speed =
-            jsonNonNegativeNumber(stats, QStringLiteral("speed"))) {
-        progress.speed = *speed;
-    }
-
-    if (const auto eta =
-            jsonNonNegativeNumber(stats, QStringLiteral("eta"))) {
-        progress.etaSeconds = *eta;
-    }
-
-    if (fileSize > 0) {
-        progress.percentage = qBound(
-            0,
-            static_cast<int>(
-                100.0 * progress.bytes / fileSize),
-            100);
-    }
-}
-
-} // namespace
-
 
 RcloneClient::RcloneClient(QString executable)
     : m_executable(executable.isEmpty()
@@ -325,135 +122,6 @@ RcloneClient::listRemotes(const RcloneContext &ctx) const
 
     return {
         std::move(remotes),
-        {RcloneErrorCode::None, {}, 0},
-    };
-}
-
-RcloneResponse<QByteArray>
-RcloneClient::runConfigCommand(const QStringList &arguments,
-                               const RcloneContext &ctx) const
-{
-    QStringList command{
-        QStringLiteral("config"),
-    };
-    command.append(arguments);
-
-    return runCommand(command, ctx);
-}
-
-RcloneResponse<RcloneSpace>
-RcloneClient::spaceInfo(const QString &remoteSpec,
-                        const RcloneContext &ctx) const
-{
-    const auto result = runCommand(
-        {
-            QStringLiteral("about"),
-            remoteSpec,
-            QStringLiteral("--json"),
-        },
-        ctx);
-
-    if (!result.success()) {
-        return {std::nullopt, result.error};
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument document =
-        QJsonDocument::fromJson(*result.data, &parseError);
-
-    if (parseError.error != QJsonParseError::NoError
-        || !document.isObject()) {
-        return {
-            std::nullopt,
-            {
-                RcloneErrorCode::InvalidResponse,
-                QStringLiteral("Invalid space info JSON: %1")
-                    .arg(parseError.errorString()),
-                -1,
-            },
-        };
-    }
-
-    auto space = RcloneSpace::fromJson(document.object());
-
-    if (!space) {
-        return {
-            std::nullopt,
-            {
-                RcloneErrorCode::InvalidResponse,
-                QStringLiteral("Invalid space info values"),
-                -1,
-            },
-        };
-    }
-
-    return {
-        std::move(space),
-        {RcloneErrorCode::None, {}, 0},
-    };
-}
-
-RcloneResponse<RcloneItem>
-RcloneClient::stat(const QString &remoteSpec,
-                   const RcloneContext &ctx) const
-{
-    return stat(remoteSpec, RcloneListOptions{}, ctx);
-}
-
-RcloneResponse<RcloneItem>
-RcloneClient::stat(const QString &remoteSpec,
-                   const RcloneListOptions &options,
-                   const RcloneContext &ctx) const
-{
-    QStringList arguments{
-        QStringLiteral("lsjson"),
-        remoteSpec,
-        QStringLiteral("--stat"),
-    };
-    arguments.append(options.extraArguments);
-
-    const auto result = runCommand(arguments, ctx);
-
-    if (!result.success()) {
-        return {
-            std::nullopt,
-            result.error,
-        };
-    }
-
-    QJsonParseError parseError;
-
-    const QJsonDocument document =
-        QJsonDocument::fromJson(*result.data, &parseError);
-
-    if (parseError.error != QJsonParseError::NoError
-        || !document.isObject()) {
-        return {
-            std::nullopt,
-            {
-                RcloneErrorCode::InvalidResponse,
-                QStringLiteral("Invalid stat JSON: %1")
-                    .arg(parseError.errorString()),
-                -1,
-            },
-        };
-    }
-
-    auto item = RcloneItem::fromJson(document.object());
-
-    if (!item) {
-        return {
-            std::nullopt,
-            {
-                RcloneErrorCode::InvalidResponse,
-                QStringLiteral("Invalid stat response"),
-                -1,
-            },
-        };
-    }
-
-    return {
-        std::move(item),
         {RcloneErrorCode::None, {}, 0},
     };
 }
@@ -624,6 +292,124 @@ RcloneClient::list(const QString &remoteSpec,
     };
 }
 
+RcloneResponse<RcloneSpace>
+RcloneClient::spaceInfo(const QString &remoteSpec,
+                        const RcloneContext &ctx) const
+{
+    const auto result = runCommand(
+        {
+            QStringLiteral("about"),
+            remoteSpec,
+            QStringLiteral("--json"),
+        },
+        ctx);
+
+    if (!result.success()) {
+        return {std::nullopt, result.error};
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document =
+        QJsonDocument::fromJson(*result.data, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError
+        || !document.isObject()) {
+        return {
+            std::nullopt,
+            {
+                RcloneErrorCode::InvalidResponse,
+                QStringLiteral("Invalid space info JSON: %1")
+                    .arg(parseError.errorString()),
+                -1,
+            },
+        };
+    }
+
+    auto space = RcloneSpace::fromJson(document.object());
+
+    if (!space) {
+        return {
+            std::nullopt,
+            {
+                RcloneErrorCode::InvalidResponse,
+                QStringLiteral("Invalid space info values"),
+                -1,
+            },
+        };
+    }
+
+    return {
+        std::move(space),
+        {RcloneErrorCode::None, {}, 0},
+    };
+}
+
+RcloneResponse<RcloneItem>
+RcloneClient::stat(const QString &remoteSpec,
+                   const RcloneContext &ctx) const
+{
+    return stat(remoteSpec, RcloneListOptions{}, ctx);
+}
+
+RcloneResponse<RcloneItem>
+RcloneClient::stat(const QString &remoteSpec,
+                   const RcloneListOptions &options,
+                   const RcloneContext &ctx) const
+{
+    QStringList arguments{
+        QStringLiteral("lsjson"),
+        remoteSpec,
+        QStringLiteral("--stat"),
+    };
+    arguments.append(options.extraArguments);
+
+    const auto result = runCommand(arguments, ctx);
+
+    if (!result.success()) {
+        return {
+            std::nullopt,
+            result.error,
+        };
+    }
+
+    QJsonParseError parseError;
+
+    const QJsonDocument document =
+        QJsonDocument::fromJson(*result.data, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError
+        || !document.isObject()) {
+        return {
+            std::nullopt,
+            {
+                RcloneErrorCode::InvalidResponse,
+                QStringLiteral("Invalid stat JSON: %1")
+                    .arg(parseError.errorString()),
+                -1,
+            },
+        };
+    }
+
+    auto item = RcloneItem::fromJson(document.object());
+
+    if (!item) {
+        return {
+            std::nullopt,
+            {
+                RcloneErrorCode::InvalidResponse,
+                QStringLiteral("Invalid stat response"),
+                -1,
+            },
+        };
+    }
+
+    return {
+        std::move(item),
+        {RcloneErrorCode::None, {}, 0},
+    };
+}
+
+
 RcloneStatus
 RcloneClient::mkdir(const QString &remoteSpec,
                     const RcloneContext &ctx) const
@@ -632,140 +418,6 @@ RcloneClient::mkdir(const QString &remoteSpec,
         {
             QStringLiteral("mkdir"),
             remoteSpec,
-        },
-        [](const QByteArray &) {
-            return true;
-        },
-        ctx);
-}
-
-RcloneStatus
-RcloneClient::setModificationTime(const QString &remoteSpec,
-                                  const QDateTime &mtime,
-                                  const RcloneContext &ctx) const
-{
-    if (!mtime.isValid()) {
-        return {
-            false,
-            {
-                RcloneErrorCode::InvalidResponse,
-                QStringLiteral("Invalid modification time"),
-                -1,
-            },
-        };
-    }
-
-    /*
-     * rclone interpreta --timestamp como UTC. --no-create evita que una
-     * petición de KIO para un objeto que ya desapareció cree un archivo vacío.
-     */
-    const QString timestamp = mtime.toUTC().toString(
-        QStringLiteral("yyyy-MM-ddTHH:mm:ss.zzz"));
-
-    return runStreamingCommand(
-        {
-            QStringLiteral("touch"),
-            QStringLiteral("--no-create"),
-            QStringLiteral("--timestamp"),
-            timestamp,
-            remoteSpec,
-        },
-        [](const QByteArray &) {
-            return true;
-        },
-        ctx);
-}
-
-RcloneStatus
-RcloneClient::remove(const QString &remoteSpec,
-                     RcloneRemovalMode mode,
-                     const RcloneContext &ctx) const
-{
-    QString command;
-
-    switch (mode) {
-    case RcloneRemovalMode::File:
-        command = QStringLiteral("deletefile");
-        break;
-
-    case RcloneRemovalMode::EmptyDirectory:
-        command = QStringLiteral("rmdir");
-        break;
-
-    case RcloneRemovalMode::Recursive:
-        command = QStringLiteral("purge");
-        break;
-    }
-
-    return runStreamingCommand(
-        {
-            command,
-            remoteSpec,
-        },
-        [](const QByteArray &) {
-            return true;
-        },
-        ctx);
-}
-
-RcloneStatus
-RcloneClient::move(const QString &srcSpec,
-                   const QString &destSpec,
-                   const RcloneWriteOptions &options,
-                   const RcloneContext &ctx) const
-{
-    auto failure = [](RcloneErrorCode code,
-                      const QString &message) -> RcloneStatus {
-        return {false, {code, message, -1}};
-    };
-
-    if (ctx.isCancelled()) {
-        return failure(
-            RcloneErrorCode::Cancelled,
-            QStringLiteral("Operation cancelled"));
-    }
-
-    if (srcSpec == destSpec) {
-        return {true, {RcloneErrorCode::None, {}, 0}};
-    }
-
-    // No usamos --no-check-dest: necesitamos respetar replaceExisting.
-    const auto destination = stat(destSpec, ctx);
-
-    if (destination.success()) {
-        if (!options.replaceExisting) {
-            return failure(
-                RcloneErrorCode::AlreadyExists,
-                QStringLiteral("Destination already exists"));
-        }
-
-        // moveto sobre un directorio existente puede combinar contenido.
-        // No lo tratamos como un reemplazo simple.
-        const auto source = stat(srcSpec, ctx);
-
-        if (!source.success()) {
-            return {false, source.error};
-        }
-
-        if (source.data->isDirectory
-            || destination.data->isDirectory) {
-            return failure(
-                RcloneErrorCode::Unsupported,
-                QStringLiteral(
-                    "Replacing an existing directory is not supported"));
-        }
-    } else if (destination.error.code != RcloneErrorCode::NotFound) {
-        // Un error de red, permisos o parsing NO significa que el
-        // destino esté libre.
-        return {false, destination.error};
-    }
-
-    return runStreamingCommand(
-        {
-            QStringLiteral("moveto"),
-            srcSpec,
-            destSpec,
-            QStringLiteral("--no-traverse"),
         },
         [](const QByteArray &) {
             return true;
@@ -830,6 +482,71 @@ RcloneClient::copy(const QString &srcSpec,
     return runStreamingCommand(
         {
             QStringLiteral("copyto"),
+            srcSpec,
+            destSpec,
+            QStringLiteral("--no-traverse"),
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
+}
+
+RcloneStatus
+RcloneClient::move(const QString &srcSpec,
+                   const QString &destSpec,
+                   const RcloneWriteOptions &options,
+                   const RcloneContext &ctx) const
+{
+    auto failure = [](RcloneErrorCode code,
+                      const QString &message) -> RcloneStatus {
+        return {false, {code, message, -1}};
+    };
+
+    if (ctx.isCancelled()) {
+        return failure(
+            RcloneErrorCode::Cancelled,
+            QStringLiteral("Operation cancelled"));
+    }
+
+    if (srcSpec == destSpec) {
+        return {true, {RcloneErrorCode::None, {}, 0}};
+    }
+
+    // No usamos --no-check-dest: necesitamos respetar replaceExisting.
+    const auto destination = stat(destSpec, ctx);
+
+    if (destination.success()) {
+        if (!options.replaceExisting) {
+            return failure(
+                RcloneErrorCode::AlreadyExists,
+                QStringLiteral("Destination already exists"));
+        }
+
+        // moveto sobre un directorio existente puede combinar contenido.
+        // No lo tratamos como un reemplazo simple.
+        const auto source = stat(srcSpec, ctx);
+
+        if (!source.success()) {
+            return {false, source.error};
+        }
+
+        if (source.data->isDirectory
+            || destination.data->isDirectory) {
+            return failure(
+                RcloneErrorCode::Unsupported,
+                QStringLiteral(
+                    "Replacing an existing directory is not supported"));
+        }
+    } else if (destination.error.code != RcloneErrorCode::NotFound) {
+        // Un error de red, permisos o parsing NO significa que el
+        // destino esté libre.
+        return {false, destination.error};
+    }
+
+    return runStreamingCommand(
+        {
+            QStringLiteral("moveto"),
             srcSpec,
             destSpec,
             QStringLiteral("--no-traverse"),
@@ -918,10 +635,10 @@ RcloneClient::upload(const QString &localSrc,
     }
 
     const qint64 fileSize = source.size();
-    const QString stagingSpec = uploadStagingSpec(remoteDest);
+    const QString stagingSpec = RcloneClientHelpers::uploadStagingSpec(remoteDest);
 
     auto cleanupStaging = [this, &stagingSpec]() {
-        CleanupContext cleanupContext;
+        RcloneClientHelpers::CleanupContext cleanupContext;
         (void)runStreamingCommand(
             {
                 QStringLiteral("deletefile"),
@@ -992,7 +709,7 @@ RcloneClient::upload(const QString &localSrc,
                     continue;
                 }
 
-                updateTransferStats(
+                RcloneClientHelpers::updateTransferStats(
                     statsValue.toObject(),
                     fileSize,
                     progress);
@@ -1013,7 +730,7 @@ RcloneClient::upload(const QString &localSrc,
 
     // Validate after the potentially long transfer. The fully uploaded sibling
     // can be discarded without ever exposing partial contents at remoteDest.
-    const RcloneStatus unchanged = targetStillMatches(
+    const RcloneStatus unchanged = RcloneClientHelpers::targetStillMatches(
         expected,
         stat(remoteDest, ctx));
 
@@ -1053,6 +770,76 @@ RcloneClient::upload(const QString &localSrc,
     }
 
     return published;
+}
+
+
+RcloneStatus
+RcloneClient::remove(const QString &remoteSpec,
+                     RcloneRemovalMode mode,
+                     const RcloneContext &ctx) const
+{
+    QString command;
+
+    switch (mode) {
+    case RcloneRemovalMode::File:
+        command = QStringLiteral("deletefile");
+        break;
+
+    case RcloneRemovalMode::EmptyDirectory:
+        command = QStringLiteral("rmdir");
+        break;
+
+    case RcloneRemovalMode::Recursive:
+        command = QStringLiteral("purge");
+        break;
+    }
+
+    return runStreamingCommand(
+        {
+            command,
+            remoteSpec,
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
+}
+
+RcloneStatus
+RcloneClient::setModificationTime(const QString &remoteSpec,
+                                  const QDateTime &mtime,
+                                  const RcloneContext &ctx) const
+{
+    if (!mtime.isValid()) {
+        return {
+            false,
+            {
+                RcloneErrorCode::InvalidResponse,
+                QStringLiteral("Invalid modification time"),
+                -1,
+            },
+        };
+    }
+
+    /*
+     * rclone interpreta --timestamp como UTC. --no-create evita que una
+     * petición de KIO para un objeto que ya desapareció cree un archivo vacío.
+     */
+    const QString timestamp = mtime.toUTC().toString(
+        QStringLiteral("yyyy-MM-ddTHH:mm:ss.zzz"));
+
+    return runStreamingCommand(
+        {
+            QStringLiteral("touch"),
+            QStringLiteral("--no-create"),
+            QStringLiteral("--timestamp"),
+            timestamp,
+            remoteSpec,
+        },
+        [](const QByteArray &) {
+            return true;
+        },
+        ctx);
 }
 
 QString RcloneClient::locateExecutable()
@@ -1217,7 +1004,7 @@ RcloneClient::runStreamingCommand(const QStringList &arguments,
         const int exitCode = process.exitCode();
         const RcloneErrorCode errorCode =
             process.exitStatus() == QProcess::NormalExit
-            ? classifyProcessFailure(exitCode, message)
+            ? RcloneClientHelpers::classifyProcessFailure(exitCode, message)
             : RcloneErrorCode::ProcessFailure;
 
         return fail(errorCode, message, exitCode);
@@ -1279,4 +1066,17 @@ RcloneClient::backendQuery(const QString &remoteName,
     arguments.append(args);
 
     return runCommand(arguments, ctx);
+}
+
+
+RcloneResponse<QByteArray>
+RcloneClient::runConfigCommand(const QStringList &arguments,
+                               const RcloneContext &ctx) const
+{
+    QStringList command{
+        QStringLiteral("config"),
+    };
+    command.append(arguments);
+
+    return runCommand(command, ctx);
 }

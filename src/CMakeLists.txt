@@ -1,5 +1,6 @@
 add_library(kio_rclone_common STATIC
   rclone/client.cpp
+  rclone/clienthelpers.cpp
   rclone/location.cpp
   rclone/models.cpp
   rclone/mountlayout.cpp
@@ -11,11 +12,8 @@ add_library(kio_rclone_common STATIC
 )
 
 # KIO-FUSE 5.x selects its per-operation FileJob path only when both
-# capabilities are advertised.  That path opens and closes a new FileJob for
-# every FUSE read/write, so a remote worker that publishes a complete upload
-# from FileJob::close() can turn an editor save into one network transaction
-# per small write.  Keep the worker's random-access implementation available
-# to explicit KIO FileJob callers, but deliberately make KIO-FUSE use its
+# capabilities are advertised.  Random-access FileJob methods are not
+# implemented by this worker, so keep them disabled and let KIO-FUSE use its
 # local cache (KIO::get/KIO::put) for rclone:/.
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/kio/rclone.json" RCLONE_PROTOCOL_METADATA)
 string(JSON RCLONE_CLASS GET "${RCLONE_PROTOCOL_METADATA}"
@@ -64,7 +62,9 @@ target_link_libraries(kio_rclone_common
 
 kcoreaddons_add_plugin(kio_rclone
     SOURCES
+        kio/main.cpp
         kio/worker.cpp
+        kio/workerhelpers.cpp
     INSTALL_NAMESPACE kf6/kio
 )
 

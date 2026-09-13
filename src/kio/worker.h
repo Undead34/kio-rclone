@@ -8,8 +8,6 @@
 
 #include "rclone/client.h"
 #include "rclone/navigation.h"
-#include "rclone/remotefile.h"
-#include "rclone/syncrepository.h"
 
 #include <KIO/WorkerBase>
 
@@ -18,14 +16,11 @@
 #include <QIODevice>
 #include <QUrl>
 
-#include <memory>
-
 /**
  * @brief KIO Worker para remotos administrados mediante rclone.
  *
  * La navegación y las operaciones remotas se delegan a las capas rclone.
- * Las operaciones de archivo aleatorias utilizan una copia local completa
- * administrada por RcloneRemoteFile.
+ * Las operaciones de archivo aleatorias todavía no están implementadas.
  */
 class RcloneWorker : public KIO::WorkerBase
 {
@@ -42,11 +37,11 @@ public:
 
     KIO::WorkerResult mimetype(const QUrl &url) override;
 
-    KIO::WorkerResult get(const QUrl &url) override;
+    // KIO::WorkerResult get(const QUrl &url) override;
 
-    KIO::WorkerResult put(const QUrl &url,
-                          int permissions,
-                          KIO::JobFlags flags) override;
+    // KIO::WorkerResult put(const QUrl &url,
+    //                       int permissions,
+    //                       KIO::JobFlags flags) override;
 
     KIO::WorkerResult mkdir(const QUrl &url,
                             int permissions) override;
@@ -55,10 +50,10 @@ public:
                              const QUrl &dest,
                              KIO::JobFlags flags) override;
 
-    KIO::WorkerResult copy(const QUrl &src,
-                           const QUrl &dest,
-                           int permissions,
-                           KIO::JobFlags flags) override;
+    // KIO::WorkerResult copy(const QUrl &src,
+    //                        const QUrl &dest,
+    //                        int permissions,
+    //                        KIO::JobFlags flags) override;
 
     KIO::WorkerResult del(const QUrl &url,
                           bool isFile) override;
@@ -87,10 +82,4 @@ private:
     RcloneClient m_client;
 
     RcloneNavigation m_navigation;
-
-    RcloneSyncRepository m_syncRepository;
-
-    std::unique_ptr<RcloneRemoteFile> m_openFile;
-
-    QUrl m_openUrl;
 };
