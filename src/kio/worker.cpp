@@ -31,8 +31,6 @@ Q_LOGGING_CATEGORY(KIO_RCLONE, "kf.kio.workers.rclone")
 
 namespace {
 
-constexpr qsizetype MaterializedReadChunkSize = 256 * 1024;
-
 class KIOPluginForMetaData : public QObject
 {
     Q_OBJECT
