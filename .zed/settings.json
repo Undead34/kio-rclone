@@ -1,0 +1,8 @@
+{
+  "languages": {
+    "C++": {
+      "enable_language_server": true,
+      "language_servers": ["clangd"]
+    }
+  }
+}

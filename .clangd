@@ -1,3 +1,4 @@
 CompileFlags:
+  CompilationDatabase: build/compile-check
   Remove:
     - -mno-direct-extern-access
