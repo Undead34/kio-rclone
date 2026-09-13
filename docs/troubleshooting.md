@@ -31,6 +31,22 @@ LibreOffice opens the document empty or corrupt:
 3. Open and edit the local copy.
 4. Upload the verified local file back to the remote when finished.
 
+If saving stalls immediately after a worker reinstall, close documents using
+the mount and refresh the desktop KIO metadata and KIO-FUSE process. KIO-FUSE
+caches protocol capabilities for its lifetime, so an old process can retain a
+node created before the worker's cache-based policy was installed:
+
+~~~bash
+kbuildsycoca6 --noincremental
+systemctl --user restart kio-fuse.service
+~~~
+
+The `rclone` worker intentionally leaves `opening` and `truncating` disabled;
+the supported path is KIO-FUSE's local cache followed by one complete
+`KIO::put()` on flush/close. The standalone KIO-FUSE diagnostic
+`--disable-filejob-io` is useful for comparing another protocol, but is not
+needed for a current KIO Rclone install.
+
 ## A TXT or other ordinary file does not keep changes
 
 Saving publishes from a temporary remote name. A cancellation, network

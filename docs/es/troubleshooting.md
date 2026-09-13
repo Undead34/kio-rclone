@@ -44,6 +44,23 @@ LibreOffice abre el documento vacío o corrupto:
 3. Abre y edita la copia local.
 4. Sube el archivo local verificado al remoto cuando termines.
 
+Si el guardado se queda detenido justo después de reinstalar el worker, cierra
+los documentos que usen el montaje y actualiza la metadata de KIO y el proceso
+de KIO-FUSE. KIO-FUSE conserva las capacidades del protocolo durante toda su
+vida, por lo que un proceso viejo puede conservar un nodo creado antes de
+instalar la política basada en caché:
+
+~~~bash
+kbuildsycoca6 --noincremental
+systemctl --user restart kio-fuse.service
+~~~
+
+El worker de `rclone` deja `opening` y `truncating` desactivados a propósito: la
+ruta admitida es la caché local de KIO-FUSE seguida de un único `KIO::put()`
+completo al hacer flush/close. La opción de diagnóstico independiente de
+KIO-FUSE `--disable-filejob-io` sirve para comparar otro protocolo, pero no es
+necesaria con una instalación actual de KIO Rclone.
+
 ## Un TXT u otro archivo ordinario no conserva los cambios
 
 El guardado se publica desde un nombre remoto temporal. Una cancelación, fallo

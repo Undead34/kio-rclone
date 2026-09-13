@@ -11,6 +11,10 @@ user-visible protocol or packaging behavior.
 - Direct `KIO::FileJob` random access now stages ordinary files locally:
   files up to 128 MiB use one complete download, while larger read-only files
   use an 8 MiB sparse block cache with read-ahead.
+- An opt-in `KIO_RCLONE_VFS_ROOT` bridge marks direct `Standard` and
+  `DriveMyDrive` entries with `UDS_LOCAL_PATH`, allowing Dolphin to use a
+  manually managed `rclone mount` for local editing. Synthetic Drive views do
+  not claim a local path.
 
 ### Fixed
 
@@ -21,6 +25,9 @@ user-visible protocol or packaging behavior.
 - Uploads retain the old remote object until a complete sibling upload has
   finished, validate the destination version immediately before publication,
   and avoid repeating a destination `stat` already performed by the caller.
+- KIO-FUSE integration explicitly keeps random-access `FileJob` capabilities
+  disabled for `rclone:/`, so editor reads and writes stay in KIO-FUSE's local
+  cache and reach this worker through one complete `get`/`put` transaction.
 - Virtual exports reported with `Size: -1` are downloaded once for an exact
   `stat()` size and reused by `get()` or `FileJob::open()` in the same worker.
   Such objects remain read-only so saving an exported DOCX cannot replace a

@@ -14,13 +14,30 @@ las decisiones específicas del proveedor a rclone.
 | Abrir `rclone:/` | Muestra los remotos configurados por rclone. |
 | Entrar en carpetas | Consulta el listado del proveedor a través de rclone. |
 | Descargar | Transmite archivos normales; materializa primero los de tamaño desconocido o nombre duplicado. |
-| Abrir en LibreOffice o un editor | Usa staging FileJob local y seekable: una descarga completa para archivos normales y caché dispersa con lectura anticipada para archivos grandes. |
+| Abrir en LibreOffice o un editor | KIO-FUSE usa su caché local del archivo completo: lecturas, seeks, escrituras y truncados permanecen locales y un único `KIO::put()` se ejecuta al vaciar la caché. |
 | Subir/guardar | Sube a un nombre remoto temporal y publica el resultado sólo cuando la transferencia termina. |
 | Crear carpeta | Usa `rclone mkdir`. |
 | Renombrar/mover dentro del remoto | Usa `rclone moveto`. |
 | Borrar | Usa `deletefile`, `rmdir` o `purge` según la operación de KIO. |
 | Ver espacio libre | Usa `rclone about` si el backend lo soporta. |
 | Configurar | Abre el configurador pequeño de KIO Rclone. |
+
+### Puente VFS local experimental
+
+Si ya tienes un `rclone mount` gestionado manualmente, puedes abrir desde
+Dolphin la ruta física del VFS de forma optativa:
+
+~~~bash
+export KIO_RCLONE_VFS_ROOT="$XDG_RUNTIME_DIR/rclone-vfs-test"
+dolphin
+~~~
+
+Para entradas directas `Standard` y **Mi unidad** de Google Drive, el worker
+publica `UDS_LOCAL_PATH` y Dolphin puede usar `mostLocalUrl()` en vez de caer a
+KIO-FUSE. Las vistas sintéticas de Drive siguen usando la URL KIO normal
+porque no tienen necesariamente una correspondencia uno a uno en el montaje.
+Quita `KIO_RCLONE_VFS_ROOT` para volver a la ruta habitual con caché local de
+KIO-FUSE.
 
 Los documentos nativos que rclone exporta pueden devolver `Size: -1`. Para
 esos objetos KIO Rclone descarga la exportación a un temporal privado, mide sus
