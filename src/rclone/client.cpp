@@ -855,26 +855,6 @@ RcloneClient::download(const QString &remoteSpec,
 }
 
 RcloneStatus
-RcloneClient::downloadRange(const QString &remoteSpec,
-                            qint64 offset,
-                            qint64 size,
-                            const DownloadCallback &onChunk,
-                            const RcloneContext &ctx) const
-{
-    return runStreamingCommand(
-        {
-            QStringLiteral("cat"),
-            remoteSpec,
-            QStringLiteral("--offset"),
-            QString::number(offset),
-            QStringLiteral("--count"),
-            QString::number(size),
-        },
-        onChunk,
-        ctx);
-}
-
-RcloneStatus
 RcloneClient::upload(const QString &localSrc,
                      const QString &remoteDest,
                      const UploadCallback &onProgress,

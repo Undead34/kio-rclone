@@ -5,8 +5,38 @@ add_library(kio_rclone_common STATIC
   rclone/navigation.cpp
   rclone/navigationentry.cpp
   rclone/remotefile.cpp
+  rclone/syncrepository.cpp
   rclone/url.cpp
 )
+
+# KIO-FUSE 5.x selects its per-operation FileJob path only when both
+# capabilities are advertised.  That path opens and closes a new FileJob for
+# every FUSE read/write, so a remote worker that publishes a complete upload
+# from FileJob::close() can turn an editor save into one network transaction
+# per small write.  Keep the worker's random-access implementation available
+# to explicit KIO FileJob callers, but deliberately make KIO-FUSE use its
+# local cache (KIO::get/KIO::put) for rclone:/.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/kio/rclone.json" RCLONE_PROTOCOL_METADATA)
+string(JSON RCLONE_CLASS GET "${RCLONE_PROTOCOL_METADATA}"
+       KDE-KIO-Protocols rclone Class)
+string(JSON RCLONE_OPENING_TYPE TYPE "${RCLONE_PROTOCOL_METADATA}"
+       KDE-KIO-Protocols rclone opening)
+string(JSON RCLONE_TRUNCATING_TYPE TYPE "${RCLONE_PROTOCOL_METADATA}"
+       KDE-KIO-Protocols rclone truncating)
+string(JSON RCLONE_OPENING GET "${RCLONE_PROTOCOL_METADATA}"
+       KDE-KIO-Protocols rclone opening)
+string(JSON RCLONE_TRUNCATING GET "${RCLONE_PROTOCOL_METADATA}"
+       KDE-KIO-Protocols rclone truncating)
+
+if(NOT RCLONE_CLASS STREQUAL ":local"
+   OR NOT RCLONE_OPENING_TYPE STREQUAL "BOOLEAN"
+   OR NOT RCLONE_TRUNCATING_TYPE STREQUAL "BOOLEAN"
+   OR RCLONE_OPENING
+   OR RCLONE_TRUNCATING)
+    message(FATAL_ERROR
+        "The rclone KIO protocol must be :local and explicitly disable opening "
+        "and truncating so KIO-FUSE uses its local cache")
+endif()
 
 set_target_properties(kio_rclone_common PROPERTIES
     POSITION_INDEPENDENT_CODE ON

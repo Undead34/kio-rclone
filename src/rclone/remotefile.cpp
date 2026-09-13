@@ -6,7 +6,12 @@
 
 #include "remotefile.h"
 
+#include <QCryptographicHash>
+#include <QDir>
 #include <QFileDevice>
+#include <QFileInfo>
+#include <QSaveFile>
+#include <QStandardPaths>
 
 #include <utility>
 
@@ -16,11 +21,7 @@ RcloneStatus success()
 {
     return {
         true,
-        {
-            RcloneErrorCode::None,
-            {},
-            0,
-        },
+        {RcloneErrorCode::None, {}, 0},
     };
 }
 
@@ -29,11 +30,7 @@ RcloneStatus failure(RcloneErrorCode code,
 {
     return {
         false,
-        {
-            code,
-            message,
-            -1,
-        },
+        {code, message, -1},
     };
 }
 
@@ -42,11 +39,7 @@ RcloneResponse<QByteArray> readFailure(RcloneErrorCode code,
 {
     return {
         std::nullopt,
-        {
-            code,
-            message,
-            -1,
-        },
+        {code, message, -1},
     };
 }
 
@@ -54,11 +47,7 @@ RcloneResponse<QByteArray> readSuccess(QByteArray data)
 {
     return {
         std::move(data),
-        {
-            RcloneErrorCode::None,
-            {},
-            0,
-        },
+        {RcloneErrorCode::None, {}, 0},
     };
 }
 
@@ -72,44 +61,130 @@ bool canWrite(QIODevice::OpenMode mode)
     return mode.testFlag(QIODevice::WriteOnly);
 }
 
-bool seedMatches(const RcloneLocalFileSeed &seed,
-                 const QString &remoteSpec,
-                 const RcloneItem &item)
+bool snapshotsMatch(const RcloneTargetSnapshot &cached,
+                    const RcloneTargetSnapshot &current)
 {
-    if (seed.localPath.isEmpty()
-        || seed.remoteSpec != remoteSpec
-        || !seed.source.exists
-        || seed.source.id != item.id
-        || seed.source.modificationTime != item.modificationTime
-        || seed.source.size != item.size) {
+    if (cached.exists != current.exists
+        || cached.isDirectory != current.isDirectory) {
         return false;
     }
 
-    // Reusing bytes without at least one remote version signal could serve a
-    // stale export indefinitely on a backend with unknown sizes.
-    return !item.id.isEmpty() || item.modificationTime.isValid();
+    if (!cached.exists) {
+        return true;
+    }
+
+    bool comparedVersion = false;
+
+    if (!cached.id.isEmpty() && !current.id.isEmpty()) {
+        comparedVersion = true;
+
+        if (cached.id != current.id) {
+            return false;
+        }
+    }
+
+    if (cached.modificationTime.isValid()
+        && current.modificationTime.isValid()) {
+        comparedVersion = true;
+
+        if (cached.modificationTime != current.modificationTime) {
+            return false;
+        }
+    }
+
+    if (cached.size >= 0 && current.size >= 0) {
+        comparedVersion = true;
+
+        if (cached.size != current.size) {
+            return false;
+        }
+    }
+
+    // Without a comparable version signal, use the remote as the source of
+    // truth and download it again rather than risk returning stale bytes.
+    return comparedVersion;
+}
+
+bool ensurePrivateDirectory(const QString &path,
+                           QString *error)
+{
+    if (!QDir().mkpath(path)) {
+        *error = QStringLiteral("Could not create the local cache directory");
+        return false;
+    }
+
+    const QFileDevice::Permissions permissions =
+        QFileDevice::ReadOwner
+        | QFileDevice::WriteOwner
+        | QFileDevice::ExeOwner;
+
+    if (!QFile::setPermissions(path, permissions)) {
+        *error = QStringLiteral("Could not secure the local cache directory");
+        return false;
+    }
+
+    return true;
+}
+
+RcloneStatus createEmptyLocalFile(const QString &path)
+{
+    QString error;
+
+    if (!ensurePrivateDirectory(QFileInfo(path).absolutePath(), &error)) {
+        return failure(RcloneErrorCode::ProcessFailure, error);
+    }
+
+    QSaveFile output(path);
+
+    if (!output.open(QIODevice::WriteOnly)) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            output.errorString());
+    }
+
+    if (!output.commit()) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            output.errorString());
+    }
+
+    const QFileDevice::Permissions permissions =
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+
+    if (!QFile::setPermissions(path, permissions)) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral("Could not secure the local cache file"));
+    }
+
+    return success();
 }
 
 } // namespace
 
 RcloneRemoteFile::RcloneRemoteFile(
     RcloneClient &client,
-    RcloneFileCachePolicy cachePolicy)
+    RcloneSyncRepository &repository,
+    RcloneCacheConfig config)
     : m_client(client)
-    , m_cachePolicy(cachePolicy)
+    , m_repository(repository)
+    , m_config(std::move(config))
 {
-    m_cachePolicy.wholeFileLimit =
-        qMax<qint64>(0, m_cachePolicy.wholeFileLimit);
-    m_cachePolicy.readAheadBlockSize =
-        qMax<qint64>(64 * 1024, m_cachePolicy.readAheadBlockSize);
-    m_localFile.setAutoRemove(true);
+    if (m_config.baseCacheDirectory.isEmpty()) {
+        m_config.baseCacheDirectory = QDir(
+            QStandardPaths::writableLocation(
+                QStandardPaths::GenericDataLocation))
+            .filePath(QStringLiteral("kio-rclone/files"));
+    }
+
+    m_config.baseCacheDirectory =
+        QDir(m_config.baseCacheDirectory).absolutePath();
 }
 
 RcloneStatus
 RcloneRemoteFile::open(const QString &remoteSpec,
                        QIODevice::OpenMode mode,
-                       const RcloneContext &ctx,
-                       const RcloneLocalFileSeed &localSeed)
+                       const RcloneContext &ctx)
 {
     if (isOpen()) {
         return failure(
@@ -120,16 +195,10 @@ RcloneRemoteFile::open(const QString &remoteSpec,
     const bool readable = canRead(mode);
     const bool writable = canWrite(mode);
 
-    if (!readable && !writable) {
-        return failure(
-            RcloneErrorCode::Unsupported,
-            QStringLiteral("The open mode does not allow reading or writing"));
-    }
-
-    if (remoteSpec.isEmpty()) {
+    if ((!readable && !writable) || remoteSpec.isEmpty()) {
         return failure(
             RcloneErrorCode::InvalidResponse,
-            QStringLiteral("The remote file path is empty"));
+            QStringLiteral("The remote file path or open mode is invalid"));
     }
 
     if ((mode.testFlag(QIODevice::Append)
@@ -145,21 +214,22 @@ RcloneRemoteFile::open(const QString &remoteSpec,
         && mode.testFlag(QIODevice::ExistingOnly)) {
         return failure(
             RcloneErrorCode::Unsupported,
-            QStringLiteral("NewOnly and ExistingOnly cannot be used together"));
+            QStringLiteral("NewOnly and ExistingOnly cannot be combined"));
     }
 
     m_remoteSpec = remoteSpec;
-    m_mode = mode;
-    m_position = 0;
-    m_size = -1;
-    m_dirty = false;
-    m_hasLocalCopy = false;
-    m_hasSparseCache = false;
-    m_usesLocalSeed = false;
-    m_cachedBlocks.clear();
+    m_localPath = resolveLocalPath(remoteSpec);
     m_originalTarget = {};
+    m_state = RcloneFileSyncState::CloudOnly;
+
+    const auto cachedEntry = m_repository.find(remoteSpec);
+
+    if (cachedEntry && !cachedEntry->localPath.isEmpty()) {
+        m_localPath = cachedEntry->localPath;
+    }
 
     const auto item = m_client.stat(remoteSpec, ctx);
+    bool localFileReady = false;
 
     if (item.success()) {
         if (item.data->isDirectory) {
@@ -183,94 +253,154 @@ RcloneRemoteFile::open(const QString &remoteSpec,
                 QStringLiteral("The remote file is read-only"));
         }
 
-        m_originalTarget =
+        const RcloneTargetSnapshot currentTarget =
             RcloneTargetSnapshot::fromItem(*item.data);
-        m_size = item.data->size;
 
-        if (mode.testFlag(QIODevice::Truncate)) {
-            const RcloneStatus status = prepareEmptyLocalCopy();
+        if (cachedEntry && cachedEntry->isDirty()) {
+            // Keep the original base version so a later upload cannot silently
+            // replace remote changes made since this local copy was edited.
+            m_originalTarget = cachedEntry->remoteSnapshot;
 
-            if (!status.success()) {
+            if (cachedEntry->state == RcloneSyncState::Conflict
+                || !snapshotsMatch(cachedEntry->remoteSnapshot,
+                                   currentTarget)
+                || !QFileInfo(m_localPath).isFile()) {
+                updateState(RcloneFileSyncState::Conflict);
                 reset();
-                return status;
+                return failure(
+                    RcloneErrorCode::AlreadyExists,
+                    QStringLiteral(
+                        "The local file conflicts with a changed remote file"));
             }
 
-            // Opening with Truncate must replace the remote file even when no
-            // subsequent write() arrives before close().
-            m_dirty = true;
-        } else if (!writable
-                   && m_size < 0
-                   && seedMatches(localSeed, remoteSpec, *item.data)) {
-            m_seedFile.setFileName(localSeed.localPath);
-
-            if (!m_seedFile.open(QIODevice::ReadOnly)) {
-                const QString error = m_seedFile.errorString();
-                reset();
-                return failure(RcloneErrorCode::ProcessFailure, error);
-            }
-
-            m_size = m_seedFile.size();
-            m_hasLocalCopy = true;
-            m_usesLocalSeed = true;
-        } else if (writable
-                   || m_size < 0
-                   || m_size <= m_cachePolicy.wholeFileLimit) {
-            const RcloneStatus status = ensureLocalCopy(ctx);
-
-            if (!status.success()) {
-                reset();
-                return status;
-            }
-
-            if (writable && mode.testFlag(QIODevice::Append)) {
-                m_position = m_size;
-
-                if (!m_localFile.seek(m_position)) {
-                    const QString error = m_localFile.errorString();
-                    reset();
-                    return failure(RcloneErrorCode::ProcessFailure, error);
-                }
-            }
+            m_state = RcloneFileSyncState::Modified;
+            localFileReady = true;
         } else {
-            const RcloneStatus status = prepareSparseLocalCache();
+            m_originalTarget = currentTarget;
 
-            if (!status.success()) {
-                reset();
-                return status;
+            if (cachedEntry
+                && cachedEntry->state == RcloneSyncState::Synced
+                && snapshotsMatch(cachedEntry->remoteSnapshot,
+                                  currentTarget)
+                && QFileInfo(m_localPath).isFile()) {
+                m_state = RcloneFileSyncState::Synced;
+                localFileReady = true;
+            } else {
+                const RcloneStatus downloadStatus =
+                    ensureFullyDownloaded(ctx);
+
+                if (!downloadStatus.success()) {
+                    reset();
+                    return downloadStatus;
+                }
+
+                updateState(RcloneFileSyncState::Synced);
+                localFileReady = true;
             }
         }
+    } else if (item.error.code == RcloneErrorCode::NotFound) {
+        if (cachedEntry && cachedEntry->isDirty()) {
+            m_originalTarget = cachedEntry->remoteSnapshot;
 
-        return success();
-    }
+            if (cachedEntry->remoteSnapshot.exists
+                || cachedEntry->state == RcloneSyncState::Conflict
+                || !QFileInfo(m_localPath).isFile()) {
+                updateState(RcloneFileSyncState::Conflict);
+                reset();
+                return failure(
+                    RcloneErrorCode::NotFound,
+                    QStringLiteral(
+                        "The remote file was removed while local changes were pending"));
+            }
 
-    if (item.error.code != RcloneErrorCode::NotFound) {
+            m_state = RcloneFileSyncState::Modified;
+            localFileReady = true;
+        } else {
+            if (!writable || mode.testFlag(QIODevice::ExistingOnly)) {
+                const RcloneError error = item.error;
+                reset();
+                return {false, error};
+            }
+
+            m_originalTarget = {};
+            const RcloneStatus createStatus =
+                createEmptyLocalFile(m_localPath);
+
+            if (!createStatus.success()) {
+                reset();
+                return createStatus;
+            }
+
+            m_state = RcloneFileSyncState::Modified;
+            localFileReady = true;
+        }
+    } else {
         const RcloneError error = item.error;
         reset();
         return {false, error};
     }
 
-    if (!writable || mode.testFlag(QIODevice::ExistingOnly)) {
-        const RcloneError error = item.error;
+    if (!localFileReady) {
         reset();
-        return {false, error};
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral("The local cache file is unavailable"));
     }
 
-    const RcloneStatus status = prepareEmptyLocalCopy();
+    QString directoryError;
 
-    if (!status.success()) {
+    if (!ensurePrivateDirectory(
+            QFileInfo(m_localPath).absolutePath(),
+            &directoryError)) {
         reset();
-        return status;
+        return failure(RcloneErrorCode::ProcessFailure, directoryError);
     }
 
-    // QIODevice opens a missing path for writing as an empty file. Delay the
-    // actual remote creation until close(), but do not lose that intent.
-    m_dirty = true;
+    m_localFile.setFileName(m_localPath);
+
+    if (!m_localFile.open(QIODevice::ReadWrite)) {
+        const QString error = m_localFile.errorString();
+        reset();
+        return failure(RcloneErrorCode::ProcessFailure, error);
+    }
+
+    const QFileDevice::Permissions filePermissions =
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+
+    if (!QFile::setPermissions(m_localPath, filePermissions)) {
+        const QString error =
+            QStringLiteral("Could not secure the local cache file");
+        reset();
+        return failure(RcloneErrorCode::ProcessFailure, error);
+    }
+
+    m_mode = mode;
+
+    if (mode.testFlag(QIODevice::Truncate)
+        && !m_localFile.resize(0)) {
+        const QString error = m_localFile.errorString();
+        reset();
+        return failure(RcloneErrorCode::ProcessFailure, error);
+    }
+
+    if (mode.testFlag(QIODevice::Append)
+        && !m_localFile.seek(m_localFile.size())) {
+        const QString error = m_localFile.errorString();
+        reset();
+        return failure(RcloneErrorCode::ProcessFailure, error);
+    }
+
+    if (mode.testFlag(QIODevice::Truncate)
+        || (m_state == RcloneFileSyncState::Modified
+            && (!cachedEntry || !cachedEntry->isDirty()))) {
+        updateState(RcloneFileSyncState::Modified);
+    }
+
     return success();
 }
 
 RcloneResponse<QByteArray>
-RcloneRemoteFile::read(qint64 size,
-                       const RcloneContext &ctx)
+RcloneRemoteFile::read(qint64 size)
 {
     if (!isOpen()) {
         return readFailure(
@@ -294,39 +424,20 @@ RcloneRemoteFile::read(qint64 size,
         return readSuccess({});
     }
 
-    if (m_size >= 0 && m_position >= m_size) {
-        return readSuccess({});
+    const QByteArray data = m_localFile.read(size);
+
+    if (data.isEmpty()
+        && m_localFile.error() != QFileDevice::NoError) {
+        return readFailure(
+            RcloneErrorCode::ProcessFailure,
+            m_localFile.errorString());
     }
 
-    qint64 requested = size;
-
-    if (m_size >= 0) {
-        requested = qMin(requested, m_size - m_position);
-    }
-
-    if (m_hasSparseCache) {
-        const RcloneStatus status = ensureSparseRange(
-            m_position,
-            requested,
-            ctx);
-
-        if (!status.success()) {
-            return {std::nullopt, status.error};
-        }
-    } else if (!m_hasLocalCopy) {
-        const RcloneStatus status = ensureLocalCopy(ctx);
-
-        if (!status.success()) {
-            return {std::nullopt, status.error};
-        }
-    }
-
-    return readLocal(requested);
+    return readSuccess(data);
 }
 
 RcloneStatus
-RcloneRemoteFile::write(const QByteArray &data,
-                        const RcloneContext &ctx)
+RcloneRemoteFile::write(const QByteArray &data)
 {
     if (!isOpen()) {
         return failure(
@@ -340,17 +451,8 @@ RcloneRemoteFile::write(const QByteArray &data,
             QStringLiteral("The remote file was not opened for writing"));
     }
 
-    const RcloneStatus status = ensureLocalCopy(ctx);
-
-    if (!status.success()) {
-        return status;
-    }
-
-    if (m_mode.testFlag(QIODevice::Append)) {
-        m_position = m_localFile.size();
-    }
-
-    if (!m_localFile.seek(m_position)) {
+    if (m_mode.testFlag(QIODevice::Append)
+        && !m_localFile.seek(m_localFile.size())) {
         return failure(
             RcloneErrorCode::ProcessFailure,
             m_localFile.errorString());
@@ -358,15 +460,20 @@ RcloneRemoteFile::write(const QByteArray &data,
 
     const qint64 written = m_localFile.write(data);
 
+    if (written > 0) {
+        updateState(RcloneFileSyncState::Modified);
+    }
+
     if (written != data.size()) {
         return failure(
             RcloneErrorCode::ProcessFailure,
             m_localFile.errorString());
     }
 
-    m_position = m_localFile.pos();
-    m_size = m_localFile.size();
-    m_dirty = true;
+    if (data.isEmpty()) {
+        updateState(RcloneFileSyncState::Modified);
+    }
+
     return success();
 }
 
@@ -385,34 +492,12 @@ RcloneRemoteFile::seek(qint64 offset)
             QStringLiteral("The requested offset is invalid"));
     }
 
-    if (m_hasLocalCopy || m_hasSparseCache) {
-        if (m_usesLocalSeed) {
-            if (!m_seedFile.isOpen()
-                || !m_seedFile.seek(offset)) {
-                return failure(
-                    RcloneErrorCode::ProcessFailure,
-                    m_seedFile.errorString());
-            }
-
-            m_position = offset;
-            return success();
-        }
-
-        if (!m_localFile.isOpen()
-            && !m_localFile.open()) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                m_localFile.errorString());
-        }
-
-        if (!m_localFile.seek(offset)) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                m_localFile.errorString());
-        }
+    if (!m_localFile.seek(offset)) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            m_localFile.errorString());
     }
 
-    m_position = offset;
     return success();
 }
 
@@ -437,59 +522,23 @@ RcloneRemoteFile::truncate(qint64 size)
             QStringLiteral("The requested size is invalid"));
     }
 
-    // open() prepares the local copy for every writable mode, so truncate()
-    // deliberately needs no context and never starts a second remote process.
-    if (!m_hasLocalCopy) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            QStringLiteral("The writable staging file is unavailable"));
-    }
-
-    if (!m_localFile.isOpen()
-        && !m_localFile.open()) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
     if (!m_localFile.resize(size)) {
         return failure(
             RcloneErrorCode::ProcessFailure,
             m_localFile.errorString());
     }
 
-    m_size = size;
-    m_dirty = true;
+    updateState(RcloneFileSyncState::Modified);
     return success();
 }
 
 RcloneStatus
-RcloneRemoteFile::flush(const RcloneContext &ctx)
+RcloneRemoteFile::flush()
 {
-    Q_UNUSED(ctx)
-
     if (!isOpen()) {
         return failure(
             RcloneErrorCode::Unsupported,
             QStringLiteral("No remote file is open"));
-    }
-
-    // FileJob writes are staged locally. A flush must never turn into a
-    // network upload: applications such as LibreOffice may issue many flushes
-    // while a document is still being edited.
-    if (m_usesLocalSeed) {
-        return success();
-    }
-
-    if (!m_hasLocalCopy) {
-        return success();
-    }
-
-    if (!m_localFile.isOpen()
-        && !m_localFile.open()) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
     }
 
     if (!m_localFile.flush()) {
@@ -508,359 +557,241 @@ RcloneRemoteFile::close(const RcloneContext &ctx)
         return success();
     }
 
-    if (!m_dirty) {
+    if (!canWrite(m_mode)
+        || m_state != RcloneFileSyncState::Modified) {
         reset();
         return success();
     }
 
-    const RcloneStatus localStatus = flush(ctx);
+    const RcloneStatus flushStatus = flush();
 
-    if (!localStatus.success()) {
-        return localStatus;
+    if (!flushStatus.success()) {
+        m_localFile.close();
+        m_mode = QIODevice::NotOpen;
+        return flushStatus;
     }
 
-    RcloneWriteOptions options;
-    options.replaceExisting = m_originalTarget.exists;
-    options.expectedTarget = m_originalTarget;
-
-    const RcloneStatus uploadStatus = m_client.upload(
-        m_localFile.fileName(),
-        m_remoteSpec,
-        {},
-        options,
-        ctx);
+    updateState(RcloneFileSyncState::SyncingUp);
+    const RcloneStatus uploadStatus = performUpload(ctx);
 
     if (!uploadStatus.success()) {
+        updateState(RcloneFileSyncState::Modified);
+        m_localFile.close();
+        m_mode = QIODevice::NotOpen;
         return uploadStatus;
     }
 
+    updateState(RcloneFileSyncState::Synced);
     reset();
     return success();
 }
 
+void RcloneRemoteFile::evictLocalCache()
+{
+    if (m_remoteSpec.isEmpty()) {
+        return;
+    }
+
+    const auto entry = m_repository.find(m_remoteSpec);
+
+    if (entry && entry->isDirty()) {
+        return;
+    }
+
+    m_localFile.close();
+    m_mode = QIODevice::NotOpen;
+    QFile::remove(m_localPath);
+    m_repository.remove(m_remoteSpec);
+    m_state = RcloneFileSyncState::CloudOnly;
+}
+
 bool RcloneRemoteFile::isOpen() const
 {
-    return m_mode != QIODevice::NotOpen;
+    return m_mode != QIODevice::NotOpen && m_localFile.isOpen();
 }
 
 qint64 RcloneRemoteFile::position() const
 {
-    return m_position;
+    return isOpen() ? m_localFile.pos() : 0;
 }
 
 qint64 RcloneRemoteFile::size() const
 {
-    return m_size;
+    return isOpen() ? m_localFile.size() : -1;
+}
+
+RcloneFileSyncState RcloneRemoteFile::state() const
+{
+    return m_state;
+}
+
+QString RcloneRemoteFile::localCachePath() const
+{
+    return m_localPath;
 }
 
 RcloneStatus
-RcloneRemoteFile::prepareEmptyLocalCopy()
+RcloneRemoteFile::ensureFullyDownloaded(const RcloneContext &ctx)
 {
-    if (!m_localFile.isOpen()
-        && !m_localFile.open()) {
+    updateState(RcloneFileSyncState::SyncingDown);
+
+    QString directoryError;
+
+    if (!ensurePrivateDirectory(
+            QFileInfo(m_localPath).absolutePath(),
+            &directoryError)) {
+        return failure(RcloneErrorCode::ProcessFailure, directoryError);
+    }
+
+    QSaveFile output(m_localPath);
+    output.setDirectWriteFallback(false);
+
+    if (!output.open(QIODevice::WriteOnly)) {
         return failure(
             RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
+            output.errorString());
     }
 
-    if (!m_localFile.resize(0)
-        || !m_localFile.seek(0)) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
+    bool localWriteFailed = false;
+    QString localError;
+    qint64 received = 0;
+
+    const RcloneStatus downloadStatus = m_client.download(
+        m_remoteSpec,
+        [&output, &localWriteFailed, &localError, &received](
+            const QByteArray &chunk) {
+            if (output.write(chunk) != chunk.size()) {
+                localWriteFailed = true;
+                localError = output.errorString();
+                return false;
+            }
+
+            received += chunk.size();
+            return true;
+        },
+        ctx);
+
+    if (localWriteFailed) {
+        return failure(RcloneErrorCode::ProcessFailure, localError);
     }
 
-    m_position = 0;
-    m_size = 0;
-    m_hasLocalCopy = true;
-    m_hasSparseCache = false;
-    m_usesLocalSeed = false;
-    m_cachedBlocks.clear();
-    return success();
-}
-
-RcloneStatus
-RcloneRemoteFile::ensureLocalCopy(const RcloneContext &ctx)
-{
-    if (m_hasLocalCopy) {
-        if (!m_localFile.isOpen()
-            && !m_localFile.open()) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                m_localFile.errorString());
-        }
-
-        if (!m_localFile.seek(m_position)) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                m_localFile.errorString());
-        }
-
-        return success();
+    if (!downloadStatus.success()) {
+        return downloadStatus;
     }
 
-    if (!m_localFile.isOpen()
-        && !m_localFile.open()) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
-    if (!m_localFile.resize(0)
-        || !m_localFile.seek(0)) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
-    if (m_size != 0) {
-        bool localWriteFailed = false;
-        QString localError;
-
-        const RcloneStatus status = m_client.download(
-            m_remoteSpec,
-            [this, &localWriteFailed, &localError](const QByteArray &chunk) {
-                if (m_localFile.write(chunk) != chunk.size()) {
-                    localWriteFailed = true;
-                    localError = m_localFile.errorString();
-                    return false;
-                }
-
-                return true;
-            },
-            ctx);
-
-        if (localWriteFailed) {
-            return failure(RcloneErrorCode::ProcessFailure, localError);
-        }
-
-        if (!status.success()) {
-            return status;
-        }
-    }
-
-    const qint64 downloadedSize = m_localFile.size();
-
-    if (m_size >= 0 && downloadedSize != m_size) {
+    if (m_originalTarget.size >= 0
+        && received != m_originalTarget.size) {
         return failure(
             RcloneErrorCode::ProcessFailure,
             QStringLiteral("The remote file changed while it was being cached"));
     }
 
-    m_size = downloadedSize;
-    m_hasLocalCopy = true;
-    m_hasSparseCache = false;
-    m_usesLocalSeed = false;
-    m_cachedBlocks.clear();
-
-    if (!m_localFile.seek(m_position)) {
+    if (!output.commit()) {
         return failure(
             RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
+            output.errorString());
+    }
+
+    const QFileDevice::Permissions permissions =
+        QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+
+    if (!QFile::setPermissions(m_localPath, permissions)) {
+        return failure(
+            RcloneErrorCode::ProcessFailure,
+            QStringLiteral("Could not secure the local cache file"));
     }
 
     return success();
 }
 
 RcloneStatus
-RcloneRemoteFile::prepareSparseLocalCache()
+RcloneRemoteFile::performUpload(const RcloneContext &ctx)
 {
-    if (m_size < 0) {
-        return failure(
-            RcloneErrorCode::InvalidResponse,
-            QStringLiteral("A sparse cache requires a known file size"));
+    RcloneWriteOptions options;
+    options.replaceExisting = m_originalTarget.exists;
+    options.expectedTarget = m_originalTarget;
+
+    const RcloneStatus status = m_client.upload(
+        m_localPath,
+        m_remoteSpec,
+        {},
+        options,
+        ctx);
+
+    if (!status.success()) {
+        return status;
     }
 
-    if (!m_localFile.isOpen()
-        && !m_localFile.open()) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
+    const auto uploadedItem = m_client.stat(m_remoteSpec, ctx);
 
-    // QFile::resize() uses a sparse extension on the local filesystems where
-    // it is supported; no remote bytes are fetched here.
-    if (!m_localFile.resize(m_size)
-        || !m_localFile.seek(m_position)) {
-        return failure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
-    m_hasLocalCopy = false;
-    m_hasSparseCache = true;
-    m_usesLocalSeed = false;
-    m_cachedBlocks.clear();
-    return success();
-}
-
-RcloneStatus
-RcloneRemoteFile::ensureSparseRange(
-    qint64 offset,
-    qint64 size,
-    const RcloneContext &ctx)
-{
-    if (!m_hasSparseCache || offset < 0 || size <= 0
-        || m_size < 0 || offset > m_size - size) {
-        return failure(
-            RcloneErrorCode::InvalidResponse,
-            QStringLiteral("The requested cache range is invalid"));
-    }
-
-    const qint64 blockSize = m_cachePolicy.readAheadBlockSize;
-    const qint64 firstBlock = offset / blockSize;
-    const qint64 lastBlock = (offset + size - 1) / blockSize;
-    const qint64 finalFileBlock = m_size > 0
-        ? (m_size - 1) / blockSize
-        : 0;
-
-    qint64 block = firstBlock;
-
-    while (block <= lastBlock) {
-        if (m_cachedBlocks.contains(block)) {
-            ++block;
-            continue;
-        }
-
-        const qint64 runFirstBlock = block;
-
-        while (block < lastBlock
-               && !m_cachedBlocks.contains(block + 1)) {
-            ++block;
-        }
-
-        const qint64 runLastBlock = block;
-        const qint64 fetchOffset = runFirstBlock * blockSize;
-        const qint64 fetchEnd = runLastBlock >= finalFileBlock
-            ? m_size
-            : (runLastBlock + 1) * blockSize;
-        const qint64 fetchSize = fetchEnd - fetchOffset;
-
-        if (!m_localFile.seek(fetchOffset)) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                m_localFile.errorString());
-        }
-
-        qint64 received = 0;
-        QString localError;
-
-        const RcloneStatus status = m_client.downloadRange(
-            m_remoteSpec,
-            fetchOffset,
-            fetchSize,
-            [this, fetchSize, &received, &localError](
-                const QByteArray &chunk) {
-                if (chunk.size() > fetchSize - received
-                    || m_localFile.write(chunk) != chunk.size()) {
-                    localError = chunk.size() > fetchSize - received
-                        ? QStringLiteral("Rclone returned more data than requested")
-                        : m_localFile.errorString();
-                    return false;
-                }
-
-                received += chunk.size();
-                return true;
-            },
-            ctx);
-
-        if (!localError.isEmpty()) {
-            return failure(RcloneErrorCode::ProcessFailure, localError);
-        }
-
-        if (!status.success()) {
-            return status;
-        }
-
-        if (received != fetchSize) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                QStringLiteral("The remote file changed while it was being cached"));
-        }
-
-        if (!m_localFile.flush()) {
-            return failure(
-                RcloneErrorCode::ProcessFailure,
-                m_localFile.errorString());
-        }
-
-        for (qint64 cached = runFirstBlock;
-             cached <= runLastBlock;
-             ++cached) {
-            m_cachedBlocks.insert(cached);
-        }
-
-        ++block;
+    if (uploadedItem.success() && !uploadedItem.data->isDirectory) {
+        m_originalTarget =
+            RcloneTargetSnapshot::fromItem(*uploadedItem.data);
     }
 
     return success();
-}
-
-RcloneResponse<QByteArray>
-RcloneRemoteFile::readLocal(qint64 size)
-{
-    if (m_usesLocalSeed) {
-        if (!m_seedFile.isOpen()
-            || !m_seedFile.seek(m_position)) {
-            return readFailure(
-                RcloneErrorCode::ProcessFailure,
-                m_seedFile.errorString());
-        }
-
-        const QByteArray data = m_seedFile.read(size);
-
-        if (data.isEmpty()
-            && m_seedFile.error() != QFileDevice::NoError) {
-            return readFailure(
-                RcloneErrorCode::ProcessFailure,
-                m_seedFile.errorString());
-        }
-
-        m_position = m_seedFile.pos();
-        return readSuccess(data);
-    }
-
-    if (!m_localFile.isOpen()
-        && !m_localFile.open()) {
-        return readFailure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
-    if (!m_localFile.seek(m_position)) {
-        return readFailure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
-    const QByteArray data = m_localFile.read(size);
-
-    if (data.isEmpty()
-        && m_localFile.error() != QFileDevice::NoError) {
-        return readFailure(
-            RcloneErrorCode::ProcessFailure,
-            m_localFile.errorString());
-    }
-
-    m_position = m_localFile.pos();
-    return readSuccess(data);
 }
 
 void RcloneRemoteFile::reset()
 {
-    m_seedFile.close();
-    m_seedFile.setFileName({});
     m_localFile.close();
-    m_localFile.remove();
-
-    m_remoteSpec.clear();
+    m_localFile.setFileName({});
     m_mode = QIODevice::NotOpen;
-    m_position = 0;
-    m_size = -1;
-    m_dirty = false;
-    m_hasLocalCopy = false;
-    m_hasSparseCache = false;
-    m_usesLocalSeed = false;
-    m_cachedBlocks.clear();
+    m_remoteSpec.clear();
+    m_localPath.clear();
+    m_state = RcloneFileSyncState::CloudOnly;
     m_originalTarget = {};
+}
+
+void RcloneRemoteFile::updateState(RcloneFileSyncState newState)
+{
+    m_state = newState;
+
+    // Transitional states are process-local. Keep the last recoverable
+    // repository state until a download/upload finishes.
+    if (m_remoteSpec.isEmpty()
+        || newState == RcloneFileSyncState::SyncingDown
+        || newState == RcloneFileSyncState::SyncingUp) {
+        return;
+    }
+
+    RcloneSyncEntry entry;
+    entry.remoteSpec = m_remoteSpec;
+    entry.localPath = m_localPath;
+    entry.remoteSnapshot = m_originalTarget;
+    entry.lastSyncTime = QDateTime::currentDateTimeUtc();
+
+    switch (newState) {
+    case RcloneFileSyncState::CloudOnly:
+        entry.state = RcloneSyncState::CloudOnly;
+        break;
+
+    case RcloneFileSyncState::Synced:
+        entry.state = RcloneSyncState::Synced;
+        break;
+
+    case RcloneFileSyncState::Modified:
+        entry.state = RcloneSyncState::Modified;
+        break;
+
+    case RcloneFileSyncState::Conflict:
+        entry.state = RcloneSyncState::Conflict;
+        break;
+
+    case RcloneFileSyncState::SyncingDown:
+    case RcloneFileSyncState::SyncingUp:
+        return;
+    }
+
+    m_repository.save(entry);
+}
+
+QString RcloneRemoteFile::resolveLocalPath(const QString &remoteSpec) const
+{
+    const QByteArray digest = QCryptographicHash::hash(
+        remoteSpec.toUtf8(),
+        QCryptographicHash::Sha256);
+
+    return QDir(m_config.baseCacheDirectory).filePath(
+        QString::fromLatin1(digest.toHex()));
 }

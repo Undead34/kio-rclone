@@ -1,7 +1,7 @@
 {
     "KDE-KIO-Protocols": {
         "rclone": {
-            "Class": ":internet",
+            "Class": ":local",
             "ExtraNames": [],
             "Icon": "folder-kio-rclone",
             "deleteRecursive": true,

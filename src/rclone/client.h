@@ -35,10 +35,10 @@ enum class RcloneErrorCode {
 };
 
 /**
- * @brief Error de una operación del cliente.
+ * @brief Error producido por una operación del cliente.
  *
- * message contiene el diagnóstico disponible. Las capas superiores deben
- * utilizar code para tomar decisiones, no comparar fragmentos de message.
+ * Las capas superiores deben utilizar code para tomar decisiones y tratar
+ * message exclusivamente como información de diagnóstico.
  */
 struct RcloneError {
     RcloneErrorCode code = RcloneErrorCode::Unknown;
@@ -48,36 +48,33 @@ struct RcloneError {
 
 /**
  * @brief Resultado de una operación que produce un valor.
- *
- * Éxito: data contiene un valor y error.code es None.
- * Fallo: data está vacío y error describe la causa.
  */
 template <typename T>
 struct RcloneResponse {
     std::optional<T> data;
     RcloneError error;
 
-    [[nodiscard]] bool success() const { return data.has_value(); }
+    [[nodiscard]] bool success() const
+    {
+        return data.has_value();
+    }
 };
 
 /**
  * @brief Resultado de una operación que no produce un valor.
- *
- * Éxito: ok es true y error.code es None.
- * Fallo: ok es false y error describe la causa.
  */
 struct RcloneStatus {
     bool ok = false;
     RcloneError error;
 
-    [[nodiscard]] bool success() const { return ok; }
+    [[nodiscard]] bool success() const
+    {
+        return ok;
+    }
 };
 
 /**
  * @brief Contexto de cancelación proporcionado por el consumidor.
- *
- * El cliente consulta isCancelled() durante las operaciones bloqueantes.
- * El contexto debe permanecer vivo hasta que la operación termine.
  */
 class RcloneContext
 {
@@ -87,9 +84,8 @@ public:
     [[nodiscard]] virtual bool isCancelled() const = 0;
 };
 
-
 /**
- * @brief Política de eliminación.
+ * @brief Política utilizada al eliminar un elemento remoto.
  */
 enum class RcloneRemovalMode {
     File,
@@ -98,17 +94,19 @@ enum class RcloneRemovalMode {
 };
 
 /**
- * @brief Version of a destination observed before a local upload starts.
+ * @brief Versión conocida de un destino remoto.
  *
- * A missing target is represented by exists == false. The remaining fields
- * are deliberately optional-by-value because not every rclone backend exposes
- * an object ID or a modification time.
+ * Permite comprobar si el elemento remoto cambió mientras una copia local
+ * estaba siendo preparada o modificada.
  */
 struct RcloneTargetSnapshot {
     bool exists = false;
     bool isDirectory = false;
+
     QString id;
+
     QDateTime modificationTime;
+
     qint64 size = -1;
 
     [[nodiscard]] static RcloneTargetSnapshot
@@ -125,35 +123,41 @@ struct RcloneTargetSnapshot {
 };
 
 /**
- * @brief Política de destino para operaciones que crean o reemplazan archivos.
- *
- * Por defecto no se permite reemplazar un destino existente.
+ * @brief Política para operaciones que publican un destino remoto.
  */
 struct RcloneWriteOptions {
     bool replaceExisting = false;
 
     /**
-     * Destination state already observed by the caller. Supplying it avoids a
-     * duplicate stat and lets upload() reject changes made while local data was
-     * being prepared.
+     * @brief Estado del destino que el consumidor espera encontrar.
+     *
+     * upload() puede utilizar este snapshot para detectar modificaciones
+     * remotas concurrentes antes de publicar los datos locales.
      */
     std::optional<RcloneTargetSnapshot> expectedTarget;
 };
 
+/**
+ * @brief Opciones adicionales para listados y consultas de metadata.
+ */
 struct RcloneListOptions {
     bool recursive = false;
+
     QStringList extraArguments;
 };
 
 /**
- * @brief Cliente bloqueante para operaciones de archivos mediante rclone.
+ * @brief Cliente bloqueante y agnóstico de KIO para el binario rclone.
  *
- * Aísla la ejecución de procesos, el parsing de sus respuestas y la
- * traducción de errores. No depende de KIO ni de detalles de su Worker.
+ * Esta clase representa exclusivamente operaciones contra el backend remoto:
  *
- * Las operaciones son síncronas. La implementación debe aplicar una
- * política de timeout adecuada y consultar el contexto de cancelación
- * mientras espera al proceso.
+ * - ejecución de rclone;
+ * - parsing de sus respuestas;
+ * - traducción de errores;
+ * - transferencias completas;
+ * - operaciones de metadata.
+ *
+ * No administra caché local, archivos abiertos ni estados de sincronización.
  */
 class RcloneClient
 {
@@ -161,14 +165,14 @@ public:
     explicit RcloneClient(QString executable = {});
 
     /**
-     * @brief Ruta del ejecutable de rclone que utilizará el cliente.
+     * @brief Ruta del ejecutable utilizado por el cliente.
      */
     [[nodiscard]] QString executable() const;
 
     /**
-     * @brief Comprueba si el ejecutable de rclone está disponible.
+     * @brief Comprueba que el ejecutable de rclone está disponible.
      *
-     * No comprueba la conectividad de ningún remoto.
+     * No comprueba remotos ni conectividad.
      */
     [[nodiscard]] bool isAvailable() const;
 
@@ -179,50 +183,39 @@ public:
     listRemotes(const RcloneContext &ctx) const;
 
     /**
-     * @brief Ejecuta un subcomando de `rclone config`.
-     *
-     * La aplicación de configuración utiliza esta entrada para consultas y
-     * cambios no interactivos. Las operaciones de archivos del worker deben
-     * usar los métodos tipados del cliente.
+     * @brief Ejecuta un subcomando no interactivo de rclone config.
      */
     [[nodiscard]] RcloneResponse<QByteArray>
     runConfigCommand(const QStringList &arguments,
                      const RcloneContext &ctx) const;
 
     /**
-     * @brief Obtiene las métricas de espacio de un remoto.
-     *
-     * Algunos backends no soportan esta operación.
+     * @brief Obtiene las métricas de espacio disponibles para un remoto.
      */
     [[nodiscard]] RcloneResponse<RcloneSpace>
     spaceInfo(const QString &remoteSpec,
               const RcloneContext &ctx) const;
 
     /**
-     * @brief Obtiene los metadatos de un archivo o directorio.
+     * @brief Obtiene metadata de un archivo o directorio remoto.
      */
     [[nodiscard]] RcloneResponse<RcloneItem>
     stat(const QString &remoteSpec,
          const RcloneContext &ctx) const;
 
     /**
-     * @brief Obtiene metadatos respetando los filtros de una vista de rclone.
+     * @brief Obtiene metadata respetando opciones específicas de la vista.
      */
     [[nodiscard]] RcloneResponse<RcloneItem>
     stat(const QString &remoteSpec,
          const RcloneListOptions &options,
          const RcloneContext &ctx) const;
 
-    using ItemCallback = std::function<bool(const RcloneItem &)>;
+    using ItemCallback =
+        std::function<bool(const RcloneItem &)>;
 
     /**
-     * @brief Lista un directorio de forma incremental.
-     *
-     * @param onItem Se invoca por cada elemento.
-     * @return Aborted si el callback devuelve false; Cancelled si el
-     *         contexto solicita cancelación. Un listado completo devuelve éxito.
-     *
-     * Los elementos ya emitidos no se deshacen si la operación falla.
+     * @brief Lista un directorio incrementalmente.
      */
     [[nodiscard]] RcloneStatus
     list(const QString &remoteSpec,
@@ -230,6 +223,9 @@ public:
          const ItemCallback &onItem,
          const RcloneContext &ctx) const;
 
+    /**
+     * @brief Lista un directorio con opciones específicas del backend.
+     */
     [[nodiscard]] RcloneStatus
     list(const QString &remoteSpec,
          const RcloneListOptions &options,
@@ -244,9 +240,7 @@ public:
           const RcloneContext &ctx) const;
 
     /**
-     * @brief Cambia la fecha de modificación de un archivo o directorio remoto.
-     *
-     * La operación no crea el destino cuando no existe.
+     * @brief Cambia la fecha de modificación de un elemento remoto.
      */
     [[nodiscard]] RcloneStatus
     setModificationTime(const QString &remoteSpec,
@@ -254,10 +248,7 @@ public:
                         const RcloneContext &ctx) const;
 
     /**
-     * @brief Elimina un archivo o directorio.
-     *
-     * EmptyDirectory no elimina recursivamente un directorio que contiene
-     * elementos.
+     * @brief Elimina un archivo o directorio remoto.
      */
     [[nodiscard]] RcloneStatus
     remove(const QString &remoteSpec,
@@ -266,8 +257,6 @@ public:
 
     /**
      * @brief Mueve o renombra un elemento remoto.
-     *
-     * El destino existente solo puede reemplazarse si options lo permite.
      */
     [[nodiscard]] RcloneStatus
     move(const QString &srcSpec,
@@ -277,8 +266,6 @@ public:
 
     /**
      * @brief Copia un elemento remoto.
-     *
-     * El destino existente solo puede reemplazarse si options lo permite.
      */
     [[nodiscard]] RcloneStatus
     copy(const QString &srcSpec,
@@ -286,49 +273,41 @@ public:
          const RcloneWriteOptions &options,
          const RcloneContext &ctx) const;
 
-    using DownloadCallback = std::function<bool(const QByteArray &chunk)>;
+    using DownloadCallback =
+        std::function<bool(const QByteArray &chunk)>;
 
     /**
-     * @brief Descarga un archivo remoto mediante streaming.
+     * @brief Descarga completamente un archivo remoto mediante streaming.
      *
-     * Entrega bloques conforme rclone los produce. No proporciona
-     * lectura aleatoria ni crea una copia local por sí mismo.
+     * La creación de la copia física local corresponde a RcloneRemoteFile.
+     * El cliente simplemente entrega los bloques conforme rclone los produce.
      */
     [[nodiscard]] RcloneStatus
     download(const QString &remoteSpec,
              const DownloadCallback &onChunk,
              const RcloneContext &ctx) const;
 
-    [[nodiscard]] RcloneStatus
-    downloadRange(const QString &remoteSpec,
-                  qint64 offset,
-                  qint64 size,
-                  const DownloadCallback &onChunk,
-                  const RcloneContext &ctx) const;
-
     /**
-     * @brief Telemetría de una transferencia.
-     *
-     * Los valores desconocidos se representan con -1.
-     * speed se expresa en bytes por segundo.
+     * @brief Estadísticas informadas durante una transferencia.
      */
     struct TransferStats {
         int percentage = -1;
+
         qint64 bytes = 0;
+
         qint64 speed = -1;
+
         qint64 etaSeconds = -1;
     };
 
-    using UploadCallback = std::function<void(const TransferStats &)>;
+    using UploadCallback =
+        std::function<void(const TransferStats &)>;
 
     /**
-     * @brief Sube un archivo local a un destino remoto.
+     * @brief Publica un archivo local completo en el destino remoto.
      *
-     * Uploads to a unique sibling first, verifies that the destination still
-     * matches options.expectedTarget, and only then publishes it. The previous
-     * destination therefore remains intact on transfer failure or cancellation.
-     * If expectedTarget is omitted, this method obtains its own snapshot before
-     * starting the transfer.
+     * La implementación puede transferir primero hacia un destino temporal y
+     * comprobar expectedTarget antes de sustituir el destino definitivo.
      */
     [[nodiscard]] RcloneStatus
     upload(const QString &localSrc,
@@ -338,13 +317,9 @@ public:
            const RcloneContext &ctx) const;
 
     /**
-     * @brief Ejecuta una consulta nativa específica de un backend.
+     * @brief Ejecuta una consulta específica de un backend.
      *
-     * Ejemplo: una consulta de unidades compartidas de Google Drive.
-     * Devuelve la salida estándar sin imponer un modelo específico
-     * del proveedor.
-     *
-     * No está destinado a ejecutar operaciones generales de archivos.
+     * No debe utilizarse como sustituto de las primitivas tipadas de archivos.
      */
     [[nodiscard]] RcloneResponse<QByteArray>
     backendQuery(const QString &remoteName,
@@ -358,8 +333,12 @@ private:
      */
     [[nodiscard]] static QString locateExecutable();
 
-    using OutputCallback = std::function<bool(const QByteArray &)>;
+    using OutputCallback =
+        std::function<bool(const QByteArray &)>;
 
+    /**
+     * @brief Ejecuta un comando consumiendo stdout/stderr incrementalmente.
+     */
     [[nodiscard]] RcloneStatus
     runStreamingCommand(const QStringList &arguments,
                         const OutputCallback &onOutput,
@@ -367,6 +346,9 @@ private:
                         const OutputCallback &onError = {},
                         int timeoutMs = 120000) const;
 
+    /**
+     * @brief Ejecuta un comando y captura completamente stdout.
+     */
     [[nodiscard]] RcloneResponse<QByteArray>
     runCommand(const QStringList &arguments,
                const RcloneContext &ctx) const;

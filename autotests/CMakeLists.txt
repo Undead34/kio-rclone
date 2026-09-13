@@ -34,3 +34,22 @@ add_test(NAME dolphinactionplugintest COMMAND dolphinactionplugintest)
 set_tests_properties(dolphinactionplugintest PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
 )
+
+add_executable(kioprotocolmetadatatest
+    kioprotocolmetadatatest.cpp
+)
+
+target_link_libraries(kioprotocolmetadatatest
+    PRIVATE
+        Qt6::Core
+        Qt6::Test
+)
+
+target_compile_definitions(kioprotocolmetadatatest
+    PRIVATE
+        KIO_RCLONE_WORKER_PLUGIN="$<TARGET_FILE:kio_rclone>"
+)
+
+add_dependencies(kioprotocolmetadatatest kio_rclone)
+
+add_test(NAME kioprotocolmetadatatest COMMAND kioprotocolmetadatatest)
